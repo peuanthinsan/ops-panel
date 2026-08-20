@@ -1,0 +1,5 @@
+.header-actions{display:flex;align-items:flex-end;gap:10px}
+.header-actions label{display:grid;gap:5px;color:#68727D;font-size:11px;font-weight:700}
+.header-actions select{border:1px solid #C8CDD2;border-radius:7px;padding:10px;background:#fff;color:#111}
+@media(max-width:700px){.header-actions{width:100%;align-items:stretch;flex-direction:column}.header-actions select,.header-actions .primary{width:100%}}
+@media print{.header-actions label{display:none!important}}

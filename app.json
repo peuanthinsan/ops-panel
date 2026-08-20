@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Songdee Ops Panel",
+    "slug": "songdee-ops-panel",
+    "owner": "peuanthinsan",
+    "version": "0.1.0",
+    "orientation": "default",
+    "scheme": "songdeeops",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "platforms": [
+      "android"
+    ],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-sqlite",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#111111"
+        }
+      ]
+    ],
+    "android": {
+      "package": "com.songdeedev.opspanel",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#111111"
+      },
+      "softwareKeyboardLayoutMode": "resize",
+      "predictiveBackGestureEnabled": false
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0825171f-7773-4a62-a7f7-899e6f4d75cf"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+node_modules/
+.expo/
+.git/
+.codex/
+.agents/
+
+# Dashboard/backend sources are deployed separately to Vercel and are not
+# needed to compile the in-vehicle Android application.
+web/
+web-legacy/
+server.js
+db/
+tests/
+data/
+
+# Local verification and downloaded release artifacts must never be uploaded
+# inside a later EAS build archive.
+design-qa-artifacts/
+design-qa.md
+releases/
+*.apk
+
+expo-env.d.ts

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 116" role="img" aria-labelledby="title desc">
+  <title id="title">Songdee Ops Panel</title>
+  <desc id="desc">The original Songdee GPS pin beside the Songdee Ops Panel wordmark</desc>
+  <g transform="translate(4 3) scale(.5)">
+    <path d="M90 4C42.5 4 4 42.5 4 90c0 61.8 86 126 86 126s86-64.2 86-126C176 42.5 137.5 4 90 4Z" fill="#ed1c24"/>
+    <circle cx="90" cy="84" r="59" fill="#fff"/>
+    <rect x="52" y="46" width="76" height="30" fill="#292929"/>
+    <rect x="52" y="93" width="76" height="29" fill="#292929"/>
+    <path d="M52 52 128 97v25L52 77Z" fill="#ed1c24"/>
+  </g>
+  <text x="112" y="43" textLength="164" lengthAdjust="spacingAndGlyphs" fill="#7a1424" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="800">SONGDEE</text>
+  <text x="112" y="96" textLength="264" lengthAdjust="spacingAndGlyphs" fill="#111111" font-family="Inter,Arial,sans-serif" font-size="43" font-weight="850">OPS PANEL</text>
+</svg>

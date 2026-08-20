@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { localReportFacets, queryLocalReports } from '../lib/local-report-query.mjs';
+
+const reports = [
+  { id: 'R1', vehicleNumber: '10', deviceId: 'D1', driverName: 'Narin', mode: 'Load', status: 'Completed', gpsLookupStatus: 'device_only', startTime: '2026-08-18T01:00:00Z', endTime: '2026-08-18T02:00:00Z', deviceGpsSamples: 1 },
+  { id: 'R2', vehicleNumber: '2', deviceId: 'D2', driverName: 'Somchai', mode: 'Unload', status: 'Cancelled', gpsLookupStatus: 'not_applicable', startTime: '2026-08-19T01:00:00Z', endTime: '2026-08-19T01:30:00Z' },
+  { id: 'R3', vehicleNumber: '10', deviceId: 'D1', driverName: 'Narin', mode: 'Break', status: 'Completed', gpsLookupStatus: 'pending', startTime: '2026-08-19T03:00:00Z', endTime: '2026-08-19T03:15:00Z', deviceGpsSamples: 10, fmsGpsSamples: 8, pairedGpsSamples: 8, attentionGpsSamples: 2 },
+];
+
+test('local dashboard query filters, sorts, summarizes, and paginates like production', () => {
+  const result = queryLocalReports(reports, [{}, {}], new URLSearchParams({
+    startDate: '2026-08-19', vehicle: '10', sort: 'duration:desc', pageSize: '1',
+  }));
+  assert.deepEqual(result.reports.map(report => report.id), ['R3']);
+  assert.deepEqual(result.summary, {
+    total: 1, activeVehicles: 1, queued: 1, cancelled: 0,
+    gpsPaired: 0, gpsNeedsAttention: 0, gpsMatched: 1, deviceGpsSamples: 10,
+    fmsGpsSamples: 8, pairedGpsSamples: 8, attentionGpsSamples: 2,
+    fleetSize: 2,
+  });
+  assert.deepEqual(result.pageInfo, { page: 1, pageSize: 1, total: 1, totalPages: 1, start: 1, end: 1 });
+});
+
+test('local dashboard facets are complete and numerically sorted', () => {
+  assert.deepEqual(localReportFacets(reports), {
+    vehicles: ['2', '10'], devices: ['D1', 'D2'], drivers: ['Narin', 'Somchai'],
+    statuses: ['Cancelled', 'Completed'],
+    gpsStates: ['device_only', 'not_applicable', 'pending'],
+  });
+});
