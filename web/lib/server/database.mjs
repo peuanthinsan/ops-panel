@@ -1,7 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 
 let databaseClient;
-export const REQUIRED_DATABASE_SCHEMA_VERSION = '2026-08-20.4';
+export const REQUIRED_DATABASE_SCHEMA_VERSION = '2026-08-24.2';
 
 export class ConfigurationError extends Error {
   constructor(message) {

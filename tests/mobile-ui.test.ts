@@ -11,14 +11,14 @@ test('technician setup copy switches fully between English and Thai', () => {
   assert.deepEqual(mobileCopy.en, {
     setupEyebrow: 'ONE-TIME SETUP',
     setup: 'Enter vehicle number',
-    setupBody: 'Connect this tablet once. Later vehicle changes must be made in Fleet admin.',
+    setupBody: 'Connect this tablet once. Later vehicle changes require the admin password.',
     vehicle: 'Vehicle number',
     save: 'Save vehicle',
   });
   assert.deepEqual(mobileCopy.th, {
     setupEyebrow: 'ตั้งค่าครั้งแรก',
     setup: 'กรอกหมายเลขรถ',
-    setupBody: 'เชื่อมต่อแท็บเล็ตเครื่องนี้เพียงครั้งเดียว หากต้องการเปลี่ยนรถภายหลังให้ทำในหน้าจัดการฝูงรถ',
+    setupBody: 'เชื่อมต่อแท็บเล็ตเครื่องนี้เพียงครั้งเดียว การเปลี่ยนรถภายหลังต้องใช้รหัสผ่านผู้ดูแล',
     vehicle: 'หมายเลขรถ',
     save: 'บันทึกหมายเลขรถ',
   });
@@ -65,6 +65,17 @@ test('compact controls are reserved for short landscape screens', () => {
   assert.equal(usesCompactLandscapeLayout(800, 1280), false);
 });
 
+test('mobile action cards pin aligned numbers above a compact text group', async () => {
+  const source = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
+  assert.match(source, /<View style=\{\[styles\.actionNumberSlot, compactLandscape && compactStyles\.actionNumberSlot\]\}>/);
+  assert.match(source, /<View style=\{\[styles\.actionTextSlot, compactLandscape && compactStyles\.actionTextSlot\]\}>/);
+  assert.match(source, /actionNumberSlot: \{ height: '45%',[^}]*justifyContent: 'flex-end'/);
+  assert.match(source, /actionTextSlot: \{ flex: 1, minHeight: 0,[^}]*paddingTop: 16/);
+  assert.match(source, /actionNumberSlot: \{ height: '38%'/);
+  assert.match(source, /actionSub: \{ fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 8 \}/);
+  assert.match(source, /numberOfLines=\{compactLandscape \? 2 : 5\}/);
+});
+
 test('production movement detection relies only on the server-side FMS adapter', async () => {
   const source = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
   assert.doesNotMatch(source, /expo-location|Location\.|deviceGpsStartsJob/);
@@ -94,10 +105,26 @@ test('confirmation dialogs restore focus to the mode or cancel control that open
   assert.match(source, /confirmationTriggerNodeRef\.current = findNodeHandle\(view\)/);
   assert.match(source, /setTimeout\(\(\) => \{[\s\S]*AccessibilityInfo\.setAccessibilityFocus\(node\)/);
   assert.match(source, /rememberConfirmationTrigger\(actionButtonRefs\.current\[number\]\)[\s\S]*selectAction\(number\)/);
-  assert.match(source, /rememberConfirmationTrigger\(cancelJobButtonRef\.current\)[\s\S]*setConfirmType\('cancel'\)/);
   assert.match(source, /dismissConfirmation\(\)[\s\S]*restoreConfirmationTriggerFocus\(\)/);
   assert.match(source, /localStateFinalized[\s\S]*confirmationTriggerNodeRef\.current = findNodeHandle\(headerTitleRef\.current\)/);
   assert.match(source, /clearTimeout\(focusRestoreTimerRef\.current\)/);
+});
+
+test('the active-job dialog offers keep on, turn off, and cancel choices', async () => {
+  const source = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
+  assert.match(source, /confirmType === 'finish' \? <Pressable[\s\S]*onPress=\{confirmCancel\}[\s\S]*Cancel job/);
+  assert.match(source, /Keep job on/);
+  assert.match(source, /Turn off/);
+  assert.doesNotMatch(source, /cancelJobButtonRef/);
+});
+
+test('cancelling releases a durably saved job without requiring a live binding check', async () => {
+  const source = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
+  const cancelFlow = source.slice(source.indexOf('async function confirmCancel()'), source.indexOf('async function refreshSavedJobs()'));
+  assert.match(cancelFlow, /cancellationReportForIntent\(pendingReport/);
+  assert.match(cancelFlow, /saveOrQueueJob\(report\)[\s\S]*finalizeActiveJob\(\)[\s\S]*setSelected\(null\)/);
+  assert.doesNotMatch(cancelFlow, /fetchVehicleBinding/);
+  assert.doesNotMatch(cancelFlow, /Connect to the server before cancelling/);
 });
 
 test('confirmation controls announce the exact action they perform', async () => {
@@ -106,4 +133,80 @@ test('confirmation controls announce the exact action they perform', async () =>
   assert.match(source, /const confirmationSubmitLabel = confirmType === 'start'/);
   assert.match(source, /accessibilityLabel=\{confirmationDismissLabel\}/);
   assert.match(source, /accessibilityLabel=\{confirmationSubmitLabel\}/);
+});
+
+test('job 9 skips movement and offers only cancel or finish-and-view-report', async () => {
+  const source = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
+  const report = await readFile(fileURLToPath(new NodeUrl('../components/MobileJobReport.tsx', import.meta.url)), 'utf8');
+  assert.match(source, /decision\.type === 'confirm_day_end'[\s\S]*setSelected\(number\)[\s\S]*setConfirmType\('day_end'\)/);
+  assert.match(source, /const immediateDayEnd = confirmType === 'day_end' && selected === '9'/);
+  assert.match(source, /confirmType === 'start' \|\| confirmType === 'day_end'\) setSelected\(null\)/);
+  assert.match(source, /confirmType === 'day_end' \? \(language === 'en' \? 'Cancel'/);
+  assert.match(source, /confirmType === 'day_end'[\s\S]*'Finish and view report'/);
+  assert.match(source, /\{confirmType === 'finish' \? <Pressable[\s\S]*Cancel job/);
+  assert.match(source, /const finishingDay = selected === '9'/);
+  assert.match(source, /const dayReport = completedDayReport/);
+  assert.match(source, /setReportDay\(mobileReportDayKey\(dayReport\.endTime\)\)/);
+  assert.match(source, /setJobsVisible\(true\)/);
+  assert.match(report, /Daily report/);
+  assert.match(report, /Timeline/);
+  assert.match(report, /Saved jobs/);
+  assert.match(report, /รายงานประจำวัน/);
+  assert.match(report, /ไทม์ไลน์/);
+  assert.match(report, /งานที่บันทึก/);
+});
+
+test('mobile saved jobs expose scalable search, filter, and sort controls without native selects', async () => {
+  const report = await readFile(fileURLToPath(new NodeUrl('../components/MobileJobReport.tsx', import.meta.url)), 'utf8');
+  const app = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
+  const outbox = await readFile(fileURLToPath(new NodeUrl('../lib/job-outbox.ts', import.meta.url)), 'utf8');
+  const localApi = await readFile(fileURLToPath(new NodeUrl('../server.js', import.meta.url)), 'utf8');
+  const productionApi = await readFile(fileURLToPath(new NodeUrl('../web/lib/server/api.mjs', import.meta.url)), 'utf8');
+  assert.match(report, /useDeferredValue\(search\)/);
+  assert.match(report, /filterAndSortMobileJobs/);
+  assert.match(report, /search: 'Search jobs'/);
+  assert.match(report, /<TextInput/);
+  assert.match(report, /All months/);
+  assert.match(report, /All activities/);
+  assert.match(report, /All statuses/);
+  assert.match(report, /Newest/);
+  assert.match(report, /Longest/);
+  assert.match(report, /Search, sort & filter/);
+  assert.match(report, /accessibilityState=\{\{ expanded: filtersExpanded \}\}/);
+  assert.match(report, /filtersExpanded \? <View/);
+  assert.match(report, /activeFilterCount/);
+  assert.match(report, /Load more jobs/);
+  assert.match(report, /onLoadMore/);
+  assert.match(report, /initialNumToRender=\{12\}/);
+  assert.match(report, /removeClippedSubviews/);
+  assert.match(report, /windowSize=\{9\}/);
+  assert.match(report, /reportStatus\(job, language\)/);
+  assert.match(report, /syncStatus\(job, language\)/);
+  assert.doesNotMatch(report, /<Picker|<select/);
+  assert.doesNotMatch(report, /Needs attention/);
+  assert.match(app, /fetchDeviceJobs\(binding\.deviceId, binding\.vehicleNumber, query, page\)/);
+  assert.match(outbox, /listStoredJobReportsPage/);
+  assert.match(outbox, /LIMIT \? OFFSET \?/);
+  assert.match(localApi, /queryLocalDeviceJobs\(reports, deviceId, vehicleNumber, query\)/);
+  assert.match(productionApi, /getDeviceJobs\(deviceId, vehicleNumber, searchParams\)/);
+  assert.match(productionApi, /LIMIT \$\{limitParameter\} OFFSET \$\{offsetParameter\}/);
+  assert.doesNotMatch(app, /DEVICE_JOB_HISTORY_LIMIT|listStoredJobReports\([^)]*5000/);
+  assert.doesNotMatch(outbox, /limit = 5000|slice\(0, 5000\)/);
+  assert.doesNotMatch(localApi, /slice\(0, 5000\)/);
+  assert.doesNotMatch(productionApi, /limit = 5000/);
+});
+
+test('the header GPS logo replaces the separate Admin text button', async () => {
+  const source = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
+  assert.match(source, /accessibilityLabel=\{language === 'en' \? 'Open admin vehicle settings'/);
+  assert.match(source, /onPress=\{openVehicleAdmin\}[\s\S]*<RedGpsPin/);
+  assert.doesNotMatch(source, />\{language === 'en' \? 'Admin' : 'ตั้งค่า'\}<\/Text>/);
+});
+
+test('admin vehicle changes release startup restoration for the new binding', async () => {
+  const source = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
+  const changeVehicle = source.slice(source.indexOf('async function changeVehicle()'), source.indexOf('function selectAction'));
+  assert.match(changeVehicle, /await clearActiveJob\(\)/);
+  assert.match(changeVehicle, /setBinding\(next\);\s*setRecoveredBindingKey\(deviceBindingKey\(next\)\)/);
+  assert.doesNotMatch(changeVehicle, /setRecoveredBindingKey\(null\)/);
 });

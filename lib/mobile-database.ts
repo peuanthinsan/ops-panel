@@ -12,7 +12,7 @@ async function ensureRetryColumns(database: SQLite.SQLiteDatabase) {
       await database.execAsync(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition};`);
     }
   }
-  await database.execAsync('PRAGMA user_version = 1;');
+  await database.execAsync('PRAGMA user_version = 2;');
 }
 
 export async function getMobileDatabase() {
@@ -40,6 +40,15 @@ export async function getMobileDatabase() {
         );
         CREATE INDEX IF NOT EXISTS pending_job_reports_created_at_idx
           ON pending_job_reports (created_at ASC);
+        CREATE TABLE IF NOT EXISTS saved_job_reports (
+          id TEXT PRIMARY KEY NOT NULL,
+          vehicle_number TEXT NOT NULL,
+          device_id TEXT NOT NULL,
+          end_at INTEGER NOT NULL,
+          payload TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS saved_job_reports_binding_end_idx
+          ON saved_job_reports (device_id, vehicle_number, end_at DESC);
         CREATE TABLE IF NOT EXISTS pending_job_starts (
           id TEXT PRIMARY KEY NOT NULL,
           created_at INTEGER NOT NULL,

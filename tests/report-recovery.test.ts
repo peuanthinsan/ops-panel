@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL as NodeUrl } from 'node:url';
 import test from 'node:test';
-import { finalReportForIntent, reportIntent } from '../lib/report-recovery.ts';
+import { cancellationReportForIntent, finalReportForIntent, reportIntent } from '../lib/report-recovery.ts';
 import type { JobReportInput } from '../lib/report.ts';
 
 const completed: JobReportInput = {
@@ -43,6 +43,13 @@ test('the first finalization creates exactly one payload', () => {
   });
   assert.equal(creations, 1);
   assert.equal(created?.status, 'Cancelled');
+});
+
+test('cancellation releases a tablet restored with an unsynced completion without duplicating the job id', () => {
+  const cancelled = cancellationReportForIntent(completed, () => ({ ...completed, id: 'should-not-be-created', status: 'Cancelled' }));
+  assert.equal(cancelled.id, completed.id);
+  assert.equal(cancelled.endTime, completed.endTime);
+  assert.equal(cancelled.status, 'Cancelled');
 });
 
 test('the Android flow persists final payloads before delivery and blocks a motion overwrite', async () => {

@@ -1,11 +1,14 @@
 const TOKEN_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000;
+const VEHICLE_MASTER_LIFETIME_MS = 60 * 60 * 1000;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_BASE_URL = 'https://www.data-fm.com';
 
 let tokenCache = null;
 let tokenRequest = null;
+let vehicleMasterCache = null;
+let vehicleMasterRequest = null;
 const driverIdentityCache = new Map();
 
 function objectRecord(value) {
@@ -217,6 +220,47 @@ async function historyRequest({ config, fetchImpl, token, vehicleNumber, fromAt,
   return { code: responseCode(payload), payload, error: null };
 }
 
+function normalizedVehicleLookupKey(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');
+}
+
+async function requestVehicleMaster(config, fetchImpl, token, timeoutMs) {
+  const url = endpoint(config.baseUrl, '/Api/VTService.svc/GetMasterVehicleList');
+  url.searchParams.set('jtoken', token);
+  const response = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+  if (!response.ok) throw new Error(`Data-FM vehicle master endpoint returned HTTP ${response.status}.`);
+  const payload = await responseJson(response);
+  const code = responseCode(payload);
+  if (code !== 0) throw new Error(dataFmStatusMessage(code));
+  const canonicalVehicles = new Map();
+  for (const row of responseRows(payload)) {
+    const vehicleNumber = optionalString(aliasValue(row, ['vehicleno']));
+    const key = normalizedVehicleLookupKey(vehicleNumber);
+    if (!vehicleNumber || !key) continue;
+    const existing = canonicalVehicles.get(key);
+    canonicalVehicles.set(key, existing && existing !== vehicleNumber ? null : vehicleNumber);
+  }
+  return canonicalVehicles;
+}
+
+async function canonicalDataFmVehicleNumber(config, fetchImpl, token, vehicleNumber, nowMs, timeoutMs) {
+  const key = cacheKey(config);
+  let vehicles = vehicleMasterCache?.key === key && vehicleMasterCache.expiresAt > nowMs
+    ? vehicleMasterCache.vehicles
+    : null;
+  if (!vehicles) {
+    if (vehicleMasterRequest?.key === key) vehicles = await vehicleMasterRequest.promise;
+    else {
+      const promise = requestVehicleMaster(config, fetchImpl, token, timeoutMs);
+      vehicleMasterRequest = { key, promise };
+      try { vehicles = await promise; }
+      finally { if (vehicleMasterRequest?.promise === promise) vehicleMasterRequest = null; }
+      vehicleMasterCache = { key, vehicles, expiresAt: nowMs + VEHICLE_MASTER_LIFETIME_MS };
+    }
+  }
+  return vehicles.get(normalizedVehicleLookupKey(vehicleNumber)) || null;
+}
+
 export async function fetchDataFmGpsHistory({
   baseUrl,
   username,
@@ -247,6 +291,12 @@ export async function fetchDataFmGpsHistory({
       if (tokenCache?.key === cacheKey(config)) tokenCache = null;
       token = await dataFmToken(config, fetchImpl, nowMs, timeoutMs, true);
       result = await historyRequest({ config, fetchImpl, token, vehicleNumber, fromAt, toAt, timeoutMs });
+    }
+    if (result.code === 6) {
+      const canonicalVehicleNumber = await canonicalDataFmVehicleNumber(config, fetchImpl, token, vehicleNumber, nowMs, timeoutMs);
+      if (canonicalVehicleNumber && canonicalVehicleNumber !== vehicleNumber) {
+        result = await historyRequest({ config, fetchImpl, token, vehicleNumber: canonicalVehicleNumber, fromAt, toAt, timeoutMs });
+      }
     }
     if (result.error) return { status: 'unavailable', payload: null, message: result.error };
     if (result.code === 6) return { status: 'received', payload: { positions: [] }, message: dataFmStatusMessage(6) };
@@ -304,5 +354,7 @@ export async function fetchDataFmDriverIdentity(options = {}) {
 export function resetDataFmTokenCacheForTests() {
   tokenCache = null;
   tokenRequest = null;
+  vehicleMasterCache = null;
+  vehicleMasterRequest = null;
   driverIdentityCache.clear();
 }

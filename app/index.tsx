@@ -1,24 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import { useKeepAwake } from 'expo-keep-awake';
-import { AccessibilityInfo, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, findNodeHandle, useWindowDimensions } from 'react-native';
+import { AccessibilityInfo, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, findNodeHandle, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MobileJobReport } from '../components/MobileJobReport';
 import { RedGpsPin } from '../components/RedGpsPin';
 import { operationActions } from '../lib/actions';
-import { fetchDeviceJobs, fetchDriverIdentity, fetchVehicleBinding, fetchVehicleMotion, requestJobGpsSync, saveJob, saveJobStart, saveVehicleBinding } from '../lib/api';
+import { changeVehicleBindingWithAdminPassword, fetchDeviceJobs, fetchDriverIdentity, fetchVehicleBinding, fetchVehicleMotion, requestJobGpsSync, saveJob, saveJobStart, saveVehicleBinding } from '../lib/api';
 import { isDeviceAccessError, isRetryableApiError } from '../lib/api-error';
 import { clearActiveJob, clearBinding, finalizeActiveJob, getActiveJob, getBinding, getDeviceId, persistActiveJob, persistBinding, type ActiveJob, type DeviceBinding } from '../lib/device';
-import { activeJobBelongsToBinding, deviceBindingKey, mobileStartupReady, recoverBindingFromActiveJob, shouldPreserveLocalBindingWithoutRemote, waitingCancellationBindingDecision } from '../lib/device-state';
+import { activeJobBelongsToBinding, deviceBindingKey, mobileStartupReady, recoverBindingFromActiveJob, shouldPreserveLocalBindingWithoutRemote } from '../lib/device-state';
 import { driverHeaderText } from '../lib/driver-display';
 import { driverLookupBelongsToBinding } from '../lib/driver-identity';
 import { deliverJobReport } from '../lib/job-delivery';
 import { createJobId, decideAction, isActionUnavailable, jobInitiatedAt, reportDriver, snapshotDriver, type DriverIdentity } from '../lib/job-flow';
-import { enqueueJobReport, listPendingJobReports, listStoredJobReports, markPendingJobReportPermanentFailure, removePendingJobReport } from '../lib/job-outbox';
+import { emptyDeviceJobHistory, type DeviceJobHistoryResponse, type DeviceJobHistorySummary } from '../lib/device-job-history';
+import { enqueueJobReport, listPendingJobReports, listStoredJobReportsPage, markPendingJobReportPermanentFailure, removePendingJobReport } from '../lib/job-outbox';
 import { enqueueJobStart, listPendingJobStarts, markPendingJobStartPermanentFailure, removePendingJobStart } from '../lib/job-start-outbox';
 import { useLanguage } from '../lib/language';
 import { mobileOperationErrorMessage } from '../lib/mobile-error-copy';
+import type { MobileJobQuery } from '../lib/mobile-job-query';
 import { usesCompactLandscapeLayout } from '../lib/mobile-layout';
+import { mobileReportDayKey } from '../lib/mobile-report';
 import { motionStartsJob } from '../lib/motion-state';
-import { finalReportForIntent } from '../lib/report-recovery';
+import { cancellationReportForIntent, finalReportForIntent } from '../lib/report-recovery';
 import type { JobStartInput } from '../lib/job-start';
 import type { JobReportInput } from '../lib/report';
 import { serverNowMs } from '../lib/server-clock';
@@ -27,10 +31,24 @@ import { mergeSavedJobs, type SavedJob } from '../lib/saved-jobs';
 const actions = operationActions;
 const actionRows = [actions.slice(0, 3), actions.slice(3, 6), actions.slice(6, 9)];
 const JOB_GPS_SYNC_INTERVAL_MS = 60_000;
+const initialJobHistoryQuery: MobileJobQuery = { dayKey: null, endAt: null, startAt: null, monthKey: null, mode: null, search: '', sort: 'newest', status: 'all' };
+
+function combinedJobSummary(left: DeviceJobHistorySummary, right: DeviceJobHistorySummary): DeviceJobHistorySummary {
+  return {
+    total: left.total + right.total,
+    completed: left.completed + right.completed,
+    cancelled: left.cancelled + right.cancelled,
+    durationSeconds: left.durationSeconds + right.durationSeconds,
+  };
+}
 
 function scheduleIdleTask(task: () => void) {
-  const callbackId = requestIdleCallback(task, { timeout: 1000 });
-  return () => cancelIdleCallback(callbackId);
+  if (typeof requestIdleCallback === 'function' && typeof cancelIdleCallback === 'function') {
+    const callbackId = requestIdleCallback(task, { timeout: 1000 });
+    return () => cancelIdleCallback(callbackId);
+  }
+  const timeoutId = setTimeout(task, 0);
+  return () => clearTimeout(timeoutId);
 }
 
 export default function Index() {
@@ -52,22 +70,31 @@ export default function Index() {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [awaitingMovement, setAwaitingMovement] = useState(false);
   const [pendingReport, setPendingReport] = useState<JobReportInput | null>(null);
-  const [confirmType, setConfirmType] = useState<'start' | 'finish' | 'cancel' | null>(null);
+  const [confirmType, setConfirmType] = useState<'start' | 'finish' | 'day_end' | 'cancel' | null>(null);
   const [message, setMessage] = useState('');
   const [savingSetup, setSavingSetup] = useState(false);
   const [startingJob, setStartingJob] = useState(false);
   const [savingJob, setSavingJob] = useState(false);
   const [jobsVisible, setJobsVisible] = useState(false);
+  const [reportDay, setReportDay] = useState<string | null>(null);
   const [savedJobs, setSavedJobs] = useState<SavedJob[]>([]);
+  const [jobHistory, setJobHistory] = useState<DeviceJobHistoryResponse>(emptyDeviceJobHistory);
   const [jobsLoading, setJobsLoading] = useState(false);
+  const [jobsLoadingMore, setJobsLoadingMore] = useState(false);
   const [jobsError, setJobsError] = useState('');
+  const [vehicleAdminVisible, setVehicleAdminVisible] = useState(false);
+  const [vehicleAdminInput, setVehicleAdminInput] = useState('');
+  const [vehicleAdminPassword, setVehicleAdminPassword] = useState('');
+  const [vehicleAdminError, setVehicleAdminError] = useState('');
+  const [changingVehicle, setChangingVehicle] = useState(false);
   const pendingReportRef = useRef<JobReportInput | null>(null);
   const confirmationTitleRef = useRef<Text | null>(null);
   const headerTitleRef = useRef<Text | null>(null);
   const actionButtonRefs = useRef<Record<string, View | null>>({});
-  const cancelJobButtonRef = useRef<View | null>(null);
   const confirmationTriggerNodeRef = useRef<number | null>(null);
   const focusRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const jobHistoryQueryRef = useRef<MobileJobQuery>(initialJobHistoryQuery);
+  const jobHistoryRequestRef = useRef(0);
 
   const updatePendingReport = (report: JobReportInput | null) => {
     pendingReportRef.current = report;
@@ -170,7 +197,7 @@ export default function Index() {
         setMessage(storedJob.pendingReport
           ? storedJob.pendingReport.status === 'Cancelled'
             ? (language === 'en' ? 'Cancellation restored — retry saving it' : 'กู้คืนการยกเลิกงาน — กรุณาลองบันทึกอีกครั้ง')
-            : (language === 'en' ? 'Completed job restored — tap Done to retry saving it' : 'กู้คืนงานที่จบแล้ว — กดจบงานเพื่อลองบันทึกอีกครั้ง')
+            : (language === 'en' ? 'Completed job restored — tap the active job to retry saving it' : 'กู้คืนงานที่จบแล้ว — กดกิจกรรมที่กำลังทำเพื่อลองบันทึกอีกครั้ง')
           : (language === 'en' ? 'Active job restored' : 'กู้คืนงานที่กำลังทำอยู่'));
       } else if (storedJob) {
         setActiveJobId(null);
@@ -386,9 +413,74 @@ export default function Index() {
     } finally { setSavingSetup(false); }
   }
 
+  function openVehicleAdmin() {
+    if (!binding) return;
+    setVehicleAdminInput(binding.vehicleNumber);
+    setVehicleAdminPassword('');
+    setVehicleAdminError('');
+    setVehicleAdminVisible(true);
+  }
+
+  function dismissVehicleAdmin() {
+    if (changingVehicle) return;
+    setVehicleAdminPassword('');
+    setVehicleAdminError('');
+    setVehicleAdminVisible(false);
+  }
+
+  async function changeVehicle() {
+    if (!binding || changingVehicle) return;
+    if (selected) {
+      setVehicleAdminError(language === 'en'
+        ? 'Turn off or cancel the current job before changing the vehicle.'
+        : 'กรุณาปิดหรือยกเลิกงานปัจจุบันก่อนเปลี่ยนรถ');
+      return;
+    }
+    const vehicleNumber = vehicleAdminInput.trim();
+    const password = vehicleAdminPassword;
+    if (!vehicleNumber || !password) return;
+    setChangingVehicle(true);
+    setVehicleAdminError('');
+    try {
+      // Vehicle changes are only allowed with no active selection, so remove
+      // any stale durable recovery marker before changing the authoritative
+      // binding. This prevents the new binding from waiting forever for an
+      // old vehicle's job state to reconcile.
+      await clearActiveJob();
+      const next = await changeVehicleBindingWithAdminPassword({ vehicleNumber, deviceId: binding.deviceId }, password);
+      await persistBinding(next).catch(() => { /* The authoritative server binding will be restored on the next launch. */ });
+      setBinding(next);
+      setRecoveredBindingKey(deviceBindingKey(next));
+      setDriverIdentity(null);
+      setJobDriverIdentity(null);
+      setSelected(null);
+      setActiveJobId(null);
+      setStartedAt(null);
+      setAwaitingMovement(false);
+      updatePendingReport(null);
+      setConfirmType(null);
+      jobHistoryRequestRef.current += 1;
+      jobHistoryQueryRef.current = initialJobHistoryQuery;
+      setSavedJobs([]);
+      setJobHistory(emptyDeviceJobHistory());
+      setVehicleAdminVisible(false);
+      setMessage(language === 'en'
+        ? `Vehicle changed to ${next.vehicleNumber}`
+        : `เปลี่ยนรถเป็น ${next.vehicleNumber} แล้ว`);
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : '';
+      setVehicleAdminError(language === 'en'
+        ? (errorText === 'Invalid password' ? 'Incorrect admin password.' : errorText || 'Could not change the vehicle number.')
+        : (errorText === 'Invalid password' ? 'รหัสผ่านผู้ดูแลไม่ถูกต้อง' : 'ไม่สามารถล้างสถานะงานหรือเปลี่ยนหมายเลขรถได้'));
+    } finally {
+      setVehicleAdminPassword('');
+      setChangingVehicle(false);
+    }
+  }
+
   function selectAction(number: string) {
-    if (number === '9' && pendingReport?.status === 'Cancelled') {
-      setMessage(language === 'en' ? 'Cancellation is pending — use Retry cancellation' : 'กำลังรอบันทึกการยกเลิก — กดลองบันทึกการยกเลิกอีกครั้ง');
+    if (number === selected && pendingReport?.status === 'Cancelled') {
+      setConfirmType('cancel');
       return;
     }
     const decision = decideAction(number, { selected, startedAt, awaitingMovement });
@@ -401,10 +493,15 @@ export default function Index() {
       return;
     }
     if (decision.type === 'confirm_finish') { setConfirmType('finish'); return; }
+    if (decision.type === 'confirm_day_end') {
+      setSelected(number);
+      setConfirmType('day_end');
+      return;
+    }
     setSelected(number);
     setConfirmType('start');
   }
-  function dismissConfirmation() { if (savingJob) return; if (confirmType === 'start') setSelected(null); setConfirmType(null); restoreConfirmationTriggerFocus(); }
+  function dismissConfirmation() { if (savingJob) return; if (confirmType === 'start' || confirmType === 'day_end') setSelected(null); setConfirmType(null); restoreConfirmationTriggerFocus(); }
 
   async function persistNewActiveJob(job: Parameters<typeof persistActiveJob>[0]) {
     try {
@@ -517,9 +614,12 @@ export default function Index() {
   }
 
   async function confirmFinish() {
-    if (savingJob || !binding || !selected || (!startedAt && !awaitingMovement)) return;
+    const immediateDayEnd = confirmType === 'day_end' && selected === '9';
+    if (savingJob || !binding || !selected || (!immediateDayEnd && !startedAt && !awaitingMovement)) return;
     const fallbackStart = startedAt ?? jobInitiatedAt(activeJobId) ?? serverNowMs();
     const reportId = activeJobId ?? createJobId(binding.deviceId, selected, fallbackStart);
+    const finishingDay = selected === '9';
+    let completedDayReport: SavedJob | null = null;
     setSavingJob(true);
     try {
       const report = finalReportForIntent(pendingReport, 'completed', () => {
@@ -540,10 +640,12 @@ export default function Index() {
       const localStateFinalized = await finalizeActiveJob();
       const deliveryMessage = syncState === 'synced'
         ? (language === 'en' ? 'Job saved to dashboard' : 'บันทึกงานไปยังแดชบอร์ดแล้ว')
-        : (language === 'en' ? 'Job saved on tablet — dashboard sync pending' : 'บันทึกงานในแท็บเล็ตแล้ว — รอส่งไปยังแดชบอร์ด');
+        : syncState === 'queued'
+          ? (language === 'en' ? 'Job saved on tablet — dashboard sync pending' : 'บันทึกงานในแท็บเล็ตแล้ว — รอส่งไปยังแดชบอร์ด')
+          : (language === 'en' ? 'Job saved on tablet — dashboard rejected it; admin review needed' : 'บันทึกงานในแท็บเล็ตแล้ว — แดชบอร์ดปฏิเสธข้อมูล กรุณาให้ผู้ดูแลตรวจสอบ');
       setMessage(localStateFinalized
         ? deliveryMessage
-        : `${deliveryMessage}${language === 'en' ? ' — local cleanup failed; tap Done again before starting another job' : ' — ล้างข้อมูลงานในเครื่องไม่สำเร็จ กรุณากดจบงานอีกครั้งก่อนเริ่มงานใหม่'}`);
+        : `${deliveryMessage}${language === 'en' ? ' — local cleanup failed; tap the active job again before starting another job' : ' — ล้างข้อมูลงานในเครื่องไม่สำเร็จ กรุณากดกิจกรรมที่กำลังทำอีกครั้งก่อนเริ่มงานใหม่'}`);
       if (localStateFinalized) {
         confirmationTriggerNodeRef.current = findNodeHandle(headerTitleRef.current);
         setSelected(null);
@@ -552,6 +654,7 @@ export default function Index() {
         setAwaitingMovement(false);
         setJobDriverIdentity(null);
         updatePendingReport(null);
+        if (finishingDay) completedDayReport = { ...report, pendingUpload: syncState === 'queued', uploadFailed: syncState === 'rejected' };
       }
     } catch (error) {
       setMessage(mobileOperationErrorMessage(error, language, 'finish'));
@@ -559,6 +662,12 @@ export default function Index() {
       setSavingJob(false);
       setConfirmType(null);
       restoreConfirmationTriggerFocus();
+      if (completedDayReport) {
+        const dayReport = completedDayReport;
+        setSavedJobs(current => [dayReport, ...current.filter(job => job.id !== dayReport.id)]);
+        setReportDay(mobileReportDayKey(dayReport.endTime));
+        setJobsVisible(true);
+      }
     }
   }
 
@@ -567,58 +676,21 @@ export default function Index() {
     const reportId = activeJobId ?? createJobId(binding.deviceId, selected, startedAt ?? serverNowMs());
     setSavingJob(true);
     try {
-      if (awaitingMovement && !startedAt && !pendingReport) {
-        let remoteBinding: DeviceBinding | null;
-        try {
-          remoteBinding = await fetchVehicleBinding(binding.deviceId);
-        } catch {
-          setMessage(language === 'en'
-            ? 'Connect to the server before cancelling this not-yet-started job.'
-            : 'กรุณาเชื่อมต่อเซิร์ฟเวอร์ก่อนยกเลิกงานที่ยังไม่เริ่ม');
-          return;
-        }
-        const bindingDecision = waitingCancellationBindingDecision(binding, remoteBinding);
-        if (bindingDecision !== 'proceed') {
-          const localStateFinalized = await finalizeActiveJob();
-          if (!localStateFinalized) {
-            setMessage(language === 'en'
-              ? 'Vehicle connection changed, but local cleanup failed. Retry cancellation.'
-              : 'การเชื่อมต่อรถเปลี่ยนแล้ว แต่ล้างข้อมูลงานในเครื่องไม่สำเร็จ กรุณาลองยกเลิกอีกครั้ง');
-            return;
-          }
-          if (remoteBinding) await persistBinding(remoteBinding).catch(() => { /* The live binding remains usable for this session. */ });
-          else await clearBinding().catch(() => { /* The next startup will reconcile the removed binding. */ });
-          setBinding(remoteBinding);
-          setDriverIdentity(null);
-          setJobDriverIdentity(null);
-          setSelected(null);
-          setActiveJobId(null);
-          setStartedAt(null);
-          setAwaitingMovement(false);
-          updatePendingReport(null);
-          setMessage(bindingDecision === 'binding_removed'
-            ? (language === 'en' ? 'Vehicle connection removed by admin; the unstarted selection was cleared.' : 'ผู้ดูแลยกเลิกการเชื่อมต่อรถแล้ว ระบบล้างกิจกรรมที่ยังไม่เริ่ม')
-            : (language === 'en' ? 'Vehicle connection updated by admin; the unstarted selection was cleared.' : 'ผู้ดูแลอัปเดตการเชื่อมต่อรถแล้ว ระบบล้างกิจกรรมที่ยังไม่เริ่ม'));
-          return;
-        }
-      }
-      const report = finalReportForIntent(pendingReport, 'cancelled', () => {
+      const report = cancellationReportForIntent(pendingReport, () => {
         const end = serverNowMs();
         const effectiveStart = startedAt ?? end;
         const jobDriver = reportDriver(jobDriverIdentity, driverIdentity);
         return { id: reportId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, driverName: jobDriver?.driverName || null, driverId: jobDriver?.driverId || null, mode: actionLabel(selected, 'en'), startTime: new Date(effectiveStart).toISOString(), endTime: new Date(end).toISOString(), duration: formatDuration(end - effectiveStart), status: 'Cancelled' };
       });
-      if (!report) {
-        setMessage(language === 'en' ? 'Job completion is already pending — tap Done to retry' : 'กำลังรอบันทึกการจบงาน — กดจบงานเพื่อลองอีกครั้ง');
-        return;
-      }
-      if (!pendingReport && !await persistPendingFinalReport(report)) return;
+      if (report !== pendingReport && !await persistPendingFinalReport(report)) return;
       const syncState = await saveOrQueueJob(report);
       await removePendingJobStart(reportId).catch(() => { /* Server-side report creation also closes the active start. */ });
       const localStateFinalized = await finalizeActiveJob();
       const deliveryMessage = syncState === 'synced'
         ? (language === 'en' ? 'Job cancelled and recorded' : 'ยกเลิกและบันทึกงานแล้ว')
-        : (language === 'en' ? 'Cancellation saved on tablet — dashboard sync pending' : 'บันทึกการยกเลิกในแท็บเล็ตแล้ว — รอส่งไปยังแดชบอร์ด');
+        : syncState === 'queued'
+          ? (language === 'en' ? 'Cancellation saved on tablet — dashboard sync pending' : 'บันทึกการยกเลิกในแท็บเล็ตแล้ว — รอส่งไปยังแดชบอร์ด')
+          : (language === 'en' ? 'Cancellation saved on tablet — dashboard rejected it; admin review needed' : 'บันทึกการยกเลิกในแท็บเล็ตแล้ว — แดชบอร์ดปฏิเสธข้อมูล กรุณาให้ผู้ดูแลตรวจสอบ');
       setMessage(localStateFinalized
         ? deliveryMessage
         : `${deliveryMessage}${language === 'en' ? ' — local cleanup failed; use Retry cancellation again' : ' — ล้างข้อมูลงานในเครื่องไม่สำเร็จ กรุณาลองบันทึกการยกเลิกอีกครั้ง'}`);
@@ -640,31 +712,58 @@ export default function Index() {
     }
   }
 
-  async function refreshSavedJobs() {
-    if (!binding || jobsLoading) return;
-    setJobsLoading(true);
+  async function refreshSavedJobs(query = jobHistoryQueryRef.current, page = 1, append = false) {
+    if (!binding) return;
+    const requestId = jobHistoryRequestRef.current + 1;
+    jobHistoryRequestRef.current = requestId;
+    if (append) setJobsLoadingMore(true);
+    else setJobsLoading(true);
     setJobsError('');
-    let serverJobs: SavedJob[] = [];
+    let serverHistory: DeviceJobHistoryResponse | null = null;
+    let localHistory = null;
     let remoteFailed = false;
     try {
-      serverJobs = await fetchDeviceJobs(binding.deviceId, binding.vehicleNumber);
+      serverHistory = await fetchDeviceJobs(binding.deviceId, binding.vehicleNumber, query, page);
     } catch {
       remoteFailed = true;
     }
     try {
-      const localJobs = await listStoredJobReports(100);
-      setSavedJobs(mergeSavedJobs(binding, serverJobs, localJobs));
+      localHistory = await listStoredJobReportsPage(binding.deviceId, binding.vehicleNumber, query, page, Boolean(serverHistory));
     } catch {
-      setSavedJobs(serverJobs);
-      remoteFailed = true;
+      if (!serverHistory) remoteFailed = true;
     }
+    if (requestId !== jobHistoryRequestRef.current) return;
+    const serverJobs = serverHistory?.jobs || [];
+    const localJobs = localHistory?.jobs || [];
+    const pageJobs = mergeSavedJobs(binding, serverJobs, localJobs);
+    setSavedJobs(current => append ? mergeSavedJobs(binding, [...current, ...pageJobs], []) : pageJobs);
+    const serverSummary = serverHistory?.summary || emptyDeviceJobHistory().summary;
+    const localSummary = localHistory?.summary || emptyDeviceJobHistory().summary;
+    const summary = serverHistory ? combinedJobSummary(serverSummary, localSummary) : localSummary;
+    const hasNextPage = Boolean(serverHistory?.pageInfo.hasNextPage || localHistory?.pageInfo.hasNextPage);
+    const months = [...new Set([...(serverHistory?.facets.months || []), ...(localHistory?.facets.months || [])])].sort().reverse();
+    setJobHistory({
+      jobs: pageJobs,
+      facets: { months },
+      pageInfo: {
+        page,
+        pageSize: serverHistory?.pageInfo.pageSize || localHistory?.pageInfo.pageSize || 50,
+        total: summary.total,
+        totalPages: Math.max(1, Math.ceil(summary.total / (serverHistory?.pageInfo.pageSize || localHistory?.pageInfo.pageSize || 50))),
+        start: summary.total ? 1 : 0,
+        end: Math.min(summary.total, page * (serverHistory?.pageInfo.pageSize || localHistory?.pageInfo.pageSize || 50)),
+        hasNextPage,
+      },
+      summary,
+    });
     if (remoteFailed) setJobsError(language === 'en' ? 'Could not refresh the dashboard. Showing jobs saved on this tablet.' : 'ไม่สามารถโหลดข้อมูลจากแดชบอร์ด แสดงงานที่บันทึกในแท็บเล็ต');
     setJobsLoading(false);
+    setJobsLoadingMore(false);
   }
 
   function openSavedJobs() {
+    setReportDay(null);
     setJobsVisible(true);
-    void refreshSavedJobs();
   }
 
   const setupDisabled = savingSetup || !vehicleInput.trim();
@@ -697,7 +796,7 @@ export default function Index() {
         <Text style={styles.body}>{t.setupBody}</Text>
         <Text style={styles.inputLabel}>{t.vehicle}</Text>
         <TextInput
-          accessibilityHint={language === 'en' ? 'Later changes must be made in Fleet admin.' : 'การเปลี่ยนภายหลังต้องทำในหน้าจัดการฝูงรถ'}
+          accessibilityHint={language === 'en' ? 'Later changes require the admin password.' : 'การเปลี่ยนภายหลังต้องใช้รหัสผ่านผู้ดูแล'}
           accessibilityLabel={t.vehicle}
           autoCapitalize="characters"
           autoCorrect={false}
@@ -721,28 +820,37 @@ export default function Index() {
   const jobSnapshot = { selected, startedAt, awaitingMovement };
   const driverSummary = driverHeaderText(driverIdentity, binding.deviceId, language);
   const confirmationTitle = confirmType === 'start'
-    ? (language === 'en' ? 'Confirm this mode?' : 'ยืนยันกิจกรรมนี้หรือไม่?')
+    ? (language === 'en' ? 'Turn this job on?' : 'เริ่มกิจกรรมนี้หรือไม่?')
+    : confirmType === 'day_end'
+      ? (language === 'en' ? 'Finish work?' : 'จบงานหรือไม่?')
     : confirmType === 'finish'
-      ? (language === 'en' ? 'Finish and save this job?' : 'จบงานและบันทึกหรือไม่?')
+      ? selected === '9'
+        ? (language === 'en' ? 'Finish work and view today’s report?' : 'จบงานและดูรายงานวันนี้หรือไม่?')
+        : (language === 'en' ? 'Turn off and save this job?' : 'ปิดและบันทึกงานนี้หรือไม่?')
       : (language === 'en' ? 'Cancel this job?' : 'ยกเลิกงานนี้หรือไม่?');
   const confirmationDismissLabel = confirmType === 'start'
-    ? (language === 'en' ? 'Choose another mode' : 'เลือกกิจกรรมอื่น')
-    : (language === 'en' ? 'Keep current job' : 'ทำงานปัจจุบันต่อ');
+    ? (language === 'en' ? 'Choose another job' : 'เลือกกิจกรรมอื่น')
+    : confirmType === 'day_end'
+      ? (language === 'en' ? 'Cancel' : 'ยกเลิก')
+    : (language === 'en' ? 'Keep current job on' : 'ทำงานปัจจุบันต่อ');
   const confirmationSubmitLabel = confirmType === 'start'
-    ? (language === 'en' ? `Confirm ${actionLabel(selected, language)}` : `ยืนยัน ${actionLabel(selected, language)}`)
+    ? (language === 'en' ? `Turn on ${actionLabel(selected, language)}` : `เริ่ม ${actionLabel(selected, language)}`)
+    : confirmType === 'day_end'
+      ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน')
     : confirmType === 'finish'
-      ? (language === 'en' ? 'Finish and save job' : 'จบและบันทึกงาน')
+      ? selected === '9'
+        ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน')
+        : (language === 'en' ? 'Turn off and save job' : 'ปิดและบันทึกงาน')
       : (language === 'en' ? 'Confirm job cancellation' : 'ยืนยันการยกเลิกงาน');
   return <SafeAreaView style={styles.page} edges={['top', 'right', 'bottom', 'left']}>
     <View style={[styles.header, compactLandscape && compactStyles.header]}>
-      <RedGpsPin size={compactLandscape ? 30 : 38} />
+      <Pressable accessibilityRole="button" accessibilityLabel={language === 'en' ? 'Open admin vehicle settings' : 'เปิดการตั้งค่ารถสำหรับผู้ดูแล'} accessibilityHint={language === 'en' ? 'Admin password required to change the vehicle number' : 'ต้องใช้รหัสผ่านผู้ดูแลเพื่อเปลี่ยนหมายเลขรถ'} onPress={openVehicleAdmin} style={languageStyles.headerButton}><RedGpsPin size={compactLandscape ? 30 : 38} /></Pressable>
       <View style={styles.headerInfo}>
         <Text ref={headerTitleRef} accessibilityRole="header" numberOfLines={1} style={[styles.headerTitle, portrait && layoutStyles.headerTitlePortrait, compactLandscape && compactStyles.headerTitle]}>SONGDEE OPS PANEL · {binding.vehicleNumber}</Text>
         <Text numberOfLines={1} style={[styles.headerMeta, compactLandscape && compactStyles.headerMeta]}>{driverSummary}</Text>
         {message ? <Text accessibilityLiveRegion="polite" numberOfLines={compactLandscape ? 1 : 2} style={[styles.headerStatus, compactLandscape && compactStyles.headerStatus]}>{message}</Text> : null}
       </View>
-      {(startedAt || awaitingMovement) && (!pendingReport || pendingReport.status === 'Cancelled') ? <Pressable ref={cancelJobButtonRef} accessibilityRole="button" accessibilityLabel={pendingReport ? (language === 'en' ? 'Retry cancellation' : 'ลองบันทึกการยกเลิกอีกครั้ง') : (language === 'en' ? 'Cancel current job' : 'ยกเลิกงานปัจจุบัน')} onPress={() => { rememberConfirmationTrigger(cancelJobButtonRef.current); setConfirmType('cancel'); }} style={[readableStyles.cancelJob, compactLandscape && compactStyles.cancelJob]}><Text style={[readableStyles.cancelJobText, compactLandscape && compactStyles.cancelJobText]}>{pendingReport ? (language === 'en' ? 'Retry cancellation' : 'ลองบันทึกอีกครั้ง') : (language === 'en' ? 'Cancel job' : 'ยกเลิกงาน')}</Text></Pressable> : null}
-      <Pressable accessibilityRole="button" accessibilityLabel={language === 'en' ? 'View saved jobs' : 'ดูงานที่บันทึก'} onPress={openSavedJobs} style={[historyStyles.headerButton, compactLandscape && historyStyles.headerButtonCompact]}><Text style={historyStyles.headerButtonText}>{language === 'en' ? 'Jobs' : 'งาน'}</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={language === 'en' ? 'View saved jobs and daily timeline' : 'ดูงานที่บันทึกและไทม์ไลน์ประจำวัน'} onPress={openSavedJobs} style={[headerUtilityStyles.button, compactLandscape && headerUtilityStyles.buttonCompact]}><Text style={headerUtilityStyles.buttonText}>{language === 'en' ? 'Jobs' : 'งาน'}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={language === 'en' ? 'Switch to Thai' : 'เปลี่ยนเป็นภาษาอังกฤษ'} onPress={() => setLanguage(language === 'en' ? 'th' : 'en')} style={languageStyles.headerButton}><Text style={styles.language}>{language === 'en' ? 'ไทย' : 'EN'}</Text></Pressable>
     </View>
     <View style={[styles.content, portrait && layoutStyles.contentPortrait, compactLandscape && compactStyles.content]}>
@@ -766,14 +874,17 @@ export default function Index() {
                         styles.action,
                         readableStyles.action,
                         compactLandscape && compactStyles.action,
-                        number === '9' && styles.done,
                         selected === number && styles.actionSelected,
                         unavailable && selected !== number && disabledActionStyles.tile,
                       ]}
                     >
-                      <Text style={[styles.number, readableStyles.number, compactLandscape && compactStyles.number, unavailable && selected !== number && readableStyles.disabledNumber]}>{number}</Text>
-                      <Text style={[styles.actionTitle, readableStyles.actionTitle, compactLandscape && compactStyles.actionTitle, unavailable && selected !== number && readableStyles.disabledText]}>{language === 'en' ? english : thai}</Text>
-                      <Text style={[styles.actionSub, readableStyles.actionSub, compactLandscape && compactStyles.actionSub, unavailable && selected !== number && readableStyles.disabledText]}>{language === 'en' ? englishDescription : thaiDescription}</Text>
+                      <View style={[styles.actionNumberSlot, compactLandscape && compactStyles.actionNumberSlot]}>
+                        <Text style={[styles.number, readableStyles.number, compactLandscape && compactStyles.number, unavailable && selected !== number && readableStyles.disabledNumber]}>{number}</Text>
+                      </View>
+                      <View style={[styles.actionTextSlot, compactLandscape && compactStyles.actionTextSlot]}>
+                        <Text numberOfLines={2} style={[styles.actionTitle, readableStyles.actionTitle, compactLandscape && compactStyles.actionTitle, unavailable && selected !== number && readableStyles.disabledText]}>{language === 'en' ? english : thai}</Text>
+                        <Text numberOfLines={compactLandscape ? 2 : 5} style={[styles.actionSub, readableStyles.actionSub, compactLandscape && compactStyles.actionSub, unavailable && selected !== number && readableStyles.disabledText]}>{language === 'en' ? englishDescription : thaiDescription}</Text>
+                      </View>
                     </Pressable>
                   );
                 })}
@@ -784,38 +895,49 @@ export default function Index() {
       </View>
     </View>
     <Modal animationType="fade" onRequestClose={dismissConfirmation} onShow={focusConfirmationTitle} statusBarTranslucent transparent visible={confirmType !== null}>
-      {confirmType ? <View style={modalStyles.overlay}><View accessibilityViewIsModal onAccessibilityEscape={dismissConfirmation} style={modalStyles.card}><RedGpsPin size={42} /><Text ref={confirmationTitleRef} accessible accessibilityLiveRegion="assertive" accessibilityRole="header" style={modalStyles.title}>{confirmationTitle}</Text><Text style={modalStyles.body}>{confirmType === 'start' ? (language === 'en' ? `Mode: ${actionLabel(selected, language)}\nThe start time will be recorded when the vehicle moves.` : `กิจกรรม: ${actionLabel(selected, language)}\nระบบจะบันทึกเวลาเริ่มเมื่อรถเคลื่อนที่`) : confirmType === 'finish' ? awaitingMovement && !startedAt ? (language === 'en' ? 'Movement has not been detected. The mode confirmation time will be used as the start time, and the job will be saved to the dashboard.' : 'ยังไม่ตรวจพบการเคลื่อนที่ ระบบจะใช้เวลาที่ยืนยันกิจกรรมเป็นเวลาเริ่ม และบันทึกงานไปยังแดชบอร์ด') : (language === 'en' ? 'The completed job will be saved and sent to the web dashboard.' : 'ระบบจะบันทึกงานที่เสร็จแล้วและส่งไปยังแดชบอร์ดเว็บ') : (language === 'en' ? 'The job will be recorded as cancelled.' : 'งานนี้จะถูกบันทึกเป็นงานที่ยกเลิก')}</Text><View style={modalStyles.actions}><Pressable accessibilityLabel={confirmationDismissLabel} accessibilityRole="button" accessibilityState={{ disabled: savingJob }} disabled={savingJob} onPress={dismissConfirmation} style={[modalStyles.cancel, savingJob && layoutStyles.disabled]}><Text style={modalStyles.cancelText}>{confirmType === 'start' ? (language === 'en' ? 'Choose another' : 'เลือกกิจกรรมอื่น') : (language === 'en' ? 'Keep job' : 'ทำงานต่อ')}</Text></Pressable><Pressable accessibilityLabel={confirmationSubmitLabel} accessibilityRole="button" accessibilityState={{ disabled: savingJob, busy: savingJob }} disabled={savingJob} onPress={confirmType === 'start' ? confirmStart : confirmType === 'finish' ? confirmFinish : confirmCancel} style={[modalStyles.confirm, savingJob && layoutStyles.disabled]}><Text style={modalStyles.confirmText}>{savingJob ? (language === 'en' ? 'Saving…' : 'กำลังบันทึก…') : confirmType === 'cancel' ? (language === 'en' ? 'Cancel job' : 'ยกเลิกงาน') : (language === 'en' ? 'Confirm' : 'ยืนยัน')}</Text></Pressable></View></View></View> : null}
+      {confirmType ? <View style={modalStyles.overlay}><View accessibilityViewIsModal onAccessibilityEscape={dismissConfirmation} style={modalStyles.card}><RedGpsPin size={42} /><Text ref={confirmationTitleRef} accessible accessibilityLiveRegion="assertive" accessibilityRole="header" style={modalStyles.title}>{confirmationTitle}</Text><Text style={modalStyles.body}>{confirmType === 'start' ? (language === 'en' ? `Job: ${actionLabel(selected, language)}\nThe start time will be recorded when the vehicle moves.` : `กิจกรรม: ${actionLabel(selected, language)}\nระบบจะบันทึกเวลาเริ่มเมื่อรถเคลื่อนที่`) : confirmType === 'day_end' ? (language === 'en' ? 'Finish work will be saved immediately, then today’s saved jobs and timeline will open.' : 'ระบบจะบันทึกการจบงานทันที แล้วเปิดงานที่บันทึกและไทม์ไลน์ของวันนี้') : confirmType === 'finish' ? selected === '9' ? (language === 'en' ? 'Finish work will be saved, then today’s saved jobs and timeline will open on this tablet.' : 'ระบบจะบันทึกการจบงาน แล้วเปิดงานที่บันทึกและไทม์ไลน์ของวันนี้บนแท็บเล็ต') : awaitingMovement && !startedAt ? (language === 'en' ? 'Movement has not been detected. The job selection time will be used as the start time, and the job will be saved to the dashboard.' : 'ยังไม่ตรวจพบการเคลื่อนที่ ระบบจะใช้เวลาที่เลือกกิจกรรมเป็นเวลาเริ่ม และบันทึกงานไปยังแดชบอร์ด') : (language === 'en' ? 'The completed job will be saved and sent to the web dashboard.' : 'ระบบจะบันทึกงานที่เสร็จแล้วและส่งไปยังแดชบอร์ดเว็บ') : (language === 'en' ? 'The job will be recorded as cancelled.' : 'งานนี้จะถูกบันทึกเป็นงานที่ยกเลิก')}</Text><View style={modalStyles.actions}><Pressable accessibilityLabel={confirmationDismissLabel} accessibilityRole="button" accessibilityState={{ disabled: savingJob }} disabled={savingJob} onPress={dismissConfirmation} style={[modalStyles.cancel, savingJob && layoutStyles.disabled]}><Text style={modalStyles.cancelText}>{confirmType === 'start' ? (language === 'en' ? 'Choose another' : 'เลือกกิจกรรมอื่น') : confirmType === 'day_end' ? (language === 'en' ? 'Cancel' : 'ยกเลิก') : (language === 'en' ? 'Keep job on' : 'ทำงานต่อ')}</Text></Pressable>{confirmType === 'finish' ? <Pressable accessibilityLabel={language === 'en' ? 'Cancel current job' : 'ยกเลิกงานปัจจุบัน'} accessibilityRole="button" accessibilityState={{ disabled: savingJob, busy: savingJob }} disabled={savingJob} onPress={confirmCancel} style={[modalStyles.cancelJob, savingJob && layoutStyles.disabled]}><Text style={modalStyles.cancelJobText}>{language === 'en' ? 'Cancel job' : 'ยกเลิกงาน'}</Text></Pressable> : null}<Pressable accessibilityLabel={confirmationSubmitLabel} accessibilityRole="button" accessibilityState={{ disabled: savingJob, busy: savingJob }} disabled={savingJob} onPress={confirmType === 'start' ? confirmStart : confirmType === 'finish' || confirmType === 'day_end' ? confirmFinish : confirmCancel} style={[modalStyles.confirm, savingJob && layoutStyles.disabled]}><Text style={modalStyles.confirmText}>{savingJob ? (language === 'en' ? 'Saving…' : 'กำลังบันทึก…') : confirmType === 'cancel' ? (language === 'en' ? 'Retry cancellation' : 'ลองบันทึกการยกเลิกอีกครั้ง') : confirmType === 'start' ? (language === 'en' ? 'Turn on' : 'เริ่มงาน') : confirmType === 'day_end' ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน') : selected === '9' ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน') : (language === 'en' ? 'Turn off' : 'ปิดงาน')}</Text></Pressable></View></View></View> : null}
+    </Modal>
+    <Modal animationType="fade" onRequestClose={dismissVehicleAdmin} statusBarTranslucent transparent visible={vehicleAdminVisible}>
+      <ScrollView contentContainerStyle={vehicleAdminStyles.scroll} keyboardShouldPersistTaps="handled">
+        <View accessibilityViewIsModal style={modalStyles.card}>
+          <RedGpsPin size={42} />
+          <Text accessibilityRole="header" style={modalStyles.title}>{language === 'en' ? 'Change vehicle number' : 'เปลี่ยนหมายเลขรถ'}</Text>
+          <Text style={modalStyles.body}>{language === 'en'
+            ? `Current vehicle: ${binding.vehicleNumber}\nDevice ID: ${binding.deviceId}`
+            : `รถปัจจุบัน: ${binding.vehicleNumber}\nรหัสอุปกรณ์: ${binding.deviceId}`}</Text>
+          {selected ? <Text accessibilityRole="alert" style={vehicleAdminStyles.warning}>{language === 'en' ? 'Turn off or cancel the current job before changing the vehicle.' : 'กรุณาปิดหรือยกเลิกงานปัจจุบันก่อนเปลี่ยนรถ'}</Text> : null}
+          <Text style={vehicleAdminStyles.label}>{language === 'en' ? 'New vehicle number' : 'หมายเลขรถใหม่'}</Text>
+          <TextInput autoCapitalize="characters" autoCorrect={false} editable={!changingVehicle} maxLength={80} onChangeText={setVehicleAdminInput} placeholder={language === 'en' ? 'Vehicle number' : 'หมายเลขรถ'} placeholderTextColor={colors.grey} style={vehicleAdminStyles.input} value={vehicleAdminInput} />
+          <Text style={vehicleAdminStyles.label}>{language === 'en' ? 'Admin password' : 'รหัสผ่านผู้ดูแล'}</Text>
+          <TextInput autoCapitalize="none" autoCorrect={false} editable={!changingVehicle && !selected} maxLength={128} onChangeText={setVehicleAdminPassword} onSubmitEditing={() => { void changeVehicle(); }} placeholder={language === 'en' ? 'Enter admin password' : 'กรอกรหัสผ่านผู้ดูแล'} placeholderTextColor={colors.grey} returnKeyType="done" secureTextEntry style={vehicleAdminStyles.input} value={vehicleAdminPassword} />
+          {vehicleAdminError ? <Text accessibilityLiveRegion="assertive" accessibilityRole="alert" style={vehicleAdminStyles.error}>{vehicleAdminError}</Text> : null}
+          <View style={modalStyles.actions}>
+            <Pressable accessibilityRole="button" disabled={changingVehicle} onPress={dismissVehicleAdmin} style={[modalStyles.cancel, changingVehicle && layoutStyles.disabled]}><Text style={modalStyles.cancelText}>{language === 'en' ? 'Cancel' : 'ยกเลิก'}</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityState={{ busy: changingVehicle, disabled: changingVehicle || Boolean(selected) || !vehicleAdminInput.trim() || !vehicleAdminPassword }} disabled={changingVehicle || Boolean(selected) || !vehicleAdminInput.trim() || !vehicleAdminPassword} onPress={() => { void changeVehicle(); }} style={[modalStyles.confirm, (changingVehicle || Boolean(selected) || !vehicleAdminInput.trim() || !vehicleAdminPassword) && layoutStyles.disabled]}><Text style={modalStyles.confirmText}>{changingVehicle ? (language === 'en' ? 'Changing…' : 'กำลังเปลี่ยน…') : (language === 'en' ? 'Change vehicle' : 'เปลี่ยนรถ')}</Text></Pressable>
+          </View>
+        </View>
+      </ScrollView>
     </Modal>
     <Modal animationType="slide" onRequestClose={() => setJobsVisible(false)} statusBarTranslucent visible={jobsVisible}>
       <SafeAreaView style={historyStyles.page} edges={['top', 'right', 'bottom', 'left']}>
-        <View style={historyStyles.header}>
-          <RedGpsPin size={34} />
-          <View style={historyStyles.headerInfo}>
-            <Text accessibilityRole="header" style={historyStyles.title}>{language === 'en' ? 'Saved jobs' : 'งานที่บันทึก'}</Text>
-            <Text numberOfLines={1} style={historyStyles.subtitle}>{binding.vehicleNumber} · {binding.deviceId}</Text>
-          </View>
-          <Pressable accessibilityRole="button" accessibilityLabel={language === 'en' ? 'Refresh saved jobs' : 'รีเฟรชงานที่บันทึก'} disabled={jobsLoading} onPress={() => { void refreshSavedJobs(); }} style={historyStyles.secondaryButton}><Text style={historyStyles.secondaryButtonText}>{jobsLoading ? '…' : (language === 'en' ? 'Refresh' : 'รีเฟรช')}</Text></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={language === 'en' ? 'Close saved jobs' : 'ปิดรายการงาน'} onPress={() => setJobsVisible(false)} style={historyStyles.closeButton}><Text style={historyStyles.closeButtonText}>×</Text></Pressable>
-        </View>
-        {jobsError ? <Text accessibilityRole="alert" style={historyStyles.error}>{jobsError}</Text> : null}
-        <FlatList
-          contentContainerStyle={[historyStyles.list, !savedJobs.length && historyStyles.emptyList]}
-          data={savedJobs}
-          key={portrait ? 'portrait-jobs' : 'landscape-jobs'}
-          keyExtractor={item => item.id}
-          numColumns={portrait ? 1 : 2}
-          refreshing={jobsLoading}
-          onRefresh={refreshSavedJobs}
-          renderItem={({ item }) => <View style={[historyStyles.jobCard, !portrait && historyStyles.jobCardLandscape]}>
-            <View style={historyStyles.jobTopRow}>
-              <Text style={historyStyles.jobMode}>{localizedJobMode(item.mode, language)}</Text>
-              <Text style={[historyStyles.jobStatus, item.status === 'Cancelled' && historyStyles.cancelledStatus, item.pendingUpload && historyStyles.pendingStatus, item.uploadFailed && historyStyles.failedStatus]}>{savedJobStatus(item, language)}</Text>
-            </View>
-            <Text style={historyStyles.jobTime}>{formatJobDate(item.startTime, language)} — {formatJobDate(item.endTime, language)}</Text>
-            <Text style={historyStyles.jobMeta}>{language === 'en' ? 'Duration' : 'ระยะเวลา'} {item.duration} · {item.driverName || (language === 'en' ? 'No driver identified' : 'ไม่พบข้อมูลพนักงานขับรถ')}</Text>
-            <Text numberOfLines={1} style={historyStyles.jobId}>{item.id}</Text>
-          </View>}
-          ListEmptyComponent={<View style={historyStyles.empty}><Text style={historyStyles.emptyTitle}>{jobsLoading ? (language === 'en' ? 'Loading jobs…' : 'กำลังโหลดงาน…') : (language === 'en' ? 'No saved jobs yet' : 'ยังไม่มีงานที่บันทึก')}</Text><Text style={historyStyles.emptyBody}>{language === 'en' ? 'Finished and cancelled jobs for this vehicle will appear here.' : 'งานที่จบหรือยกเลิกของรถคันนี้จะแสดงที่นี่'}</Text></View>}
+        <MobileJobReport
+          binding={binding}
+          error={jobsError}
+          hasMore={jobHistory.pageInfo.hasNextPage}
+          jobs={savedJobs}
+          language={language}
+          loading={jobsLoading}
+          loadingMore={jobsLoadingMore}
+          monthKeys={jobHistory.facets.months}
+          onClose={() => setJobsVisible(false)}
+          onLoadMore={() => { void refreshSavedJobs(jobHistoryQueryRef.current, jobHistory.pageInfo.page + 1, true); }}
+          onQueryChange={query => { jobHistoryQueryRef.current = query; void refreshSavedJobs(query, 1, false); }}
+          onRefresh={() => { void refreshSavedJobs(jobHistoryQueryRef.current, 1, false); }}
+          onSelectDay={setReportDay}
+          portrait={portrait}
+          reportDay={reportDay}
+          summary={jobHistory.summary}
+          totalJobs={jobHistory.pageInfo.total}
         />
       </SafeAreaView>
     </Modal>
@@ -825,13 +947,10 @@ export default function Index() {
 function formatDuration(ms: number) { const total = Math.max(0, Math.floor(ms / 1000)); return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`; }
 function actionLabel(number: string | null, language: 'en' | 'th') { const action = actions.find(item => item[0] === number); return action ? (language === 'en' ? action[2] : action[1]) : ''; }
 function apiFailureMessage(error: unknown) { return error instanceof Error && error.message ? error.message : 'Permanent API rejection'; }
-function localizedJobMode(mode: string, language: 'en' | 'th') { const action = actions.find(item => item[2] === mode); return language === 'th' && action ? action[1] : mode; }
-function formatJobDate(value: string, language: 'en' | 'th') { const date = new Date(value); return Number.isFinite(date.getTime()) ? date.toLocaleString(language === 'en' ? 'en-GB' : 'th-TH', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : value; }
-function savedJobStatus(job: SavedJob, language: 'en' | 'th') { if (job.uploadFailed) return language === 'en' ? 'Needs attention' : 'ต้องตรวจสอบ'; if (job.pendingUpload) return language === 'en' ? 'Waiting to sync' : 'รอซิงค์'; if (job.status === 'Cancelled') return language === 'en' ? 'Cancelled' : 'ยกเลิก'; return language === 'en' ? 'Saved' : 'บันทึกแล้ว'; }
 
 const colors = { red: '#E31B23', maroon: '#7A1424', black: '#111111', grey: '#68727D', lightGrey: '#EEF0F2', white: '#FFFFFF' };
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: colors.lightGrey }, header: { minHeight: 76, backgroundColor: colors.black, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 10 }, headerInfo: { flex: 1, minWidth: 0 }, headerTitle: { color: colors.white, fontWeight: '800', letterSpacing: 1 }, headerMeta: { color: '#C8CDD2', fontSize: 12, marginTop: 4 }, headerStatus: { color: '#FFB3B6', fontSize: 11, marginTop: 3 }, language: { color: colors.white, fontWeight: '700' }, content: { padding: 8, flex: 1 }, eyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 1.5, color: colors.grey }, title: { fontSize: 30, fontWeight: '800', color: colors.black, marginTop: 7 }, body: { fontSize: 14, color: colors.grey, marginTop: 8, lineHeight: 21 }, columns: { flex: 1, flexDirection: 'row' }, panel: { flex: 1, backgroundColor: colors.white, borderColor: '#D7DBDF', borderWidth: 1, borderRadius: 8, padding: 8 }, grid: { flex: 1, gap: 8 }, actionRow: { flex: 1, flexDirection: 'row', gap: 8 }, action: { flex: 1, minHeight: 0, borderWidth: 1, borderColor: '#D7DBDF', borderRadius: 8, padding: 10, justifyContent: 'center' }, actionSelected: { borderColor: colors.red, borderWidth: 2 }, done: { backgroundColor: '#FFF1F1' }, number: { backgroundColor: colors.red, color: colors.white, width: 27, height: 27, borderRadius: 14, textAlign: 'center', textAlignVertical: 'center', fontWeight: '800', marginBottom: 10 }, actionTitle: { fontWeight: '800', color: colors.black, fontSize: 14 }, actionSub: { color: colors.grey, fontSize: 10, marginTop: 4 }, setup: { flex: 1, justifyContent: 'center', padding: 40, backgroundColor: colors.lightGrey }, setupPage: { flex: 1, backgroundColor: colors.lightGrey }, setupScroll: { flexGrow: 1, justifyContent: 'center', padding: 40 }, loading: { alignItems: 'center', gap: 10 }, setupCard: { maxWidth: 520, width: '100%', alignSelf: 'center', backgroundColor: colors.white, padding: 30, borderRadius: 14, borderWidth: 1, borderColor: '#D7DBDF' }, inputLabel: { color: colors.black, fontSize: 13, fontWeight: '700', marginTop: 22 }, input: { backgroundColor: colors.white, borderColor: '#C8CDD2', borderWidth: 1, borderRadius: 8, padding: 14, marginTop: 6, fontSize: 16, color: colors.black }, primary: { minHeight: 48, justifyContent: 'center', backgroundColor: colors.red, padding: 14, borderRadius: 8, marginTop: 14 }, primaryText: { color: colors.white, textAlign: 'center', fontWeight: '800' }, error: { color: colors.maroon, marginTop: 12, fontSize: 12 },
+  page: { flex: 1, backgroundColor: colors.lightGrey }, header: { minHeight: 76, backgroundColor: colors.black, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 10 }, headerInfo: { flex: 1, minWidth: 0 }, headerTitle: { color: colors.white, fontWeight: '800', letterSpacing: 1 }, headerMeta: { color: '#C8CDD2', fontSize: 12, marginTop: 4 }, headerStatus: { color: '#FFB3B6', fontSize: 11, marginTop: 3 }, language: { color: colors.white, fontWeight: '700' }, content: { padding: 8, flex: 1 }, eyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 1.5, color: colors.grey }, title: { fontSize: 30, fontWeight: '800', color: colors.black, marginTop: 7 }, body: { fontSize: 14, color: colors.grey, marginTop: 8, lineHeight: 21 }, columns: { flex: 1, flexDirection: 'row' }, panel: { flex: 1, backgroundColor: colors.white, borderColor: '#D7DBDF', borderWidth: 1, borderRadius: 8, padding: 8 }, grid: { flex: 1, gap: 8 }, actionRow: { flex: 1, flexDirection: 'row', gap: 8 }, action: { flex: 1, minHeight: 0, borderWidth: 1, borderColor: '#D7DBDF', borderRadius: 8, padding: 10 }, actionNumberSlot: { height: '45%', alignItems: 'center', justifyContent: 'flex-end' }, actionTextSlot: { flex: 1, minHeight: 0, width: '100%', alignItems: 'center', paddingTop: 16 }, actionSelected: { borderColor: colors.red, borderWidth: 2, backgroundColor: '#FFF1F1' }, number: { backgroundColor: colors.red, color: colors.white, width: 27, height: 27, borderRadius: 14, textAlign: 'center', textAlignVertical: 'center', fontWeight: '800' }, actionTitle: { fontWeight: '800', color: colors.black, fontSize: 14 }, actionSub: { color: colors.grey, fontSize: 10 }, setup: { flex: 1, justifyContent: 'center', padding: 40, backgroundColor: colors.lightGrey }, setupPage: { flex: 1, backgroundColor: colors.lightGrey }, setupScroll: { flexGrow: 1, justifyContent: 'center', padding: 40 }, loading: { alignItems: 'center', gap: 10 }, setupCard: { maxWidth: 520, width: '100%', alignSelf: 'center', backgroundColor: colors.white, padding: 30, borderRadius: 14, borderWidth: 1, borderColor: '#D7DBDF' }, inputLabel: { color: colors.black, fontSize: 13, fontWeight: '700', marginTop: 22 }, input: { backgroundColor: colors.white, borderColor: '#C8CDD2', borderWidth: 1, borderRadius: 8, padding: 14, marginTop: 6, fontSize: 16, color: colors.black }, primary: { minHeight: 48, justifyContent: 'center', backgroundColor: colors.red, padding: 14, borderRadius: 8, marginTop: 14 }, primaryText: { color: colors.white, textAlign: 'center', fontWeight: '800' }, error: { color: colors.maroon, marginTop: 12, fontSize: 12 },
 });
 
 const disabledActionStyles = StyleSheet.create({
@@ -844,39 +963,11 @@ const languageStyles = StyleSheet.create({
   headerButton: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
 });
 
-const modalStyles = StyleSheet.create({ overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 }, card: { width: '100%', maxWidth: 420, backgroundColor: colors.white, borderRadius: 14, padding: 26 }, title: { color: colors.black, fontSize: 22, fontWeight: '800', marginTop: 12 }, body: { color: colors.grey, fontSize: 14, lineHeight: 21, marginTop: 8 }, actions: { flexDirection: 'row', gap: 8, marginTop: 24 }, cancel: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#D7DBDF' }, cancelText: { color: colors.black, fontWeight: '700', textAlign: 'center' }, confirm: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, backgroundColor: colors.red }, confirmText: { color: colors.white, fontWeight: '800', textAlign: 'center' } });
-const historyStyles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: colors.lightGrey },
-  header: { minHeight: 76, backgroundColor: colors.black, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 10 },
-  headerInfo: { flex: 1, minWidth: 0 },
-  title: { color: colors.white, fontSize: 20, fontWeight: '800' },
-  subtitle: { color: '#C8CDD2', fontSize: 11, marginTop: 3 },
-  headerButton: { minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: '#4D5358', borderRadius: 7, paddingHorizontal: 13 },
-  headerButtonCompact: { minHeight: 40, paddingHorizontal: 9 },
-  headerButtonText: { color: colors.white, fontWeight: '800', fontSize: 12 },
-  secondaryButton: { minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: '#5C6268', borderRadius: 7, paddingHorizontal: 12 },
-  secondaryButtonText: { color: colors.white, fontWeight: '700', fontSize: 12 },
-  closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  closeButtonText: { color: colors.white, fontSize: 30, lineHeight: 32 },
-  error: { color: colors.maroon, backgroundColor: '#FFE8E9', paddingHorizontal: 16, paddingVertical: 10, fontWeight: '700' },
-  list: { padding: 12, gap: 10 },
-  emptyList: { flexGrow: 1, justifyContent: 'center' },
-  jobCard: { flex: 1, minWidth: 0, backgroundColor: colors.white, borderWidth: 1, borderColor: '#D7DBDF', borderRadius: 10, padding: 16 },
-  jobCardLandscape: { marginHorizontal: 5 },
-  jobTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  jobMode: { flex: 1, color: colors.black, fontSize: 18, fontWeight: '800' },
-  jobStatus: { color: '#176B3A', backgroundColor: '#E7F7ED', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, overflow: 'hidden', fontSize: 11, fontWeight: '800' },
-  cancelledStatus: { color: colors.grey, backgroundColor: '#E4E7E9' },
-  pendingStatus: { color: '#7A4C00', backgroundColor: '#FFF0CC' },
-  failedStatus: { color: colors.maroon, backgroundColor: '#FFE0E2' },
-  jobTime: { color: colors.black, fontSize: 14, fontWeight: '700', marginTop: 12 },
-  jobMeta: { color: colors.grey, fontSize: 12, marginTop: 6 },
-  jobId: { color: '#8A9299', fontSize: 10, marginTop: 10 },
-  empty: { alignItems: 'center', padding: 30 },
-  emptyTitle: { color: colors.black, fontSize: 20, fontWeight: '800', textAlign: 'center' },
-  emptyBody: { color: colors.grey, fontSize: 13, textAlign: 'center', marginTop: 7 },
-});
-const readableStyles = StyleSheet.create({ action: { alignItems: 'center' }, number: { width: 38, height: 38, borderRadius: 19, fontSize: 17, marginBottom: 12 }, disabledNumber: { backgroundColor: '#727A80', color: '#FFFFFF' }, actionTitle: { fontSize: 18, textAlign: 'center' }, actionSub: { fontSize: 13, textAlign: 'center', marginTop: 6 }, disabledText: { color: '#596167' }, cancelJob: { minHeight: 44, justifyContent: 'center', backgroundColor: colors.red, borderRadius: 7, paddingHorizontal: 12, paddingVertical: 8 }, cancelJobText: { color: colors.white, fontWeight: '800', fontSize: 12 } });
+const modalStyles = StyleSheet.create({ overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 }, card: { width: '100%', maxWidth: 420, backgroundColor: colors.white, borderRadius: 14, padding: 26 }, title: { color: colors.black, fontSize: 22, fontWeight: '800', marginTop: 12 }, body: { color: colors.grey, fontSize: 14, lineHeight: 21, marginTop: 8 }, actions: { gap: 8, marginTop: 24 }, cancel: { minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#D7DBDF' }, cancelText: { color: colors.black, fontWeight: '700', textAlign: 'center' }, cancelJob: { minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.red, backgroundColor: '#FFF1F1' }, cancelJobText: { color: colors.red, fontWeight: '800', textAlign: 'center' }, confirm: { minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, backgroundColor: colors.red }, confirmText: { color: colors.white, fontWeight: '800', textAlign: 'center' } });
+const vehicleAdminStyles = StyleSheet.create({ scroll: { flexGrow: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 }, label: { color: colors.black, fontSize: 13, fontWeight: '800', marginTop: 16 }, input: { minHeight: 48, borderWidth: 1, borderColor: '#C8CDD2', borderRadius: 8, paddingHorizontal: 13, marginTop: 6, color: colors.black, backgroundColor: colors.white, fontSize: 16 }, warning: { color: colors.maroon, backgroundColor: '#FFF1F1', borderRadius: 7, padding: 10, marginTop: 14, fontSize: 12, fontWeight: '700' }, error: { color: colors.maroon, marginTop: 12, fontSize: 12, fontWeight: '700' } });
+const historyStyles = StyleSheet.create({ page: { flex: 1, backgroundColor: colors.lightGrey } });
+const headerUtilityStyles = StyleSheet.create({ button: { minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: '#4D5358', borderRadius: 7, paddingHorizontal: 13 }, buttonCompact: { minHeight: 40, paddingHorizontal: 9 }, buttonText: { color: colors.white, fontWeight: '800', fontSize: 12 } });
+const readableStyles = StyleSheet.create({ action: { alignItems: 'center' }, number: { width: 38, height: 38, borderRadius: 19, fontSize: 17 }, disabledNumber: { backgroundColor: '#727A80', color: '#FFFFFF' }, actionTitle: { fontSize: 18, lineHeight: 24, textAlign: 'center' }, actionSub: { fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 8 }, disabledText: { color: '#596167' } });
 const layoutStyles = StyleSheet.create({ headerTitlePortrait: { fontSize: 12 }, contentPortrait: { padding: 8 }, columnsPortrait: { flexDirection: 'column' }, disabled: { opacity: 0.48 } });
 const compactStyles = StyleSheet.create({
   header: { minHeight: 60, paddingHorizontal: 10, gap: 7 },
@@ -888,11 +979,11 @@ const compactStyles = StyleSheet.create({
   grid: { gap: 5 },
   actionRow: { gap: 5 },
   action: { padding: 4 },
-  number: { width: 28, height: 28, borderRadius: 14, fontSize: 14, marginBottom: 4 },
+  actionNumberSlot: { height: '38%' },
+  actionTextSlot: { paddingTop: 0 },
+  number: { width: 28, height: 28, borderRadius: 14, fontSize: 14 },
   actionTitle: { fontSize: 13, lineHeight: 15 },
   actionSub: { fontSize: 10, lineHeight: 12, marginTop: 2 },
-  cancelJob: { minHeight: 42, paddingHorizontal: 8 },
-  cancelJobText: { fontSize: 10 },
   setupScroll: { padding: 16 },
   setupCard: { padding: 20 },
   setupTitle: { fontSize: 24 },

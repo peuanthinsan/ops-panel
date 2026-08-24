@@ -43,10 +43,10 @@ test('a temporary failure remains enabled for background retry', async () => {
   assert.deepEqual(fixture.calls, ['enqueue', 'send']);
 });
 
-test('a permanent rejection is retained as a disabled diagnostic record', async () => {
+test('a permanent rejection is retained for admin review without trapping the next job', async () => {
   const rejection = new SongdeeApiError(409, 'binding conflict');
   const fixture = operations(async () => { throw rejection; });
-  await assert.rejects(deliverJobReport(report, fixture.value), rejection);
+  assert.equal(await deliverJobReport(report, fixture.value), 'rejected');
   assert.deepEqual(fixture.calls, ['enqueue', 'send', 'mark-permanent']);
 });
 

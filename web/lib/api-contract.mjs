@@ -1,5 +1,5 @@
 export const SONGDEE_API_SERVICE = 'songdee-fleet-ops';
-export const SONGDEE_API_CONTRACT_VERSION = '2026-08-20.5';
+export const SONGDEE_API_CONTRACT_VERSION = '2026-08-24.2';
 
 export function songdeeApiHealth(extra = {}) {
   return {

@@ -7,6 +7,8 @@ test('mobile startup renders a valid cached binding before remote reconciliation
   const source = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
   assert.match(source, /if \(local\) setBindingChecked\(true\)/);
   assert.match(source, /requestIdleCallback/);
+  assert.match(source, /typeof requestIdleCallback === 'function'/);
+  assert.match(source, /const timeoutId = setTimeout\(task, 0\)/);
   assert.doesNotMatch(source, /InteractionManager/);
   assert.doesNotMatch(source, /expo-location|locationPermissionPromiseRef|getForegroundPermissionsAsync/);
   assert.match(source, /requestJobGpsSync/);

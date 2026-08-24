@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { activeJobBelongsToBinding, deviceBindingKey, mobileStartupReady, parseStoredActiveJob, parseStoredBinding, recoverBindingFromActiveJob, shouldPreserveLocalBindingWithoutRemote, waitingCancellationBindingDecision } from '../lib/device-state.ts';
+import { activeJobBelongsToBinding, deviceBindingKey, mobileStartupReady, parseStoredActiveJob, parseStoredBinding, recoverBindingFromActiveJob, shouldPreserveLocalBindingWithoutRemote } from '../lib/device-state.ts';
 
 test('the control panel waits for active-job recovery for the exact current binding', () => {
   const binding = { vehicleNumber: '74-1286', deviceId: 'tablet-101' };
@@ -9,13 +9,6 @@ test('the control panel waits for active-job recovery for the exact current bind
   assert.equal(mobileStartupReady(true, binding, deviceBindingKey(binding)), true);
   assert.equal(mobileStartupReady(true, { ...binding, vehicleNumber: '74-9999' }, deviceBindingKey(binding)), false);
   assert.equal(mobileStartupReady(true, null, null), true);
-});
-
-test('an unstarted cancellation proceeds only for the same authoritative binding', () => {
-  const binding = { vehicleNumber: '74-1286', deviceId: 'tablet-101' };
-  assert.equal(waitingCancellationBindingDecision(binding, binding), 'proceed');
-  assert.equal(waitingCancellationBindingDecision(binding, null), 'binding_removed');
-  assert.equal(waitingCancellationBindingDecision(binding, { ...binding, vehicleNumber: '74-9999' }), 'binding_changed');
 });
 
 test('stored vehicle binding is trimmed and validated', () => {
@@ -28,7 +21,11 @@ test('stored vehicle binding is trimmed and validated', () => {
 });
 
 test('stored active jobs allow only real modes and valid timing state', () => {
-  assert.equal(parseStoredActiveJob('{"vehicleNumber":"V1","deviceId":"D1","selected":"9","startedAt":100}'), null);
+  assert.deepEqual(
+    parseStoredActiveJob('{"vehicleNumber":"V1","deviceId":"D1","selected":"9","startedAt":100}'),
+    { vehicleNumber: 'V1', deviceId: 'D1', selected: '9', startedAt: 100, driverName: null, driverId: null },
+  );
+  assert.equal(parseStoredActiveJob('{"vehicleNumber":"V1","deviceId":"D1","selected":"10","startedAt":100}'), null);
   assert.equal(parseStoredActiveJob('{"vehicleNumber":"V1","deviceId":"D1","selected":"1","startedAt":0}'), null);
   assert.equal(parseStoredActiveJob('{"closed":true}'), null);
   assert.deepEqual(

@@ -89,6 +89,33 @@ test('refreshes an expired token exactly once and normalizes live history record
   assert.equal(requests.filter(item => item.pathname.endsWith('/GetVehicleHistory')).length, 2);
 });
 
+test('resolves a case-insensitive fleet name through the vehicle master before retrying history', async () => {
+  resetDataFmTokenCacheForTests();
+  const requests = [];
+  const fetchImpl = async url => {
+    const request = new URL(url);
+    requests.push(request);
+    if (request.pathname.endsWith('/GetToken')) return jsonResponse({ vResponseCode: 0, token: 'token-1' });
+    if (request.pathname.endsWith('/GetMasterVehicleList')) {
+      return jsonResponse({ vResponseCode: 0, vTotalRecords: 2, vData: [{ vehicleno: 'Ford T' }, { vehicleno: '700-4172' }] });
+    }
+    if (request.searchParams.get('vehicleno') === 'FORD T') return jsonResponse({ vResponseCode: 6, vData: '[]' });
+    return jsonResponse({ vResponseCode: 0, vTotalRecords: 1, vData: [{
+      vehicleno: 'Ford T', latitude: 13.3481683, longitude: 101.030055,
+      tracktime: '2026.08.20 10:40:46', speed: 0, bearing: 0,
+    }] });
+  };
+  const result = await fetchDataFmGpsHistory({ ...config, vehicleNumber: 'FORD T', fetchImpl });
+  assert.equal(result.status, 'received');
+  assert.equal(result.payload.positions.length, 1);
+  assert.equal(result.payload.positions[0].vehicleNumber, 'Ford T');
+  assert.deepEqual(
+    requests.filter(item => item.pathname.endsWith('/GetVehicleHistory')).map(item => item.searchParams.get('vehicleno')),
+    ['FORD T', 'Ford T'],
+  );
+  assert.equal(requests.filter(item => item.pathname.endsWith('/GetMasterVehicleList')).length, 1);
+});
+
 test('requires TLS for credentials unless an explicit local-development override is supplied', async () => {
   resetDataFmTokenCacheForTests();
   const result = await fetchDataFmGpsHistory({ ...config, baseUrl: 'http://www.data-fm.com', fetchImpl: async () => { throw new Error('must not fetch'); } });

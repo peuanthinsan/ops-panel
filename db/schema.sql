@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS ops_reports (
   device_id TEXT NOT NULL,
   driver_name TEXT,
   driver_id TEXT,
-  mode TEXT NOT NULL CHECK (mode IN ('Load', 'Stop vehicle', 'Unload', 'Break', 'Vehicle check', 'Refuel', 'Vehicle wash', 'Park overnight')),
+  mode TEXT NOT NULL,
   start_time TIMESTAMPTZ NOT NULL,
   end_time TIMESTAMPTZ NOT NULL,
   duration TEXT NOT NULL,
@@ -101,6 +101,7 @@ CREATE INDEX IF NOT EXISTS ops_reports_start_time_idx ON ops_reports (start_time
 CREATE INDEX IF NOT EXISTS ops_reports_keyset_idx ON ops_reports (start_time DESC, id DESC);
 CREATE INDEX IF NOT EXISTS ops_reports_vehicle_number_idx ON ops_reports (vehicle_number, start_time DESC);
 CREATE INDEX IF NOT EXISTS ops_reports_device_id_idx ON ops_reports (device_id, start_time DESC);
+CREATE INDEX IF NOT EXISTS ops_reports_device_vehicle_end_idx ON ops_reports (device_id, lower(vehicle_number), end_time DESC, id DESC);
 CREATE INDEX IF NOT EXISTS ops_reports_driver_name_idx ON ops_reports (driver_name, start_time DESC) WHERE driver_name IS NOT NULL;
 CREATE INDEX IF NOT EXISTS ops_reports_status_idx ON ops_reports (status, start_time DESC);
 CREATE INDEX IF NOT EXISTS ops_reports_gps_sync_status_idx ON ops_reports (gps_sync_status) WHERE gps_sync_status IS NOT NULL;
@@ -123,13 +124,20 @@ END $$;
 
 ALTER TABLE ops_reports VALIDATE CONSTRAINT ops_reports_time_order_check;
 
+ALTER TABLE ops_reports DROP CONSTRAINT IF EXISTS ops_reports_mode_check;
+ALTER TABLE ops_reports
+  ADD CONSTRAINT ops_reports_mode_check
+  CHECK (mode IN ('Load', 'Stop vehicle', 'Unload', 'Break', 'Vehicle check', 'Refuel', 'Vehicle wash', 'Park overnight', 'Finish work'))
+  NOT VALID;
+ALTER TABLE ops_reports VALIDATE CONSTRAINT ops_reports_mode_check;
+
 CREATE TABLE IF NOT EXISTS active_jobs (
   id TEXT PRIMARY KEY,
   vehicle_number TEXT NOT NULL,
   device_id TEXT NOT NULL,
   driver_name TEXT,
   driver_id TEXT,
-  mode TEXT NOT NULL CHECK (mode IN ('Load', 'Stop vehicle', 'Unload', 'Break', 'Vehicle check', 'Refuel', 'Vehicle wash', 'Park overnight')),
+  mode TEXT NOT NULL,
   start_time TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -137,6 +145,13 @@ CREATE TABLE IF NOT EXISTS active_jobs (
 
 CREATE INDEX IF NOT EXISTS active_jobs_vehicle_start_idx ON active_jobs (vehicle_number, start_time DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS active_jobs_one_per_device_idx ON active_jobs (device_id);
+
+ALTER TABLE active_jobs DROP CONSTRAINT IF EXISTS active_jobs_mode_check;
+ALTER TABLE active_jobs
+  ADD CONSTRAINT active_jobs_mode_check
+  CHECK (mode IN ('Load', 'Stop vehicle', 'Unload', 'Break', 'Vehicle check', 'Refuel', 'Vehicle wash', 'Park overnight', 'Finish work'))
+  NOT VALID;
+ALTER TABLE active_jobs VALIDATE CONSTRAINT active_jobs_mode_check;
 
 DO $$
 BEGIN
@@ -384,7 +399,7 @@ FROM report_coverage
 WHERE report.id = report_coverage.id;
 
 INSERT INTO app_settings (setting_key, setting_value, updated_at)
-VALUES ('database_schema_version', '2026-08-20.4', now())
+VALUES ('database_schema_version', '2026-08-24.2', now())
 ON CONFLICT (setting_key) DO UPDATE
   SET setting_value = EXCLUDED.setting_value,
       updated_at = now();

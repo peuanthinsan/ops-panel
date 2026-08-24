@@ -11,6 +11,7 @@ import TimelineDashboard from './timeline-dashboard';
 import { adminFetch } from './dashboard-api';
 import { clearAdminSessionToken, getAdminSessionToken, setAdminSessionToken } from './dashboard-session';
 import { localizedDashboardAdminError } from '../lib/dashboard-errors';
+import { clearOfflineResponses } from './offline-store';
 
 const copy = {
   en: {
@@ -128,9 +129,31 @@ function Shell({ lang, setLang, onLogout, children }) {
           <button className="logout" type="button" onClick={onLogout}>{t.signOut}</button>
         </div>
       </aside>
-      <div className="content-area">{children}</div>
+      <div className="content-area"><OfflineStatus lang={lang} />{children}</div>
     </div>
   );
+}
+
+function OfflineStatus({ lang }) {
+  const [state, setState] = useState(() => typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'online');
+  useEffect(() => {
+    const goOffline = () => setState('offline');
+    const goOnline = () => setState('online');
+    const showCached = () => setState('cached');
+    window.addEventListener('offline', goOffline);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('songdee-offline-data', showCached);
+    window.addEventListener('songdee-online-data', goOnline);
+    return () => {
+      window.removeEventListener('offline', goOffline);
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('songdee-offline-data', showCached);
+      window.removeEventListener('songdee-online-data', goOnline);
+    };
+  }, []);
+  if (state === 'online') return null;
+  const thai = lang === 'th';
+  return <div className="offline-banner" role="status" aria-live="polite"><strong>{thai ? 'โหมดออฟไลน์' : 'Offline mode'}</strong><span>{state === 'cached' ? (thai ? 'กำลังแสดงข้อมูลแดชบอร์ดล่าสุดที่บันทึกไว้' : 'Showing the latest dashboard data saved on this device.') : (thai ? 'การเชื่อมต่อขาดหาย งานเขียนจะรอจนกว่าจะออนไลน์' : 'The connection is unavailable. Changes will wait until you are online.')}</span></div>;
 }
 
 function usePersistentLanguage() {
@@ -172,6 +195,7 @@ export default function Dashboard() {
 
   const logout = () => {
     clearAdminSessionToken();
+    clearOfflineResponses().catch(() => {});
     setLoggedIn(false);
   };
 

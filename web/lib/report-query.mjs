@@ -49,7 +49,7 @@ export function buildReportQuery(searchParams) {
   const parameter = value => { values.push(value); return `$${values.length}`; };
   if (filters.startDate) clauses.push(`report.start_time >= (${parameter(filters.startDate)}::date::timestamp AT TIME ZONE 'Asia/Bangkok')`);
   if (filters.endDate) clauses.push(`report.start_time < ((${parameter(filters.endDate)}::date + 1)::timestamp AT TIME ZONE 'Asia/Bangkok')`);
-  if (filters.vehicle) clauses.push(`report.vehicle_number = ${parameter(filters.vehicle)}`);
+  if (filters.vehicle) clauses.push(`lower(report.vehicle_number) = lower(${parameter(filters.vehicle)})`);
   if (filters.device) clauses.push(`report.device_id = ${parameter(filters.device)}`);
   if (filters.driver) clauses.push(`report.driver_name = ${parameter(filters.driver)}`);
   if (filters.mode) clauses.push(`report.mode = ${parameter(filters.mode)}`);

@@ -1,6 +1,6 @@
 import type { JobReportInput } from './report';
 
-export type JobDeliveryResult = 'synced' | 'queued';
+export type JobDeliveryResult = 'synced' | 'queued' | 'rejected';
 
 type JobDeliveryOperations = {
   enqueue(report: JobReportInput): Promise<void>;
@@ -31,11 +31,11 @@ export async function deliverJobReport(
   } catch (error) {
     if (operations.isRetryable(error)) return 'queued';
 
-    // Keep rejected records as diagnostics. Repeating Done/Cancel re-enqueues
-    // the same stable report ID and deliberately enables one operator retry.
+    // Keep rejected records as diagnostics, but do not trap the driver in the
+    // completed job after its exact payload is already durable on the tablet.
     await operations.markPermanentFailure(report.id, operations.errorMessage(error)).catch(() => {
       // Preserve the original API error even if recording diagnostics fails.
     });
-    throw error;
+    return 'rejected';
   }
 }

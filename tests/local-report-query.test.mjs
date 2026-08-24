@@ -8,6 +8,11 @@ const reports = [
   { id: 'R3', vehicleNumber: '10', deviceId: 'D1', driverName: 'Narin', mode: 'Break', status: 'Completed', gpsLookupStatus: 'pending', startTime: '2026-08-19T03:00:00Z', endTime: '2026-08-19T03:15:00Z', deviceGpsSamples: 10, fmsGpsSamples: 8, pairedGpsSamples: 8, attentionGpsSamples: 2 },
 ];
 
+const fordReports = [
+  { id: 'F1', vehicleNumber: 'FORD T', status: 'Completed', startTime: '2026-08-19T03:00:00Z', endTime: '2026-08-19T03:01:00Z' },
+  { id: 'F2', vehicleNumber: 'Ford T', status: 'Completed', startTime: '2026-08-19T04:00:00Z', endTime: '2026-08-19T04:01:00Z' },
+];
+
 test('local dashboard query filters, sorts, summarizes, and paginates like production', () => {
   const result = queryLocalReports(reports, [{}, {}], new URLSearchParams({
     startDate: '2026-08-19', vehicle: '10', sort: 'duration:desc', pageSize: '1',
@@ -28,4 +33,11 @@ test('local dashboard facets are complete and numerically sorted', () => {
     statuses: ['Cancelled', 'Completed'],
     gpsStates: ['device_only', 'not_applicable', 'pending'],
   });
+});
+
+test('vehicle filters and facets treat casing variants as one fleet vehicle', () => {
+  assert.deepEqual(localReportFacets(fordReports).vehicles, ['Ford T']);
+  const result = queryLocalReports(fordReports, [], new URLSearchParams({ vehicle: 'FORD T' }));
+  assert.equal(result.summary.total, 2);
+  assert.equal(result.summary.activeVehicles, 1);
 });

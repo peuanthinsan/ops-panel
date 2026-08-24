@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseHttpAdapterUrl } from './lib/adapter-url.mjs';
 import { songdeeApiHealth } from './lib/api-contract.mjs';
+import { queryLocalDeviceJobs } from './lib/device-job-history.mjs';
 import { localReportFacets, queryLocalReports } from './lib/local-report-query.mjs';
 import { fetchDataFmDriverIdentity, fetchDataFmGpsHistory } from './web/lib/server/data-fm-gps.mjs';
 import { DEFAULT_GPS_PAIR_TOLERANCE_MS, pairExternalGpsSources } from './web/lib/server/external-gps.mjs';
@@ -16,7 +17,7 @@ const seedReports = [
   { id: 'OPS-1041', vehicleNumber: '74-2219', deviceId: 'demo-android-002', driverName: 'Narin Suksan', driverId: 'DRV-0098', mode: 'Unload', startTime: '2026-08-18T07:46:00+07:00', endTime: '2026-08-18T08:31:00+07:00', duration: '45:00', gps: 'No GPS point', status: 'Completed', gpsLookupStatus: 'no_data', gpsLookupMessage: 'No Data-FM GPS point has been matched yet.' },
   { id: 'OPS-1040', vehicleNumber: '74-0904', deviceId: 'demo-android-003', driverName: 'Preecha K.', driverId: 'DRV-0215', mode: 'Refuel', startTime: '2026-08-18T07:18:00+07:00', endTime: '2026-08-18T07:32:00+07:00', duration: '14:00', gps: 'No GPS point', status: 'Completed', gpsLookupStatus: 'no_data', gpsLookupMessage: 'No Data-FM GPS point has been matched yet.' }
 ];
-const allowedModes = new Set(['Load', 'Stop vehicle', 'Unload', 'Break', 'Vehicle check', 'Refuel', 'Vehicle wash', 'Park overnight']);
+const allowedModes = new Set(['Load', 'Stop vehicle', 'Unload', 'Break', 'Vehicle check', 'Refuel', 'Vehicle wash', 'Park overnight', 'Finish work']);
 function validRequiredText(value, maxLength) {
   const result = String(value || '').trim();
   return result && result.length <= maxLength ? result : null;
@@ -54,7 +55,7 @@ function verifyPassword(password, encoded) {
   if (typeof password !== 'string' || password.length > 128) return false;
   try { const [, salt, expectedHex] = String(encoded).split(':'); const actual = crypto.scryptSync(password, salt, 64); const expected = Buffer.from(expectedHex, 'hex'); return expected.length === actual.length && crypto.timingSafeEqual(actual, expected); } catch { return false; }
 }
-let adminPasswordHash = stored.adminPasswordHash || hashPassword(process.env.SONGDEE_ADMIN_PASSWORD || 'songdee-admin');
+let adminPasswordHash = stored.adminPasswordHash || hashPassword(process.env.SONGDEE_ADMIN_PASSWORD || 'songdee-setup');
 const adminSessions = new Map();
 const adminSessionLifetimeMs = 12 * 60 * 60 * 1000;
 const driverIdentityApiUrl = process.env.SONGDEE_DRIVER_IDENTITY_API_URL || '';
@@ -415,15 +416,35 @@ const server = http.createServer(async (req, res) => {
     const vehicleNumber = query.get('vehicleNumber') || '';
     const binding = deviceBindings.find(item => item.deviceId === deviceId);
     if (!binding || binding.vehicleNumber !== vehicleNumber) return send(res, 409, { error: 'Vehicle and device binding does not match.', code: 'DEVICE_BINDING_MISMATCH' });
-    const jobs = reports
-      .filter(item => item.deviceId === deviceId && item.vehicleNumber === vehicleNumber)
-      .sort((left, right) => Date.parse(right.endTime) - Date.parse(left.endTime))
-      .slice(0, 50);
-    return send(res, 200, { jobs });
+    return send(res, 200, queryLocalDeviceJobs(reports, deviceId, vehicleNumber, query));
   }
   if (req.url === '/api/device-config' && req.method === 'POST') {
     try { const input = await readJsonBody(req); const vehicleNumber = validRequiredText(input.vehicleNumber, 80); const deviceId = validRequiredText(input.deviceId, 180); if (!vehicleNumber || !deviceId) return send(res, 400, { error: 'vehicleNumber and deviceId are required and must be within their size limits' }); const existingDevice = deviceBindings.find(item => item.deviceId === deviceId); if (existingDevice?.vehicleNumber === vehicleNumber) return send(res, 200, { deviceConfig: existingDevice, deduplicated: true }); if (existingDevice) return send(res, 409, { error: 'Device is already connected; change it from the admin dashboard.' }); deviceConfig = { vehicleNumber, deviceId }; deviceBindings.push(deviceConfig); openBindingHistory(deviceConfig); saveState(); return send(res, 200, { deviceConfig }); }
     catch (error) { return sendBodyError(res, error); }
+  }
+  if (req.url === '/api/device-config/rebind' && req.method === 'POST') {
+    try {
+      const input = await readJsonBody(req);
+      const vehicleNumber = validRequiredText(input.vehicleNumber, 80);
+      const deviceId = validRequiredText(input.deviceId, 180);
+      if (!vehicleNumber || !deviceId) return send(res, 400, { error: 'vehicleNumber and deviceId are required and must be within their size limits' });
+      if (!verifyPassword(String(input.password || ''), adminPasswordHash)) return send(res, 401, { error: 'Invalid password' });
+      const index = deviceBindings.findIndex(item => item.deviceId === deviceId);
+      if (index < 0) return send(res, 404, { error: 'Device binding not found' });
+      const previous = deviceBindings[index];
+      if (previous.vehicleNumber !== vehicleNumber && activeJobs.some(item => item.deviceId === deviceId)) {
+        return send(res, 409, { error: 'Finish or cancel the active job before changing this vehicle binding.' });
+      }
+      const next = { vehicleNumber, deviceId };
+      if (previous.vehicleNumber !== vehicleNumber) {
+        closeBindingHistory(deviceId);
+        openBindingHistory(next);
+      }
+      deviceBindings[index] = next;
+      if (deviceConfig?.deviceId === deviceId) deviceConfig = next;
+      saveState();
+      return send(res, 200, { deviceConfig: next });
+    } catch (error) { return sendBodyError(res, error); }
   }
   if (req.url?.startsWith('/api/driver-identity') && req.method === 'GET') {
     const query = new URL(req.url, 'http://localhost').searchParams;

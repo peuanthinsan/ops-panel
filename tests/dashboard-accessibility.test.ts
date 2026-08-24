@@ -52,19 +52,32 @@ test('print flows separate the combined report from the timeline-only action', a
   assert.match(landscape, /timelineOnly=\{params\.get\('view'\) === 'timeline'\}/);
 });
 
-test('job GPS detail is an accessible, cancellable Data-FM-only modal', async () => {
+test('job GPS detail is an accessible, cancellable GPS modal', async () => {
   const reports = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
   const source = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
   assert.match(source, /role="dialog" aria-modal="true" aria-labelledby="gps-detail-title"/);
   assert.match(source, /if \(event\.key === 'Escape'\)/);
   assert.match(source, /if \(event\.key !== 'Tab'\) return/);
   assert.match(source, /previouslyFocused instanceof HTMLElement/);
-  assert.match(source, /Data-FM GPS/);
-  assert.match(source, /จุด GPS จาก Data-FM/);
+  assert.match(source, /GPS detail/);
+  assert.match(source, /จุด GPS/);
   assert.match(source, /new AbortController\(\)/);
   assert.match(source, /data-label=\{t\.coordinates\}/);
   assert.doesNotMatch(source, /Howen|PairingTracks|fmsGps|pairStatus/);
   assert.doesNotMatch(reports, /GpsCoverageOverview|Howen FMS|coverageOverview/);
+});
+
+test('timeline segments expose detailed tooltips to pointer, keyboard, and touch users', async () => {
+  const source = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
+  assert.match(source, /type="button"\s+className="timeline-segment"/);
+  assert.match(source, /aria-label=\{segment\.accessibleLabel\}/);
+  assert.match(source, /aria-describedby=/);
+  assert.match(source, /onMouseEnter=/);
+  assert.match(source, /onFocus=/);
+  assert.match(source, /onClick=/);
+  assert.match(source, /role="tooltip"/);
+  assert.match(source, /event\.key === 'Escape'/);
+  for (const detail of ['start', 'end', 'duration', 'vehicle', 'driver', 'device', 'gps', 'location', 'reportId']) assert.match(source, new RegExp(`tooltip\\.segment\\.detail\\.${detail}`));
 });
 
 test('large fleet filters use bounded searchable comboboxes instead of native selects', async () => {

@@ -17,6 +17,8 @@ test('Ops Panel has a separate Android application identity', async () => {
   assert.equal(expo.android.versionCode, undefined, 'EAS remote versioning owns the Android build number.');
   assert.equal(expo.orientation, 'default');
   assert.deepEqual(expo.platforms, ['android']);
+  assert.equal(expo.android.edgeToEdgeEnabled, undefined, 'SDK 57 owns Android edge-to-edge behavior.');
+  assert.equal(expo.android.predictiveBackGestureEnabled, true);
   assert.equal(expo.plugins.includes('expo-location'), false, 'The tablet is not a GPS source.');
   assert.equal(
     expo.extra?.eas?.projectId,
@@ -25,7 +27,7 @@ test('Ops Panel has a separate Android application identity', async () => {
   );
 });
 
-test('EAS profiles produce an installable preview APK and a production AAB', async () => {
+test('EAS profiles produce preview and production APKs while preserving the production AAB', async () => {
   const eas = await readJson('eas.json');
   assert.equal(eas.cli.appVersionSource, 'remote');
   assert.equal(eas.build.preview.android.buildType, 'apk');
@@ -35,6 +37,9 @@ test('EAS profiles produce an installable preview APK and a production AAB', asy
   assert.equal(eas.build.production.android.buildType, 'app-bundle');
   assert.equal(eas.build.production.environment, 'production');
   assert.equal(eas.build.production.autoIncrement, true);
+  assert.equal(eas.build['production-apk'].extends, 'production');
+  assert.equal(eas.build['production-apk'].android.buildType, 'apk');
+  assert.equal(eas.build['production-apk'].distribution, 'internal');
   assert.doesNotMatch(JSON.stringify(eas), /songdee-svis|com\.songdeedev\.svis/i);
 });
 

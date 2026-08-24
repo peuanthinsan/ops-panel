@@ -6,15 +6,15 @@ import { adminFetch } from './dashboard-api';
 
 const copy = {
   en: {
-    title: 'Data-FM GPS detail', close: 'Close', vehicle: 'Vehicle', driver: 'Driver', activity: 'Activity', time: 'Time',
-    device: 'Data-FM GPS points', last: 'Last GPS fix', captured: 'GPS fix time', coordinates: 'Coordinates', speedLabel: 'Speed', heading: 'Heading',
-    loading: 'Loading Data-FM GPS points…', failed: 'Could not load Data-FM GPS detail.', empty: 'No Data-FM GPS points are linked to this job yet.',
+    title: 'GPS detail', close: 'Close', vehicle: 'Vehicle', driver: 'Driver', activity: 'Activity', time: 'Time',
+    device: 'GPS points', last: 'Last GPS fix', captured: 'GPS fix time', coordinates: 'Coordinates', speedLabel: 'Speed', heading: 'Heading',
+    loading: 'Loading GPS points…', failed: 'Could not load GPS detail.', empty: 'No GPS points are linked to this job yet.',
     previous: 'Previous', next: 'Next', page: 'Page', of: 'of', print: 'Print job', speed: 'km/h', degrees: '°',
   },
   th: {
-    title: 'รายละเอียด GPS จาก Data-FM', close: 'ปิด', vehicle: 'รถ', driver: 'พขร.', activity: 'กิจกรรม', time: 'เวลา',
-    device: 'จุด GPS จาก Data-FM', last: 'พิกัด GPS ล่าสุด', captured: 'เวลาพิกัด GPS', coordinates: 'พิกัด', speedLabel: 'ความเร็ว', heading: 'ทิศทาง',
-    loading: 'กำลังโหลดจุด GPS จาก Data-FM…', failed: 'ไม่สามารถโหลดรายละเอียด GPS จาก Data-FM', empty: 'ยังไม่มีจุด GPS จาก Data-FM ที่เชื่อมกับงานนี้',
+    title: 'รายละเอียด GPS', close: 'ปิด', vehicle: 'รถ', driver: 'พขร.', activity: 'กิจกรรม', time: 'เวลา',
+    device: 'จุด GPS', last: 'พิกัด GPS ล่าสุด', captured: 'เวลาพิกัด GPS', coordinates: 'พิกัด', speedLabel: 'ความเร็ว', heading: 'ทิศทาง',
+    loading: 'กำลังโหลดจุด GPS…', failed: 'ไม่สามารถโหลดรายละเอียด GPS', empty: 'ยังไม่มีจุด GPS ที่เชื่อมกับงานนี้',
     previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', print: 'พิมพ์งาน', speed: 'กม./ชม.', degrees: '°',
   },
 };
@@ -113,7 +113,7 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
           <div><dt>{t.vehicle}</dt><dd>{displayedReport.vehicleNumber || '—'}</dd></div>
           <div><dt>{t.driver}</dt><dd>{displayedReport.driverName || '—'}</dd></div>
           <div><dt>{t.activity}</dt><dd>{displayedReport.mode || '—'}</dd></div>
-          <div><dt>{t.time}</dt><dd>{time(displayedReport.startTime, lang).slice(0, 5)}–{time(displayedReport.endTime, lang).slice(0, 5)}</dd></div>
+          <div><dt>{t.time}</dt><dd>{time(displayedReport.startTime, lang)}–{time(displayedReport.endTime, lang)}</dd></div>
         </dl>
         <section className="gps-detail-section">
           <h2 id="gps-detail-title">{t.title}</h2>

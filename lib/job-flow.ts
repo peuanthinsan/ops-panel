@@ -11,21 +11,18 @@ export type DriverIdentity = {
 
 export type ActionDecision =
   | { type: 'confirm_start' }
+  | { type: 'confirm_day_end' }
   | { type: 'confirm_finish' }
   | { type: 'blocked'; reason: 'waiting_for_movement' | 'not_started' | 'job_in_progress' };
 
 export function isActionUnavailable(snapshot: JobSnapshot, actionNumber: string) {
-  if (actionNumber === '9') return !snapshot.selected;
-  return Boolean(snapshot.selected);
+  return Boolean(snapshot.selected && snapshot.selected !== actionNumber);
 }
 
 export function decideAction(actionNumber: string, snapshot: JobSnapshot): ActionDecision {
-  if (actionNumber === '9') {
-    if (!snapshot.selected) return { type: 'blocked', reason: 'not_started' };
-    return { type: 'confirm_finish' };
-  }
-  if (snapshot.startedAt || snapshot.awaitingMovement) return { type: 'blocked', reason: 'job_in_progress' };
-  return { type: 'confirm_start' };
+  if (!snapshot.selected) return actionNumber === '9' ? { type: 'confirm_day_end' } : { type: 'confirm_start' };
+  if (snapshot.selected === actionNumber) return { type: 'confirm_finish' };
+  return { type: 'blocked', reason: 'job_in_progress' };
 }
 
 export function idleJobSnapshot(): JobSnapshot {

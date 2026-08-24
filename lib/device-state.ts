@@ -22,17 +22,6 @@ export function mobileStartupReady(
     && (!binding || recoveredBindingKey === deviceBindingKey(binding));
 }
 
-export function waitingCancellationBindingDecision(
-  current: DeviceBinding,
-  remote: DeviceBinding | null,
-) {
-  if (!remote) return 'binding_removed' as const;
-  if (remote.deviceId !== current.deviceId || remote.vehicleNumber !== current.vehicleNumber) {
-    return 'binding_changed' as const;
-  }
-  return 'proceed' as const;
-}
-
 export function shouldPreserveLocalBindingWithoutRemote(job: ActiveJob | null, binding: DeviceBinding | null) {
   return activeJobBelongsToBinding(job, binding)
     && (Boolean(job?.pendingReport) || job?.awaitingMovement !== true);
@@ -98,6 +87,7 @@ function expectedMode(selected: string) {
     '6': 'Refuel',
     '7': 'Vehicle wash',
     '8': 'Park overnight',
+    '9': 'Finish work',
   } as Record<string, string>)[selected] || '';
 }
 
@@ -124,7 +114,7 @@ export function parseStoredActiveJob(raw: string | null): ActiveJob | null {
     const selected = trimmedText(value.selected);
     const startedAt = Number(value.startedAt);
     const awaitingMovement = value.awaitingMovement === true;
-    if (!vehicleNumber || !deviceId || !/^[1-8]$/.test(selected)
+    if (!vehicleNumber || !deviceId || !/^[1-9]$/.test(selected)
       || !Number.isFinite(startedAt) || startedAt < 0
       || (!awaitingMovement && startedAt <= 0)) return null;
     const rawJobId = trimmedText(value.jobId) || undefined;

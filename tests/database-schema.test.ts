@@ -38,6 +38,8 @@ test('production schema validates job timing, GPS values, and the active binding
   assert.match(schema, /pair_status TEXT NOT NULL DEFAULT 'pending'/);
   assert.match(schema, /gps_sync_samples_pair_status_check/);
   assert.match(schema, /ops_reports_keyset_idx[\s\S]*start_time DESC, id DESC/);
+  assert.match(schema, /CONSTRAINT ops_reports_mode_check[\s\S]*'Finish work'/);
+  assert.match(schema, /CONSTRAINT active_jobs_mode_check[\s\S]*'Finish work'/);
 });
 
 test('database migrations are ordered and checksum-protected', async () => {
@@ -47,6 +49,8 @@ test('database migrations are ordered and checksum-protected', async () => {
   const multiDeviceMigration = await readFile(fileURLToPath(new NodeUrl('../db/migrations/20260820_003_multi_device_vehicle_bindings.sql', import.meta.url)), 'utf8');
   const optionalDeliveryMigration = await readFile(fileURLToPath(new NodeUrl('../db/migrations/20260820_004_optional_report_delivery.sql', import.meta.url)), 'utf8');
   const gpsLookupMigration = await readFile(fileURLToPath(new NodeUrl('../db/migrations/20260820_005_gps_lookup_states.sql', import.meta.url)), 'utf8');
+  const finishWorkMigration = await readFile(fileURLToPath(new NodeUrl('../db/migrations/20260824_006_finish_work_mode.sql', import.meta.url)), 'utf8');
+  const historyPaginationMigration = await readFile(fileURLToPath(new NodeUrl('../db/migrations/20260824_007_device_job_history_pagination.sql', import.meta.url)), 'utf8');
   assert.match(runner, /\.filter\(file => file\.endsWith\('\.sql'\)\)\.sort\(\)/);
   assert.match(runner, /createHash\('sha256'\)/);
   assert.match(runner, /splitSqlStatements/);
@@ -66,4 +70,10 @@ test('database migrations are ordered and checksum-protected', async () => {
   assert.match(gpsLookupMigration, /ADD COLUMN IF NOT EXISTS gps_lookup_status/);
   assert.match(gpsLookupMigration, /gps_sync_status = NULL/);
   assert.match(gpsLookupMigration, /VALUES \('database_schema_version', '2026-08-20\.4'/);
+  assert.match(finishWorkMigration, /ops_reports_mode_check/);
+  assert.match(finishWorkMigration, /active_jobs_mode_check/);
+  assert.match(finishWorkMigration, /'Finish work'/);
+  assert.match(finishWorkMigration, /VALUES \('database_schema_version', '2026-08-24\.1'/);
+  assert.match(historyPaginationMigration, /ops_reports_device_vehicle_end_idx/);
+  assert.match(historyPaginationMigration, /VALUES \('database_schema_version', '2026-08-24\.2'/);
 });

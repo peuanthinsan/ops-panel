@@ -10,6 +10,7 @@ import { checkDatabase, ConfigurationError, getDatabase } from './database.mjs';
 import { parseHttpAdapterUrl } from '../adapter-url.mjs';
 import { songdeeApiHealth } from '../api-contract.mjs';
 import { normalizeBulkBindings } from '../bulk-bindings.mjs';
+import { parseDeviceJobHistoryQuery } from '../device-job-history.mjs';
 import { buildReportQuery } from '../report-query.mjs';
 import {
   decryptDeviceSecret,
@@ -31,6 +32,7 @@ const allowedModes = new Set([
   'Refuel',
   'Vehicle wash',
   'Park overnight',
+  'Finish work',
 ]);
 const safeId = /^[a-zA-Z0-9._:-]+$/;
 const maximumJsonBodyBytes = 64 * 1024;
@@ -574,15 +576,88 @@ async function getReport(id) {
   return rows[0] || null;
 }
 
-async function getDeviceJobs(deviceId, vehicleNumber, limit = 50) {
+async function getDeviceJobs(deviceId, vehicleNumber, searchParams) {
   const sql = getDatabase();
-  return sql.query(`
-    SELECT ${reportColumns()}
-    FROM ops_reports
-    WHERE device_id = $1 AND vehicle_number = $2
-    ORDER BY end_time DESC, id DESC
-    LIMIT $3
-  `, [deviceId, vehicleNumber, limit]);
+  const query = parseDeviceJobHistoryQuery(searchParams);
+  const values = [deviceId, vehicleNumber];
+  const clauses = ['report.device_id = $1', 'lower(report.vehicle_number) = lower($2)'];
+  const parameter = value => { values.push(value); return `$${values.length}`; };
+  if (query.dayKey) {
+    const day = parameter(query.dayKey);
+    clauses.push(`report.end_time >= (${day}::date::timestamp AT TIME ZONE 'Asia/Bangkok')`);
+    clauses.push(`report.end_time < ((${day}::date + 1)::timestamp AT TIME ZONE 'Asia/Bangkok')`);
+  } else if (query.startAt || query.endAt) {
+    if (query.startAt) clauses.push(`report.end_time >= ${parameter(query.startAt)}::timestamptz`);
+    if (query.endAt) clauses.push(`report.start_time <= ${parameter(query.endAt)}::timestamptz`);
+  } else if (query.monthKey) {
+    const month = parameter(`${query.monthKey}-01`);
+    clauses.push(`report.end_time >= (${month}::date::timestamp AT TIME ZONE 'Asia/Bangkok')`);
+    clauses.push(`report.end_time < (((${month}::date + INTERVAL '1 month'))::timestamp AT TIME ZONE 'Asia/Bangkok')`);
+  }
+  if (query.mode) clauses.push(`report.mode = ${parameter(query.mode)}`);
+  if (query.status === 'cancelled') clauses.push(`report.status = 'Cancelled'`);
+  if (query.status === 'completed') clauses.push(`report.status <> 'Cancelled'`);
+  if (query.status === 'pending' || query.status === 'failed') clauses.push('FALSE');
+  if (query.search) {
+    clauses.push(`concat_ws(' ', report.id, report.vehicle_number, report.device_id, report.driver_name, report.driver_id, report.mode, report.status, report.start_time, report.end_time, report.duration) ILIKE ${parameter(`%${query.search}%`)}`);
+  }
+  const orderBy = {
+    newest: 'report.end_time DESC, report.id DESC',
+    oldest: 'report.end_time ASC, report.id ASC',
+    duration_desc: 'EXTRACT(EPOCH FROM (report.end_time - report.start_time)) DESC, report.end_time DESC, report.id DESC',
+    mode_asc: 'lower(report.mode) ASC, report.end_time DESC, report.id DESC',
+  }[query.sort];
+  const whereSql = `WHERE ${clauses.join(' AND ')}`;
+  const limitParameter = `$${values.length + 1}`;
+  const offsetParameter = `$${values.length + 2}`;
+  const offset = (query.page - 1) * query.pageSize;
+  const pageValues = [...values, query.pageSize, offset];
+  const [jobs, summaryRows, monthRows] = await sql.transaction(transaction => [
+    transaction.query(`
+      SELECT ${reportColumns()}
+      FROM ops_reports report
+      ${whereSql}
+      ORDER BY ${orderBy}
+      LIMIT ${limitParameter} OFFSET ${offsetParameter}
+    `, pageValues),
+    transaction.query(`
+      SELECT
+        count(*)::int AS total,
+        count(*) FILTER (WHERE report.status <> 'Cancelled')::int AS completed,
+        count(*) FILTER (WHERE report.status = 'Cancelled')::int AS cancelled,
+        COALESCE(floor(sum(EXTRACT(EPOCH FROM (report.end_time - report.start_time)))), 0)::bigint AS "durationSeconds"
+      FROM ops_reports report
+      ${whereSql}
+    `, values),
+    transaction.query(`
+      SELECT DISTINCT to_char(report.end_time AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM') AS month
+      FROM ops_reports report
+      WHERE report.device_id = $1 AND lower(report.vehicle_number) = lower($2)
+      ORDER BY month DESC
+    `, [deviceId, vehicleNumber]),
+  ]);
+  const summaryRow = summaryRows[0] || {};
+  const total = Number(summaryRow.total) || 0;
+  const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
+  return {
+    jobs,
+    facets: { months: monthRows.map(row => row.month).filter(Boolean) },
+    pageInfo: {
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      totalPages,
+      start: jobs.length ? offset + 1 : 0,
+      end: offset + jobs.length,
+      hasNextPage: query.page < totalPages,
+    },
+    summary: {
+      total,
+      completed: Number(summaryRow.completed) || 0,
+      cancelled: Number(summaryRow.cancelled) || 0,
+      durationSeconds: Number(summaryRow.durationSeconds) || 0,
+    },
+  };
 }
 
 async function getReportsPage(request) {
@@ -676,7 +751,7 @@ async function getReportFacets() {
   const sql = getDatabase();
   const [result] = await sql`
     SELECT
-      COALESCE((SELECT json_agg(value ORDER BY value) FROM (SELECT DISTINCT vehicle_number AS value FROM ops_reports) facet_values), '[]'::json) AS vehicles,
+      COALESCE((SELECT json_agg(value ORDER BY lower(value), value) FROM (SELECT (array_agg(vehicle_number ORDER BY (vehicle_number <> upper(vehicle_number)) DESC, vehicle_number))[1] AS value FROM ops_reports GROUP BY lower(vehicle_number)) facet_values), '[]'::json) AS vehicles,
       COALESCE((SELECT json_agg(value ORDER BY value) FROM (SELECT DISTINCT device_id AS value FROM ops_reports) facet_values), '[]'::json) AS devices,
       COALESCE((SELECT json_agg(value ORDER BY value) FROM (SELECT DISTINCT driver_name AS value FROM ops_reports WHERE driver_name IS NOT NULL AND driver_name <> '') facet_values), '[]'::json) AS drivers,
       COALESCE((SELECT json_agg(value ORDER BY value) FROM (SELECT DISTINCT status AS value FROM ops_reports) facet_values), '[]'::json) AS statuses,
@@ -1258,6 +1333,22 @@ async function routeRequest(request, route) {
     return json(await createInitialBinding(vehicleNumber, deviceId));
   }
 
+  if (route === 'device-config/rebind' && method === 'POST') {
+    const { input, raw } = await readJsonPayload(request);
+    const vehicleNumber = requiredText(input.vehicleNumber, 'vehicleNumber', 80);
+    const deviceId = requiredText(input.deviceId, 'deviceId', 180);
+    const password = String(input.password || '');
+    await authenticateDeviceRequest(request, deviceId, raw);
+    await consumeRateLimit(request, 'device-rebind', 8, 15 * 60, deviceId);
+    const settings = await ensureAdminSettings();
+    if (!verifyPassword(password, settings.admin_password_hash)) {
+      throw new ApiError(401, 'Invalid password');
+    }
+    const deviceConfig = await saveAdminBinding(vehicleNumber, deviceId);
+    await clearRateLimit('device-rebind', deviceId);
+    return json({ deviceConfig });
+  }
+
   if (route === 'device-credentials/claim' && method === 'POST') {
     await consumeRateLimit(request, 'device-credential-claim', 12, 60 * 60);
     const input = await readJson(request);
@@ -1287,7 +1378,7 @@ async function routeRequest(request, route) {
     if (!binding || binding.vehicleNumber !== vehicleNumber) {
       throw new ApiError(409, 'Vehicle and device binding does not match.', { code: 'DEVICE_BINDING_MISMATCH' });
     }
-    return json({ jobs: await getDeviceJobs(deviceId, vehicleNumber) });
+    return json(await getDeviceJobs(deviceId, vehicleNumber, query));
   }
 
   if (route === 'job-starts' && method === 'POST') {

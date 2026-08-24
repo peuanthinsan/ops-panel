@@ -11,10 +11,10 @@ const expected = [
   ['6', 'เติมน้ำมัน', 'Refuel', 'บันทึกจุดเติมน้ำมัน', 'Record refueling stop'],
   ['7', 'ล้างรถ', 'Vehicle wash', 'แจ้งนำรถเข้าล้างทำความสะอาด', 'Report vehicle sent for washing'],
   ['8', 'จอดนอน', 'Park overnight', 'แจ้งจุดจอดพักค้างคืน', 'Report overnight parking location'],
-  ['9', 'จบงาน', 'Done', 'ปิดงาน สรุปเที่ยววิ่ง', 'Close job and summarize trip'],
+  ['9', 'จบงาน', 'Finish work', 'ปิดงาน สรุปเที่ยววิ่ง', 'Close the job and summarize the trip'],
 ];
 
 test('the nine control-panel actions keep the approved titles and descriptions exactly', () => {
   assert.deepEqual(operationActions, expected);
-  assert.deepEqual(reportableOperations, expected.slice(0, 8));
+  assert.deepEqual(reportableOperations, expected);
 });

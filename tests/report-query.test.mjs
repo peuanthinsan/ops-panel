@@ -18,6 +18,7 @@ test('report query parameters are bounded, parameterized, and preserve multi-col
   assert.doesNotMatch(query.whereSql, /OR true/);
   assert.equal(query.values.at(-1), "%truck' OR true --%");
   assert.match(query.whereSql, /Asia\/Bangkok/);
+  assert.match(query.whereSql, /lower\(report\.vehicle_number\) = lower\(\$3\)/);
 });
 
 test('unsafe report sort fields fall back to newest first', () => {

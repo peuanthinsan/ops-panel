@@ -10,6 +10,8 @@ import type { JobReportInput } from './report';
 import { normalizeVehicleMotion } from './motion-state';
 import { observeServerTime, serverNowMs } from './server-clock';
 import type { SavedJob } from './saved-jobs';
+import { deviceJobHistorySearchParams, type DeviceJobHistoryResponse } from './device-job-history';
+import type { MobileJobQuery } from './mobile-job-query';
 
 // EXPO_PUBLIC_API_URL always wins in deployed builds. During local Expo
 // development, hostUri lets both physical tablets and emulators reach the
@@ -129,6 +131,19 @@ export async function saveVehicleBinding(binding: DeviceBinding) {
   return data;
 }
 
+export async function changeVehicleBindingWithAdminPassword(binding: DeviceBinding, password: string) {
+  const body = JSON.stringify({ ...binding, password });
+  const response = await deviceFetch('/api/device-config/rebind', { method: 'POST', body }, 8000);
+  if (!response.ok) throw await responseError(response, response.status === 401 ? 'Invalid password' : 'Could not change vehicle binding');
+  const data = await response.json() as BindingEnvelope;
+  if (!data.deviceConfig
+    || data.deviceConfig.deviceId !== binding.deviceId
+    || data.deviceConfig.vehicleNumber !== binding.vehicleNumber) {
+    throw new Error('The server returned an invalid vehicle binding');
+  }
+  return data.deviceConfig;
+}
+
 export async function fetchVehicleBinding(deviceId: string) {
   const path = `/api/device-config?deviceId=${encodeURIComponent(deviceId)}`;
   const response = await deviceFetch(path);
@@ -181,11 +196,19 @@ export async function requestJobGpsSync(input: JobGpsSyncRequest) {
   return response.json();
 }
 
-export async function fetchDeviceJobs(deviceId: string, vehicleNumber: string) {
-  const query = new URLSearchParams({ deviceId, vehicleNumber });
+export async function fetchDeviceJobs(deviceId: string, vehicleNumber: string, historyQuery: MobileJobQuery, page = 1) {
+  const query = deviceJobHistorySearchParams(historyQuery, page);
+  query.set('deviceId', deviceId);
+  query.set('vehicleNumber', vehicleNumber);
   const path = `/api/device-jobs?${query.toString()}`;
   const response = await deviceFetch(path, {}, 8000);
   if (!response.ok) throw await responseError(response, 'Could not load saved jobs');
-  const data = await response.json() as { jobs?: SavedJob[] };
-  return Array.isArray(data.jobs) ? data.jobs : [];
+  const data = await response.json() as Partial<DeviceJobHistoryResponse>;
+  if (!Array.isArray(data.jobs) || !data.pageInfo || !data.summary) throw new Error('The saved-job response is invalid');
+  return {
+    jobs: data.jobs as SavedJob[],
+    facets: { months: Array.isArray(data.facets?.months) ? data.facets.months : [] },
+    pageInfo: data.pageInfo,
+    summary: data.summary,
+  } as DeviceJobHistoryResponse;
 }

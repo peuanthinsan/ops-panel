@@ -7,7 +7,7 @@ export const operationActions = [
   ['6', 'เติมน้ำมัน', 'Refuel', 'บันทึกจุดเติมน้ำมัน', 'Record refueling stop'],
   ['7', 'ล้างรถ', 'Vehicle wash', 'แจ้งนำรถเข้าล้างทำความสะอาด', 'Report vehicle sent for washing'],
   ['8', 'จอดนอน', 'Park overnight', 'แจ้งจุดจอดพักค้างคืน', 'Report overnight parking location'],
-  ['9', 'จบงาน', 'Done', 'ปิดงาน สรุปเที่ยววิ่ง', 'Close job and summarize trip'],
+  ['9', 'จบงาน', 'Finish work', 'ปิดงาน สรุปเที่ยววิ่ง', 'Close the job and summarize the trip'],
 ] as const;
 
-export const reportableOperations = operationActions.slice(0, 8);
+export const reportableOperations = operationActions;

@@ -99,7 +99,19 @@ test('tablet job history is signed and restricted to its current vehicle binding
   assert.match(source, /route === 'device-jobs' && method === 'GET'/);
   assert.match(source, /authenticateDeviceRequest\(request, deviceId\)/);
   assert.match(source, /binding\.vehicleNumber !== vehicleNumber[\s\S]*DEVICE_BINDING_MISMATCH/);
-  assert.match(source, /WHERE device_id = \$1 AND vehicle_number = \$2/);
+  assert.match(source, /report\.device_id = '\$1'|report\.device_id = \$1/);
+  assert.match(source, /lower\(report\.vehicle_number\) = lower\(\$2\)/);
+  assert.match(source, /parseDeviceJobHistoryQuery\(searchParams\)/);
+  assert.match(source, /LIMIT \$\{limitParameter\} OFFSET \$\{offsetParameter\}/);
+});
+
+test('tablet vehicle changes require both the signed device and fleet-admin password', async () => {
+  const source = await readFile(fileURLToPath(new NodeUrl('../web/lib/server/api.mjs', import.meta.url)), 'utf8');
+  assert.match(source, /route === 'device-config\/rebind' && method === 'POST'/);
+  assert.match(source, /authenticateDeviceRequest\(request, deviceId, raw\)/);
+  assert.match(source, /consumeRateLimit\(request, 'device-rebind', 8, 15 \* 60, deviceId\)/);
+  assert.match(source, /verifyPassword\(password, settings\.admin_password_hash\)/);
+  assert.match(source, /saveAdminBinding\(vehicleNumber, deviceId\)/);
 });
 
 test('local and production fleet endpoints require explicit device correlation and align idempotent setup responses', async () => {

@@ -153,6 +153,22 @@ test('local API preserves bindings, paired GPS, active starts, and retry-safe co
   assert.equal(repeatedInitial.body.deduplicated, true);
   assert.deepEqual(repeatedInitial.body.deviceConfig, { vehicleNumber: '74-1286', deviceId: 'android-device-001' });
 
+  const rejectedTabletRebind = await jsonRequest(baseUrl, '/api/device-config/rebind', {
+    method: 'POST', body: JSON.stringify({ vehicleNumber: '74-9000', deviceId: 'android-device-001', password: 'wrong-password' }),
+  });
+  assert.equal(rejectedTabletRebind.response.status, 401);
+
+  const tabletRebind = await jsonRequest(baseUrl, '/api/device-config/rebind', {
+    method: 'POST', body: JSON.stringify({ vehicleNumber: '74-9000', deviceId: 'android-device-001', password: 'songdee-setup' }),
+  });
+  assert.equal(tabletRebind.response.status, 200);
+  assert.deepEqual(tabletRebind.body.deviceConfig, { vehicleNumber: '74-9000', deviceId: 'android-device-001' });
+
+  const restoredTabletRebind = await jsonRequest(baseUrl, '/api/device-config/rebind', {
+    method: 'POST', body: JSON.stringify({ vehicleNumber: '74-1286', deviceId: 'android-device-001', password: 'songdee-setup' }),
+  });
+  assert.equal(restoredTabletRebind.response.status, 200);
+
   const secondDeviceForVehicle = await jsonRequest(baseUrl, '/api/device-config', {
     method: 'POST', body: JSON.stringify({ vehicleNumber: '74-1286', deviceId: 'android-device-002' }),
   });
@@ -200,7 +216,7 @@ test('local API preserves bindings, paired GPS, active starts, and retry-safe co
   assert.equal(rejectedTabletGps.response.status, 410);
 
   const login = await jsonRequest(baseUrl, '/api/admin/login', {
-    method: 'POST', body: JSON.stringify({ password: 'songdee-admin' }),
+    method: 'POST', body: JSON.stringify({ password: 'songdee-setup' }),
   });
   assert.equal(login.response.status, 200);
   const adminHeaders = { 'x-admin-token': String(login.body.token) };
@@ -220,6 +236,11 @@ test('local API preserves bindings, paired GPS, active starts, and retry-safe co
   const started = await jsonRequest(baseUrl, '/api/job-starts', { method: 'POST', body: JSON.stringify(jobStart) });
   assert.equal(started.response.status, 201);
   assert.equal(started.body.jobStart.status, 'Active');
+
+  const activeTabletRebind = await jsonRequest(baseUrl, '/api/device-config/rebind', {
+    method: 'POST', body: JSON.stringify({ vehicleNumber: '74-9001', deviceId: 'android-device-001', password: 'songdee-setup' }),
+  });
+  assert.equal(activeTabletRebind.response.status, 409);
 
   const gpsTargetAt = new Date(Date.parse(startTime) + 500).toISOString();
   const inJobGps = await jsonRequest(baseUrl, '/api/job-gps-sync', { method: 'POST', body: JSON.stringify({ ...jobStart, jobId: jobStart.id, targetAt: gpsTargetAt }) });
@@ -289,6 +310,14 @@ test('local API preserves bindings, paired GPS, active starts, and retry-safe co
   const deduplicated = await jsonRequest(baseUrl, '/api/reports', { method: 'POST', body: JSON.stringify(report) });
   assert.equal(deduplicated.response.status, 200);
   assert.equal(deduplicated.body.deduplicated, true);
+
+  const deviceHistory = await jsonRequest(baseUrl, '/api/device-jobs?deviceId=android-device-001&vehicleNumber=74-1286&page=1&pageSize=1&search=OPS-contract-001');
+  assert.equal(deviceHistory.response.status, 200);
+  assert.deepEqual(deviceHistory.body.jobs.map((item: { id: string }) => item.id), ['OPS-contract-001']);
+  assert.equal(deviceHistory.body.pageInfo.total, 1);
+  assert.equal(deviceHistory.body.pageInfo.hasNextPage, false);
+  assert.equal(deviceHistory.body.summary.completed, 1);
+  assert.deepEqual(deviceHistory.body.facets.months.length, 1);
 
   const conflicting = await jsonRequest(baseUrl, '/api/reports', {
     method: 'POST', body: JSON.stringify({ ...report, endTime: new Date(Date.now() + 5_000).toISOString() }),
@@ -377,7 +406,7 @@ test('local API never treats the tablet as a GPS source when external adapters a
   assert.equal(reconciliation.body.deviceSource.status, 'not_configured');
 
   const login = await jsonRequest(baseUrl, '/api/admin/login', {
-    method: 'POST', body: JSON.stringify({ password: 'songdee-admin' }),
+    method: 'POST', body: JSON.stringify({ password: 'songdee-setup' }),
   });
   assert.equal(login.response.status, 200);
   const report = { ...job, endTime: new Date(Date.parse(startTime) + 1_000).toISOString() };

@@ -60,7 +60,35 @@ export function formatReportDateTime(value: string | null | undefined, language:
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
   }).format(date);
+}
+
+export function formatReportDuration(
+  startTime?: string | null,
+  endTime?: string | null,
+  storedDuration?: string | null,
+) {
+  const start = dateValue(startTime)?.getTime();
+  const end = dateValue(endTime)?.getTime();
+  let totalSeconds: number | null = start != null && end != null
+    ? Math.max(0, Math.floor((end - start) / 1000))
+    : null;
+
+  if (totalSeconds == null && storedDuration) {
+    const parts = storedDuration.trim().split(':').map(Number);
+    if (parts.length === 3 && parts.every(Number.isFinite)) {
+      totalSeconds = Math.max(0, Math.floor(parts[0] * 3600 + parts[1] * 60 + parts[2]));
+    } else if (parts.length === 2 && parts.every(Number.isFinite)) {
+      totalSeconds = Math.max(0, Math.floor(parts[0] * 60 + parts[1]));
+    }
+  }
+
+  if (totalSeconds == null) return storedDuration || '—';
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map(value => String(value).padStart(2, '0')).join(':');
 }
 
 export function formatReportCoordinate(value: number | string | null | undefined) {
