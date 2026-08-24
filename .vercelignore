@@ -1,0 +1,8 @@
+node_modules
+web/node_modules
+web/.next
+web/.next-*
+.expo
+releases
+data
+work
