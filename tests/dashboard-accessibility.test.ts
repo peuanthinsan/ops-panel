@@ -167,6 +167,10 @@ test('large fleet filters use bounded searchable multi-comboboxes instead of nat
   const combobox = await readFile(fileURLToPath(new NodeUrl('../web/app/searchable-combobox.jsx', import.meta.url)), 'utf8');
   assert.doesNotMatch(reports, /<select\b/);
   for (const field of ['vehicle', 'device', 'driver', 'mode', 'status', 'gps']) assert.match(reports, new RegExp(`<SearchableCombobox multiple label=\\{t\\.${field}\\}`));
+  assert.match(reports, /<div className="header-vehicle-selector">\s*<SearchableCombobox multiple label=\{t\.vehicle\}/);
+  assert.match(reports, /<div className="filter-grid shared-filter-grid">\s*<SearchableCombobox multiple label=\{t\.device\}/);
+  const sharedFilterPanel = reports.slice(reports.indexOf('<section className="panel shared-report-filters"'), reports.indexOf('<TimelineDashboard'));
+  assert.doesNotMatch(sharedFilterPanel, /label=\{t\.vehicle\}/);
   assert.match(combobox, /MAX_VISIBLE_COMBOBOX_OPTIONS = 100/);
   assert.match(combobox, /matches\.slice\(0, maxResults\)/);
   assert.match(combobox, /role="combobox"/);
@@ -184,7 +188,7 @@ test('daily print requires exactly one vehicle and never falls back to a fleet v
   const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
   assert.match(reports, /const canPrintDailyReport = Boolean\(selectedPrintDate && vehicles\.length === 1/);
   assert.match(reports, /disabled=\{!canPrintDailyReport\}/);
-  assert.match(reports, /printVehicleRequired: 'Select exactly one vehicle in the shared filters\.'/);
+  assert.match(reports, /printVehicleRequired: 'Select exactly one vehicle in the header\.'/);
   assert.match(reports, /const vehicle = String\(report\.vehicleNumber \|\| ''\)\.trim\(\)/);
   assert.match(reports, /new URLSearchParams\(\{ vehicle, date, lang \}\)/);
   assert.match(print, /const vehicle = String\(requestedVehicle \|\| ''\)\.trim\(\)/);
