@@ -16,6 +16,10 @@
 - Merged Reports and Timeline dashboard checked at 2048 × 933.
 - Responsive dashboard checked at 390 × 844.
 - Daily report checked at 2048 × 933 with fixed 297 × 210 mm A4 landscape sheets.
+- Latest dashboard alert capture: `/private/tmp/songdee-alert-dashboard-desktop.png` (2048 × 933 px at device scale 1).
+- Latest daily-report capture: `/private/tmp/songdee-print-implementation-full.png` (2048 × 933 px at device scale 1).
+- Full-view normalized comparison: `/private/tmp/songdee-alert-full-comparison.png` (2650 × 1000 px). The 1572 × 1348 px source was normalized to 1000 px high; the rendered A4 sheet was cropped from the browser viewport and normalized to the same height.
+- Focused timeline comparison: `/private/tmp/songdee-alert-timeline-comparison.png` (2400 × 310 px). Source and implementation timeline regions were cropped, scaled to the same width, padded to the same height, and combined side by side.
 - The implementation and supplied mockups were opened together for direct comparison at native detail.
 - Realistic QA data covered two vehicles, a 19-job Ford T day, GPS speed samples, speeding, harsh braking, every operation mode, locations, distance, and signatures.
 
@@ -40,6 +44,8 @@
 - The Timeline and Job List remain on the same Reports page.
 - The Timeline speed graph is drawn over the same time scale as the colored job segments, with one chronological vehicle/day path connecting every available GPS sample across saved jobs.
 - Every GPS sample is drawn as a visible point on the speed line; dashboard points expose the exact time and speed in a pointer, keyboard, or touch popup.
+- Speeding and harsh-braking alerts now appear on the web timeline and daily print as red downward arrow icons positioned at the alert event time. The dashboard also shows matching alert chips and a pointer, keyboard, or touch popup with `HH:MM:SS` and alert detail.
+- The QA day produced a speeding arrow at the exact 92 km/h GPS peak (`07:45:00`) and a harsh-braking arrow at `09:30:00`; both daily-print arrows and chips used those same times.
 - Data-FM history now carries its latest `drivername` and `driverrfid` into blank saved-report driver fields without overwriting tablet-captured identity.
 - Reports missing a driver expose the existing retry action even when GPS was already matched, so historical rows can be backfilled through the same reconciliation path.
 - Activity tooltips include the job's top speed.
@@ -53,6 +59,7 @@
 - The user-requested landscape orientation is intentional; the source mockup hierarchy is preserved within a wider, denser A4 composition.
 - The nine operation modes use stable, distinct colors while preserving the reference's red, navy, gold, grey, green, and red-alert semantics.
 - The speed line has a white halo so it remains legible over colored timeline bars, a dot for every GPS point, a direct scale label, and accessible point/peak descriptions.
+- The filled Phosphor caret markers match the mockup's downward red alert arrows without substituting CSS art, text glyphs, or a handcrafted SVG. Their white drop edge stays legible over the speed graph.
 - The report uses `/songdee-gps-pin.svg`, the official pin from the product logo, instead of the earlier lettered report-pin asset.
 - Live values intentionally replace the sample names, dates, locations, and metrics shown in the mockup.
 - At 390 px, report controls and KPI cards reflow without page-level clipping; the wide timeline stays inside its dedicated horizontal scroll container.
@@ -96,6 +103,10 @@
 34. Fix: all samples for one vehicle/day are merged chronologically into one SVG path while retaining every dot and exact time/speed tooltip.
 35. P1: Data-FM returned `drivername` and `driverrfid`, but GPS reconciliation discarded them before updating a completed report.
 36. Fix: the adapter exposes driver identity with history, and both local and production reconciliation fill only previously blank report driver fields.
+37. P1: the web timeline did not render alerts, and daily-print flags were placed at each job's start rather than the underlying alert event time.
+38. Fix: one shared alert derivation layer now uses exact GPS peaks, timestamped stored events, and legacy report fallbacks; both dashboard and print render the same event-timed arrows and chips.
+39. P2: the first browser interaction pass found that clicking a marker after pointer hover toggled the alert popup closed.
+40. Fix: marker state now distinguishes transient hover/focus from a pinned click. The post-fix click exposed `Speeding (92 km/h)` and `07:45:00`, with `aria-expanded="true"`.
 
 ## Verification
 
@@ -110,5 +121,9 @@
 - Browser print check: 24 Aug Ford T rows retained seconds in start, end, and duration; shift, KPI, alert, print, and axis times rendered with seconds; no framework overlay or console warnings/errors — passed.
 - Browser speed check: Ford T rendered one 12-point path with 11 connected line segments on dashboard and print; the 92 km/h point exposed its `07:45:00` tooltip; both legends retained operation modes 1–9 — passed.
 - Browser vehicle-scope check: zero or multiple vehicle selections disabled Print daily report; one Ford T selection opened a Ford-only 19-job report; the 700-4172 row action opened only its one-job report; date changes preserved the vehicle query; a vehicle-less URL showed Vehicle required; mobile controls did not clip — passed.
+- `node --test tests/timeline-alerts.test.ts tests/speed-timeline.test.ts tests/dashboard-accessibility.test.ts` — 18 passed.
+- Browser alert check: 24 Aug rendered two Ford T arrow buttons and two matching chips on the dashboard; the speeding marker popup exposed `07:45:00` and `92 km/h`; the daily print showed the same two decorative arrows and exact-time chips; no console warnings or errors — passed.
+- Responsive alert check: 390 × 844 had no page-level horizontal overflow; the timeline remained horizontally scrollable and both arrows stayed aligned with the speed graph — passed.
+- Full-view and focused side-by-side comparisons verified typography hierarchy, section rhythm, red/navy/neutral tokens, official logo asset quality, alert copy, and the mockup's arrow/chip treatment. Live data, landscape orientation, the 1–9 legend, speed overlay, and job continuation are intentional deviations — passed.
 
 final result: passed

@@ -144,6 +144,24 @@ test('timeline segments expose detailed tooltips to pointer, keyboard, and touch
   for (const detail of ['start', 'end', 'duration', 'speed', 'vehicle', 'driver', 'device', 'gps', 'location', 'reportId']) assert.match(source, new RegExp(`tooltip\\.segment\\.detail\\.${detail}`));
 });
 
+test('dashboard and daily print timelines expose event-timed alert arrows and details', async () => {
+  const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
+  const markers = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-alerts.jsx', import.meta.url)), 'utf8');
+  const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
+  assert.match(timeline, /deriveTimelineAlerts\(row\.reports, speedSeries\.samplesByReportId\)/);
+  assert.match(timeline, /<TimelineAlertMarkers alerts=\{rowAlerts\}/);
+  assert.match(timeline, /<TimelineAlertChips alerts=\{rowAlerts\}/);
+  assert.match(timeline, /className="legend-alert-icon" weight="fill"/);
+  assert.match(markers, /CaretDownIcon weight="fill"/);
+  assert.match(markers, /timelineAlertPosition\(alert, startMinute, endMinute\)/);
+  assert.match(markers, /role="tooltip"/);
+  assert.match(markers, /formatTimelineAlertTime\(alert, lang\)/);
+  assert.match(print, /deriveTimelineAlerts\(summary\.rows, speedSeries\.samplesByReportId\)/);
+  assert.match(print, /<TimelineAlertMarkers alerts=\{alerts\} lang=\{lang\} startMinute=\{6 \* 60\} endMinute=\{24 \* 60\} interactive=\{false\}/);
+  assert.match(print, /<TimelineAlertChips alerts=\{alerts\} lang=\{lang\} limit=\{3\}/);
+  assert.doesNotMatch(print, /function alertFor|className="timeline-flag"/);
+});
+
 test('large fleet filters use bounded searchable multi-comboboxes instead of native selects', async () => {
   const reports = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
   const combobox = await readFile(fileURLToPath(new NodeUrl('../web/app/searchable-combobox.jsx', import.meta.url)), 'utf8');

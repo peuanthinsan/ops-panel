@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { operationActions } from '../../lib/actions';
 import { formatReportDuration, reportDateKey } from '../../lib/report-view';
@@ -10,9 +11,11 @@ import { reportModeColor } from '../../lib/report-mode-meta';
 import { paginateDailyReportJobs, DAILY_REPORT_FIRST_PAGE_JOB_LIMIT, DAILY_REPORT_CONTINUATION_JOB_LIMIT } from '../../lib/report-print-pages';
 import { timelineReportMatchesFilters } from '../../lib/timeline-filter';
 import { TIMELINE_AXIS_LABELS, bangkokMinuteOfDay, timelinePosition } from '../../lib/timeline-position';
+import { deriveTimelineAlerts } from '../../lib/timeline-alerts';
 import { adminFetch, adminFetchAllReports } from '../dashboard-api';
 import { useReportSpeedSeries } from '../report-speed-series';
 import SpeedTimelineOverlay from '../speed-timeline';
+import { TimelineAlertChips, TimelineAlertMarkers } from '../timeline-alerts';
 
 const MODE_META = Object.fromEntries(operationActions.map(action => [action[2], { number: action[0], th: action[1], en: action[2] }]));
 
@@ -73,13 +76,6 @@ function portraitTimelinePosition(startValue, endValue, fallbackMinutes = 5) {
     left: ((boundedStart - windowStart) / (windowEnd - windowStart)) * 100,
     width: ((Math.min(windowEnd, boundedEnd) - boundedStart) / (windowEnd - windowStart)) * 100,
   };
-}
-function alertFor(report) {
-  const explicit = Array.isArray(report.alerts) ? report.alerts : [];
-  const hasHarshBraking = Boolean(report.harshBraking || report.harshBrake || Number(report.harshBrakingCount) > 0 || explicit.some(value => /brak/i.test(String(value))));
-  if (hasHarshBraking) return { type: 'braking', label: 'Harsh Braking', th: 'เบรกกะทันหัน' };
-  if (speed(report) > 90 || report.speeding === true || Number(report.speedingCount) > 0) return { type: 'speeding', label: `Speeding (${speed(report)} km/h)`, th: `ความเร็วเกินกำหนด (${speed(report)} กม./ชม.)` };
-  return null;
 }
 function statusLabel(report, lang) {
   if (report.status === 'Cancelled') return lang === 'th' ? 'ยกเลิก' : 'Cancelled';
@@ -311,14 +307,13 @@ export function PortraitPrintDashboard({ date: requestedDate, vehicle: requested
   const totalSeconds = summary.rows.reduce((sum, report) => sum + elapsedSeconds(report), 0);
   const shiftSeconds = summary.start && summary.end ? Math.max(0, Math.floor((dateValue(summary.end) - dateValue(summary.start)) / 1000)) : 0;
   const breakSeconds = Math.max(0, shiftSeconds - totalSeconds);
-  const alerts = summary.rows.map(report => ({ report, alert: alertFor(report) })).filter(item => item.alert);
+  const alerts = deriveTimelineAlerts(summary.rows, speedSeries.samplesByReportId);
   const printedAt = new Intl.DateTimeFormat(lang === 'th' ? 'th-TH' : 'en-GB', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date());
   const documentId = `SD-${date.replaceAll('-', '')}-${vehicle}`;
   const timelineRows = summary.rows.map(report => {
     const position = portraitTimelinePosition(report.startTime, report.endTime);
     return position ? { report, position } : null;
   }).filter(Boolean);
-  const visibleAlerts = alerts.slice(0, 3);
   const jobPages = paginateDailyReportJobs(summary.rows);
   function changeReportDate(nextDate) {
     if (!nextDate) return;
@@ -332,7 +327,7 @@ export function PortraitPrintDashboard({ date: requestedDate, vehicle: requested
       <DailyReportMasthead lang={lang} documentId={documentId} printedAt={printedAt} page={1} totalPages={jobPages.totalPages} />
       <DailyTripInfo lang={lang} vehicle={vehicle} summary={summary} date={date} />
       <div className="report-kpi-grid"><Kpi label={lang === 'th' ? 'ระยะทางรวม' : 'Total Distance'} value={summary.distance == null ? '—' : summary.distance.toFixed(1)} note="km" /><Kpi label={lang === 'th' ? 'งานที่เสร็จ' : 'Jobs Completed'} value={summary.rows.length} note={lang === 'th' ? 'งาน' : 'jobs'} /><Kpi label={lang === 'th' ? 'เวลาทำงานรวม' : 'Total Working Time'} value={totalDuration(totalSeconds)} note={lang === 'th' ? 'ชม.' : 'hrs'} /><Kpi label={lang === 'th' ? 'เวลาพัก / รอ' : 'Break / Wait Time'} value={totalDuration(breakSeconds)} note={lang === 'th' ? 'ชม.' : 'hrs'} /></div>
-      <section className="report-section"><div className="report-section-heading"><h2>{lang === 'th' ? 'ไทม์ไลน์การเดินรถ' : 'TRIP TIMELINE'}</h2><strong className={alerts.length ? 'timeline-alert-count' : 'timeline-clear'}>△ {alerts.length} {lang === 'th' ? 'การแจ้งเตือนระหว่างทาง' : alerts.length === 1 ? 'alert during this trip' : 'alerts during this trip'}</strong></div><div className="timeline-legend">{operationActions.map(([number, thai, english]) => <span key={number}><i style={{ backgroundColor: reportModeColor(english) }} /><b>{number}</b>{lang === 'th' ? thai : english}</span>)}<span><i className="speed" />{lang === 'th' ? 'ความเร็ว (กม./ชม.)' : 'Speed (km/h)'}</span><span><i className="alert" />{lang === 'th' ? 'การแจ้งเตือน' : 'Alert'}</span></div><div className="trip-timeline" role="group" aria-label={lang === 'th' ? 'ไทม์ไลน์การเดินรถพร้อมกราฟความเร็ว' : 'Trip timeline with vehicle speed graph'}>{timelineRows.map(({ report, position }) => <span key={report.id || report.startTime} className="timeline-segment" style={{ left: `${position.left}%`, width: `${Math.max(.9, position.width)}%`, background: reportModeColor(report.mode), opacity: report.status === 'Cancelled' ? .45 : 1 }} />)}<SpeedTimelineOverlay reports={summary.rows} samplesByReportId={speedSeries.samplesByReportId} loading={speedSeries.loading} lang={lang} startMinute={6 * 60} endMinute={24 * 60} className="print-speed-overlay" interactive={false} />{alerts.map(({ report }) => { const position = portraitTimelinePosition(report.startTime, report.endTime); return position ? <span key={`flag-${report.id || report.startTime}`} className="timeline-flag" style={{ left: `${position.left}%` }} aria-hidden="true" /> : null; })}</div><div className="timeline-axis">{['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00', '24:00'].map(label => <span key={label}>{axisTime(label)}</span>)}</div><div className="alert-list">{visibleAlerts.map(({ report, alert }) => <span key={`alert-${report.id || report.startTime}`}>● {time(report.startTime, lang)} · {lang === 'th' ? alert.th : alert.label}</span>)}{alerts.length > visibleAlerts.length ? <span>+{alerts.length - visibleAlerts.length} {lang === 'th' ? 'รายการ' : 'more'}</span> : null}</div></section>
+      <section className="report-section"><div className="report-section-heading"><h2>{lang === 'th' ? 'ไทม์ไลน์การเดินรถ' : 'TRIP TIMELINE'}</h2><strong className={alerts.length ? 'timeline-alert-count' : 'timeline-clear'}><WarningIcon weight="bold" aria-hidden="true" /> {alerts.length} {lang === 'th' ? 'การแจ้งเตือนระหว่างทาง' : alerts.length === 1 ? 'alert during this trip' : 'alerts during this trip'}</strong></div><div className="timeline-legend">{operationActions.map(([number, thai, english]) => <span key={number}><i style={{ backgroundColor: reportModeColor(english) }} /><b>{number}</b>{lang === 'th' ? thai : english}</span>)}<span><i className="speed" />{lang === 'th' ? 'ความเร็ว (กม./ชม.)' : 'Speed (km/h)'}</span><span><i className="alert" />{lang === 'th' ? 'การแจ้งเตือน' : 'Alert'}</span></div><div className="trip-timeline" role="group" aria-label={lang === 'th' ? 'ไทม์ไลน์การเดินรถพร้อมกราฟความเร็วและการแจ้งเตือน' : 'Trip timeline with vehicle speed graph and alerts'}>{timelineRows.map(({ report, position }) => <span key={report.id || report.startTime} className="timeline-segment" style={{ left: `${position.left}%`, width: `${Math.max(.9, position.width)}%`, background: reportModeColor(report.mode), opacity: report.status === 'Cancelled' ? .45 : 1 }} />)}<SpeedTimelineOverlay reports={summary.rows} samplesByReportId={speedSeries.samplesByReportId} loading={speedSeries.loading} lang={lang} startMinute={6 * 60} endMinute={24 * 60} className="print-speed-overlay" interactive={false} /><TimelineAlertMarkers alerts={alerts} lang={lang} startMinute={6 * 60} endMinute={24 * 60} interactive={false} /></div><div className="timeline-axis">{['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00', '24:00'].map(label => <span key={label}>{axisTime(label)}</span>)}</div><TimelineAlertChips alerts={alerts} lang={lang} limit={3} className="alert-list" /></section>
       <section className="report-section job-section"><div className="report-section-heading"><h2>{lang === 'th' ? 'รายการงาน' : 'JOB LIST'}</h2><span>{dailyJobRangeLabel(lang, 1, jobPages.firstPage.length, summary.rows.length)}</span></div><DailyJobTable rows={jobPages.firstPage} lang={lang} />{!summary.rows.length ? <p className="print-empty">{lang === 'th' ? 'ไม่มีงานที่บันทึกสำหรับรถและวันที่นี้' : 'No saved jobs for this vehicle and date.'}</p> : null}</section>
       {!jobPages.continuationPages.length ? <DailySignatureFooter lang={lang} /> : null}
     </section>
