@@ -8,7 +8,7 @@ import { formatReportDuration, reportDateKey } from '../../lib/report-view';
 import { printReportLocation } from '../../lib/report-print-view';
 import { filterReports, hasRestrictiveReportFilters } from '../../lib/report-filter';
 import { reportModeColor } from '../../lib/report-mode-meta';
-import { paginateDailyReportJobs, DAILY_REPORT_FIRST_PAGE_JOB_LIMIT, DAILY_REPORT_CONTINUATION_JOB_LIMIT } from '../../lib/report-print-pages';
+import { dailyReportIsComplete, paginateDailyReportJobs, DAILY_REPORT_FIRST_PAGE_JOB_LIMIT, DAILY_REPORT_CONTINUATION_JOB_LIMIT } from '../../lib/report-print-pages';
 import { timelineReportMatchesFilters } from '../../lib/timeline-filter';
 import { TIMELINE_AXIS_LABELS, bangkokMinuteOfDay, timelinePosition } from '../../lib/timeline-position';
 import { deriveTimelineAlerts } from '../../lib/timeline-alerts';
@@ -158,7 +158,7 @@ function summaryForVehicle(vehicle, reports) {
     topSpeed: topSpeed >= 0 ? topSpeed : null,
     distance: knownDistances.length ? knownDistances.reduce((sum, value) => sum + value, 0) : null,
     gpsMatched: rows.filter(hasGps).length,
-    cancelled: rows.filter(report => report.status === 'Cancelled').length,
+    dayFinished: dailyReportIsComplete(rows),
     gpsPending: rows.filter(isLookupPending).length,
   };
 }
@@ -276,7 +276,7 @@ function DailyReportMasthead({ lang, documentId, printedAt, page, totalPages, co
 }
 
 function DailyTripInfo({ lang, vehicle, summary, date }) {
-  return <div className="trip-info-row"><div><small>{lang === 'th' ? 'ทะเบียนรถ' : 'Vehicle Plate'}</small><strong>{vehicle || '—'}</strong></div><div><small>{lang === 'th' ? 'คนขับ' : 'Driver'}</small><strong>{summary.driver}</strong></div><div><small>{lang === 'th' ? 'วันที่' : 'Date'}</small><strong>{reportDate(date, lang)}</strong></div><div><small>{lang === 'th' ? 'เวลาเริ่ม–สิ้นสุด' : 'Shift Start–End'}</small><strong>{time(summary.start, lang)} – {time(summary.end, lang)}</strong></div><div><small>{lang === 'th' ? 'สถานะ' : 'Status'}</small><strong className="trip-status">{lang === 'th' ? (summary.cancelled ? 'มีข้อยกเว้น' : 'เสร็จสิ้น') : (summary.cancelled ? 'Attention' : 'Completed')}</strong></div></div>;
+  return <div className="trip-info-row"><div><small>{lang === 'th' ? 'ทะเบียนรถ' : 'Vehicle Plate'}</small><strong>{vehicle || '—'}</strong></div><div><small>{lang === 'th' ? 'คนขับ' : 'Driver'}</small><strong>{summary.driver}</strong></div><div><small>{lang === 'th' ? 'วันที่' : 'Date'}</small><strong>{reportDate(date, lang)}</strong></div><div><small>{lang === 'th' ? 'เวลาเริ่ม–สิ้นสุด' : 'Shift Start–End'}</small><strong>{time(summary.start, lang)} – {time(summary.end, lang)}</strong></div><div><small>{lang === 'th' ? 'สถานะ' : 'Status'}</small><strong className="trip-status">{lang === 'th' ? (summary.dayFinished ? 'เสร็จสิ้น' : 'ยังไม่จบงาน') : (summary.dayFinished ? 'Completed' : 'Attention')}</strong></div></div>;
 }
 
 function DailyJobTable({ rows, lang }) {

@@ -28,7 +28,8 @@ test('mobile reports use the Bangkok operating day across UTC midnight', () => {
   assert.equal(formatMobileReportMonth('2026-08', 'en'), 'Aug 2026');
   assert.equal(formatMobileReportMonth('2026-08', 'th'), 'ส.ค. 2569');
   assert.deepEqual(savedJobDayKeys(jobs), ['2026-08-25', '2026-08-24']);
-  assert.deepEqual(savedJobsForDay(jobs, '2026-08-24').map(job => job.id), ['load', 'cancelled']);
+  assert.deepEqual(savedJobsForDay(jobs, '2026-08-24').map(job => job.id), ['finish', 'load', 'cancelled']);
+  assert.deepEqual(savedJobsForDay(jobs, '2026-08-25').map(job => job.id), ['finish']);
 });
 
 test('end-of-day summary counts completed and cancelled jobs and totals recorded time', () => {

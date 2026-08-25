@@ -1,5 +1,5 @@
 import { operationActions } from './actions.ts';
-import { durationSeconds, formatMobileReportTime, mobileReportDayKey } from './mobile-report.ts';
+import { durationSeconds, formatMobileReportTime, mobileReportDayKey, mobileReportOverlapsDay } from './mobile-report.ts';
 import type { SavedJob } from './saved-jobs.ts';
 
 export type MobileJobStatusFilter = 'all' | 'completed' | 'cancelled' | 'pending' | 'failed';
@@ -70,7 +70,7 @@ export function mobileJobMonthKeys(jobs: SavedJob[]) {
 export function filterAndSortMobileJobs(jobs: SavedJob[], query: MobileJobQuery) {
   const search = normalizedSearch(query.search);
   const filtered = jobs.filter(job => {
-    if (query.dayKey && mobileReportDayKey(job.endTime) !== query.dayKey) return false;
+    if (query.dayKey && !mobileReportOverlapsDay(job.startTime, job.endTime, query.dayKey)) return false;
     if (!query.dayKey && query.startAt && timestamp(job.endTime) < timestamp(query.startAt)) return false;
     if (!query.dayKey && query.endAt && timestamp(job.startTime) > timestamp(query.endAt)) return false;
     if (!query.dayKey && !query.startAt && !query.endAt && query.monthKey && mobileJobMonthKey(job) !== query.monthKey) return false;

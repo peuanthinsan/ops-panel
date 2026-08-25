@@ -99,7 +99,7 @@ function storedJobWhere(query: MobileJobQuery, onlyPending: boolean) {
     if (range.end != null) {
       clauses.push(range.exactRange
         ? "COALESCE(unixepoch(json_extract(saved.payload, '$.startTime')) * 1000, saved.end_at) <= ?"
-        : 'saved.end_at < ?');
+        : "COALESCE(unixepoch(json_extract(saved.payload, '$.startTime')) * 1000, saved.end_at) < ?");
       values.push(range.end);
     }
   }

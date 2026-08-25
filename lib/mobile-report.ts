@@ -13,6 +13,21 @@ export function mobileReportDayKey(value: string | number | Date) {
   return bangkokDate(value)?.toISOString().slice(0, 10) || '';
 }
 
+function bangkokDayBoundary(dayKey: string, end = false) {
+  const match = dayKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return NaN;
+  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])) - BANGKOK_OFFSET_MS + (end ? 24 * 60 * 60 * 1000 : 0);
+}
+
+export function mobileReportOverlapsDay(startTime: string, endTime: string, dayKey: string) {
+  const start = Date.parse(startTime);
+  const end = Date.parse(endTime);
+  const dayStart = bangkokDayBoundary(dayKey);
+  const dayEnd = bangkokDayBoundary(dayKey, true);
+  return Number.isFinite(start) && Number.isFinite(end) && Number.isFinite(dayStart) && Number.isFinite(dayEnd)
+    && start < dayEnd && end >= dayStart;
+}
+
 export function formatMobileReportDay(dayKey: string, language: 'en' | 'th') {
   const match = dayKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return dayKey;
@@ -44,11 +59,11 @@ export function formatMobileReportDateTime(value: string, language: 'en' | 'th')
 }
 
 export function savedJobDayKeys(jobs: SavedJob[]) {
-  return [...new Set(jobs.map(job => mobileReportDayKey(job.endTime)).filter(Boolean))].sort().reverse();
+  return [...new Set(jobs.flatMap(job => [mobileReportDayKey(job.startTime), mobileReportDayKey(job.endTime)]).filter(Boolean))].sort().reverse();
 }
 
 export function savedJobsForDay(jobs: SavedJob[], dayKey: string | null) {
-  const filtered = dayKey ? jobs.filter(job => mobileReportDayKey(job.endTime) === dayKey) : jobs;
+  const filtered = dayKey ? jobs.filter(job => mobileReportOverlapsDay(job.startTime, job.endTime, dayKey)) : jobs;
   return [...filtered].sort((left, right) => Date.parse(right.endTime) - Date.parse(left.endTime));
 }
 

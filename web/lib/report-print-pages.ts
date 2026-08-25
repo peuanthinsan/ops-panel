@@ -1,6 +1,10 @@
 export const DAILY_REPORT_FIRST_PAGE_JOB_LIMIT = 8;
 export const DAILY_REPORT_CONTINUATION_JOB_LIMIT = 14;
 
+export function dailyReportIsComplete(rows: Array<{ mode?: unknown; status?: unknown }>) {
+  return rows.some(report => report.mode === 'Finish work' && report.status !== 'Cancelled');
+}
+
 export function paginateDailyReportJobs<T>(rows: T[]) {
   const jobs = Array.isArray(rows) ? rows : [];
   const firstPage = jobs.slice(0, DAILY_REPORT_FIRST_PAGE_JOB_LIMIT);

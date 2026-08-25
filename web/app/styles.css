@@ -150,11 +150,17 @@ button:focus-visible{outline:3px solid #111;outline-offset:2px;box-shadow:0 0 0 
 .print-timeline-track .speed-timeline-overlay{z-index:2}.print-timeline-track .speed-scale-label,.print-timeline-track .speed-timeline-state{top:2px!important;right:3px;font-size:5px}.print-timeline-track>span:not(.speed-scale-label):not(.speed-timeline-state){z-index:1}
 @media(max-width:760px){.print-toolbar{width:calc(100% - 24px);flex-wrap:wrap;justify-content:center}.print-date-control{order:3;width:100%}}
 .header-actions .daily-print-action{display:grid;gap:4px}.header-actions .daily-print-action .primary{width:100%}.daily-print-selection{max-width:230px;font-size:10px;font-weight:700;line-height:1.25}.daily-print-selection.required{color:#B3131A}.daily-print-selection.selected{color:#14865B}
-@media(min-width:821px){
-  .report-header>div:first-child{flex:0 1 220px;min-width:180px}
-  .header-actions{flex:1 1 760px;min-width:0}
-  .header-vehicle-selector,.date-range-control{width:auto;flex:1 1 220px;min-width:190px}
+@media(min-width:821px) and (max-width:1180px){
+  .report-header>div:first-child{max-width:360px}
+  .header-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);flex:1 1 100%;width:100%;min-width:0}
+  .header-vehicle-selector,.date-range-control{width:100%;min-width:0}
+  .header-actions>.secondary{width:100px;justify-self:end}
+  .header-actions>.daily-print-action{width:190px;justify-self:start}
+}
+@media(min-width:1181px){
+  .report-header>div:first-child{flex:1 1 280px;min-width:260px;max-width:360px}
+  .header-actions{display:grid;grid-template-columns:minmax(220px,1fr) minmax(220px,1fr) 100px 190px;flex:0 1 900px;width:min(900px,100%);min-width:0;margin-left:auto}
+  .header-vehicle-selector,.date-range-control{width:100%;min-width:0}
   .header-vehicle-selector .multi-combobox-chips{max-width:100%}
-  .header-actions>.secondary{flex:0 0 auto}
-  .header-actions>.daily-print-action{flex:0 0 181px}
+  .header-actions>.secondary,.header-actions>.daily-print-action{width:100%}
 }

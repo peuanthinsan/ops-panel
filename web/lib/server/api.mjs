@@ -585,7 +585,7 @@ async function getDeviceJobs(deviceId, vehicleNumber, searchParams) {
   if (query.dayKey) {
     const day = parameter(query.dayKey);
     clauses.push(`report.end_time >= (${day}::date::timestamp AT TIME ZONE 'Asia/Bangkok')`);
-    clauses.push(`report.end_time < ((${day}::date + 1)::timestamp AT TIME ZONE 'Asia/Bangkok')`);
+    clauses.push(`report.start_time < ((${day}::date + 1)::timestamp AT TIME ZONE 'Asia/Bangkok')`);
   } else if (query.startAt || query.endAt) {
     if (query.startAt) clauses.push(`report.end_time >= ${parameter(query.startAt)}::timestamptz`);
     if (query.endAt) clauses.push(`report.start_time <= ${parameter(query.endAt)}::timestamptz`);

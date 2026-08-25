@@ -56,3 +56,20 @@ test('device history applies search, status, activity, and sorting before pagina
   assert.ok(range.jobs.every(job => Date.parse(job.endTime) >= Date.parse(target.startTime) - 500
     && Date.parse(job.startTime) <= Date.parse(target.endTime) + 500));
 });
+
+test('device history keeps an overnight job on both Bangkok operating days it overlaps', () => {
+  const overnight = {
+    id: 'overnight',
+    vehicleNumber: 'FORD T',
+    deviceId: 'tablet-lifetime',
+    driverName: 'Night driver',
+    driverId: 'D-NIGHT',
+    mode: 'Park overnight',
+    startTime: '2026-08-24T16:50:00.000Z',
+    endTime: '2026-08-24T17:05:00.000Z',
+    duration: '00:15:00',
+    status: 'Completed',
+  };
+  assert.deepEqual(queryLocalDeviceJobs([overnight], 'tablet-lifetime', 'FORD T', params({ day: '2026-08-24' })).jobs.map(job => job.id), ['overnight']);
+  assert.deepEqual(queryLocalDeviceJobs([overnight], 'tablet-lifetime', 'FORD T', params({ day: '2026-08-25' })).jobs.map(job => job.id), ['overnight']);
+});

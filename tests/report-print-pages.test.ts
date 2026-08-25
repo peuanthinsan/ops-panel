@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   DAILY_REPORT_CONTINUATION_JOB_LIMIT,
   DAILY_REPORT_FIRST_PAGE_JOB_LIMIT,
+  dailyReportIsComplete,
   paginateDailyReportJobs,
 } from '../web/lib/report-print-pages.ts';
 import { REPORT_MODE_COLORS } from '../web/lib/report-mode-meta.ts';
@@ -27,6 +28,20 @@ test('daily print pagination adds as many continuation pages as needed', () => {
   assert.deepEqual(pages.continuationPages.map(page => page.length), [14, 14, 3]);
   assert.equal(pages.totalPages, 4);
   assert.deepEqual([...pages.firstPage, ...pages.continuationPages.flat()], jobs);
+});
+
+test('daily report is complete only after a completed Finish work job', () => {
+  assert.equal(dailyReportIsComplete([
+    { mode: 'Load', status: 'Completed' },
+    { mode: 'Unload', status: 'Completed' },
+  ]), false);
+  assert.equal(dailyReportIsComplete([
+    { mode: 'Load', status: 'Cancelled' },
+    { mode: 'Finish work', status: 'Completed' },
+  ]), true);
+  assert.equal(dailyReportIsComplete([
+    { mode: 'Finish work', status: 'Cancelled' },
+  ]), false);
 });
 
 test('the timeline exposes a distinct legend color for every mode 1–9', () => {
