@@ -839,15 +839,15 @@ function gpsLookupState(reconciliation) {
   const deviceSource = reconciliation?.deviceSource || {};
   if (reconciliation?.gpsSync) {
     if (reconciliation.pairStatus === 'paired') {
-      return { status: 'paired', gps: 'GPS paired', message: 'Data-FM and Howen FMS GPS points matched by time.' };
+      return { status: 'paired', gps: 'GPS paired', message: 'GPS points matched by time.' };
     }
     if (reconciliation.pairStatus === 'fms_delayed') {
-      return { status: 'partial', gps: 'GPS partially paired', message: deviceSource.message || 'Data-FM GPS was found; Howen FMS coverage is partial.' };
+      return { status: 'partial', gps: 'GPS partially paired', message: deviceSource.message || 'GPS was found; FMS coverage is partial.' };
     }
-    return { status: 'device_only', gps: 'Data-FM matched', message: deviceSource.message || 'Data-FM GPS point matched.' };
+    return { status: 'device_only', gps: 'GPS matched', message: deviceSource.message || 'GPS point matched.' };
   }
   if (deviceSource.status === 'no_time_match' || deviceSource.status === 'received') {
-    return { status: 'no_data', gps: 'No GPS point', message: deviceSource.message || 'No Data-FM GPS point was found inside the time window.' };
+    return { status: 'no_data', gps: 'No GPS point', message: deviceSource.message || 'No GPS point was found inside the time window.' };
   }
   if (deviceSource.status === 'not_configured') {
     return { status: 'lookup_unavailable', gps: 'GPS unavailable', message: deviceSource.message || 'GPS lookup is not configured.' };
@@ -1594,7 +1594,7 @@ async function routeRequest(request, route) {
         cancelled ? 'Not applicable' : 'Pending GPS lookup',
         cancelled ? 'Cancelled' : 'Completed',
         cancelled ? 'not_applicable' : 'pending',
-        cancelled ? 'Cancelled job recorded.' : 'Waiting for Data-FM GPS lookup.',
+        cancelled ? 'Cancelled job recorded.' : 'Waiting for GPS lookup.',
       ],
     );
     const inputShape = { vehicleNumber, deviceId, driverName, driverId, mode, startTime: start.iso, endTime: end.iso, cancelled };
@@ -1615,7 +1615,7 @@ async function routeRequest(request, route) {
         gpsLookup: { status: 'not_applicable', message: 'Cancelled job recorded.' },
       }, 201);
     }
-    return json({ report: rows[0], gpsLookup: { status: 'pending', message: 'Waiting for Data-FM GPS lookup.' } }, 201);
+    return json({ report: rows[0], gpsLookup: { status: 'pending', message: 'Waiting for GPS lookup.' } }, 201);
   }
 
   throw new ApiError(404, 'Not found');

@@ -13,9 +13,9 @@ import { DEFAULT_GPS_PAIR_TOLERANCE_MS, pairExternalGpsSources } from './web/lib
 const port = process.env.PORT || 4000;
 const maximumJsonBodyBytes = 64 * 1024;
 const seedReports = [
-  { id: 'OPS-1042', vehicleNumber: '74-1286', deviceId: 'demo-android-001', driverName: 'Somchai Prasert', driverId: 'DRV-0142', mode: 'Load', startTime: '2026-08-18T08:14:00+07:00', endTime: '2026-08-18T09:02:00+07:00', duration: '48:00', gps: 'No GPS point', status: 'Completed', gpsLookupStatus: 'no_data', gpsLookupMessage: 'No Data-FM GPS point has been matched yet.' },
-  { id: 'OPS-1041', vehicleNumber: '74-2219', deviceId: 'demo-android-002', driverName: 'Narin Suksan', driverId: 'DRV-0098', mode: 'Unload', startTime: '2026-08-18T07:46:00+07:00', endTime: '2026-08-18T08:31:00+07:00', duration: '45:00', gps: 'No GPS point', status: 'Completed', gpsLookupStatus: 'no_data', gpsLookupMessage: 'No Data-FM GPS point has been matched yet.' },
-  { id: 'OPS-1040', vehicleNumber: '74-0904', deviceId: 'demo-android-003', driverName: 'Preecha K.', driverId: 'DRV-0215', mode: 'Refuel', startTime: '2026-08-18T07:18:00+07:00', endTime: '2026-08-18T07:32:00+07:00', duration: '14:00', gps: 'No GPS point', status: 'Completed', gpsLookupStatus: 'no_data', gpsLookupMessage: 'No Data-FM GPS point has been matched yet.' }
+  { id: 'OPS-1042', vehicleNumber: '74-1286', deviceId: 'demo-android-001', driverName: 'Somchai Prasert', driverId: 'DRV-0142', mode: 'Load', startTime: '2026-08-18T08:14:00+07:00', endTime: '2026-08-18T09:02:00+07:00', duration: '48:00', gps: 'No GPS point', status: 'Completed', gpsLookupStatus: 'no_data', gpsLookupMessage: 'No GPS point has been matched yet.' },
+  { id: 'OPS-1041', vehicleNumber: '74-2219', deviceId: 'demo-android-002', driverName: 'Narin Suksan', driverId: 'DRV-0098', mode: 'Unload', startTime: '2026-08-18T07:46:00+07:00', endTime: '2026-08-18T08:31:00+07:00', duration: '45:00', gps: 'No GPS point', status: 'Completed', gpsLookupStatus: 'no_data', gpsLookupMessage: 'No GPS point has been matched yet.' },
+  { id: 'OPS-1040', vehicleNumber: '74-0904', deviceId: 'demo-android-003', driverName: 'Preecha K.', driverId: 'DRV-0215', mode: 'Refuel', startTime: '2026-08-18T07:18:00+07:00', endTime: '2026-08-18T07:32:00+07:00', duration: '14:00', gps: 'No GPS point', status: 'Completed', gpsLookupStatus: 'no_data', gpsLookupMessage: 'No GPS point has been matched yet.' }
 ];
 const allowedModes = new Set(['Load', 'Stop vehicle', 'Unload', 'Break', 'Vehicle check', 'Refuel', 'Vehicle wash', 'Park overnight', 'Finish work']);
 function validRequiredText(value, maxLength) {
@@ -115,11 +115,11 @@ function isCancelledReport(report) { return report.status === 'Cancelled'; }
 function gpsLookupState(reconciliation) {
   const deviceSource = reconciliation?.deviceSource || {};
   if (reconciliation?.gpsSync) {
-    if (reconciliation.pairStatus === 'paired') return { status: 'paired', gps: 'GPS paired', message: 'Data-FM and Howen FMS GPS points matched by time.' };
-    if (reconciliation.pairStatus === 'fms_delayed') return { status: 'partial', gps: 'GPS partially paired', message: deviceSource.message || 'Data-FM GPS was found; Howen FMS coverage is partial.' };
-    return { status: 'device_only', gps: 'Data-FM matched', message: deviceSource.message || 'Data-FM GPS point matched.' };
+    if (reconciliation.pairStatus === 'paired') return { status: 'paired', gps: 'GPS paired', message: 'GPS points matched by time.' };
+    if (reconciliation.pairStatus === 'fms_delayed') return { status: 'partial', gps: 'GPS partially paired', message: deviceSource.message || 'GPS was found; FMS coverage is partial.' };
+    return { status: 'device_only', gps: 'GPS matched', message: deviceSource.message || 'GPS point matched.' };
   }
-  if (deviceSource.status === 'no_time_match' || deviceSource.status === 'received') return { status: 'no_data', gps: 'No GPS point', message: deviceSource.message || 'No Data-FM GPS point was found inside the time window.' };
+  if (deviceSource.status === 'no_time_match' || deviceSource.status === 'received') return { status: 'no_data', gps: 'No GPS point', message: deviceSource.message || 'No GPS point was found inside the time window.' };
   if (deviceSource.status === 'not_configured') return { status: 'lookup_unavailable', gps: 'GPS unavailable', message: deviceSource.message || 'GPS lookup is not configured.' };
   return { status: 'lookup_failed', gps: 'GPS lookup failed', message: deviceSource.message || 'GPS lookup failed.' };
 }
@@ -676,7 +676,7 @@ const server = http.createServer(async (req, res) => {
           gps: cancelled ? 'Not applicable' : 'Pending GPS lookup',
           status: cancelled ? 'Cancelled' : 'Completed',
           gpsLookupStatus: cancelled ? 'not_applicable' : 'pending',
-          gpsLookupMessage: cancelled ? 'Cancelled job recorded.' : 'Waiting for Data-FM GPS lookup.',
+          gpsLookupMessage: cancelled ? 'Cancelled job recorded.' : 'Waiting for GPS lookup.',
         };
         reports.unshift(report);
         removeActiveJob(report.id);

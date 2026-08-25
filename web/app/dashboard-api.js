@@ -9,6 +9,9 @@ const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL
 export async function adminFetch(path, options = {}) {
   const token = typeof window !== 'undefined' ? getAdminSessionToken() : '';
   const isGet = (options.method || 'GET').toUpperCase() === 'GET';
+  const isLocalPreview = process.env.NODE_ENV === 'development'
+    && typeof window !== 'undefined'
+    && ['localhost', '127.0.0.1'].includes(window.location.hostname);
   const cacheKey = String(path);
   const useOfflineCache = isGet && options.cacheOffline !== false;
   const offlineFallback = async (message) => {
@@ -22,7 +25,7 @@ export async function adminFetch(path, options = {}) {
     }
     throw new Error(message);
   };
-  if (isGet && typeof navigator !== 'undefined' && navigator.onLine === false) {
+  if (isGet && !isLocalPreview && typeof navigator !== 'undefined' && navigator.onLine === false) {
     return offlineFallback('Offline and no cached dashboard data is available.');
   }
   if (!isGet && typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -89,4 +92,18 @@ export async function adminFetchAllReports(filters = {}) {
     page += 1;
   } while (page <= totalPages);
   return reports;
+}
+
+export async function adminFetchReportGpsSamples(reportId, { signal } = {}) {
+  const samples = [];
+  const pageSize = 200;
+  let page = 1;
+  let totalPages = 1;
+  do {
+    const result = await adminFetch(`/api/admin/reports/${encodeURIComponent(reportId)}/gps?page=${page}&pageSize=${pageSize}`, { signal });
+    samples.push(...(Array.isArray(result.samples) ? result.samples : []));
+    totalPages = Math.max(1, Number(result.pageInfo?.totalPages || 1));
+    page += 1;
+  } while (page <= totalPages);
+  return samples;
 }

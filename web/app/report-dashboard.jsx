@@ -8,6 +8,7 @@ import {
   formatReportDate,
   formatReportDateTime,
   formatReportDuration,
+  displayGpsLookupMessage,
   reportDateKey,
 } from '../lib/report-view';
 import { reportableOperations } from '../lib/actions';
@@ -51,10 +52,10 @@ const gpsUiText = {
 };
 const text = {
   en: {
-    eyebrowToday: 'TODAY', title: 'Operations reports', subtitle: 'Review, filter, print, and retry every saved vehicle job.', search: 'Search reports', searchPlaceholder: 'Vehicle, device, driver, mode, report ID, GPS, or location', dateRange: 'Date range', allDates: 'All dates', today: 'Today', last7: 'Last 7 days', month: 'This month', custom: 'Custom range', startDate: 'Start date', endDate: 'End date', apply: 'Apply', cancel: 'Cancel', previousMonth: 'Previous month', nextMonth: 'Next month', report: 'Report ID', vehicle: 'Vehicle', allVehicles: 'All vehicles', device: 'Device', allDevices: 'All devices', driver: 'Driver', allDrivers: 'All drivers', mode: 'Activity', allModes: 'All activities', status: 'Status', allStatuses: 'All statuses', gps: 'GPS', allGps: 'All GPS states', sort: 'Sort by', sortHint: 'Shift-click headers to sort by up to three columns.', newest: 'Newest first', oldest: 'Oldest first', clear: 'Clear', refresh: 'Refresh', refreshing: 'Refreshing…', print: 'Print report', printVehicle: 'Print vehicle report', jobs: 'Total jobs', jobsSub: 'in the selected range', active: 'Vehicles operating', activeSub: 'vehicles with saved work', queued: 'GPS lookup pending', queuedSub: 'waiting for GPS data', cancelled: 'Cancelled jobs', cancelledSub: 'kept in the audit record', activity: 'Job list', date: 'Date', start: 'Start time', end: 'End time', duration: 'Total time', durationFormat: 'HH:MM:SS', topSpeed: 'Top speed', location: 'Location (GPS)', noJobs: 'No jobs match the current filters.', emptyTitle: 'No jobs recorded yet', emptyBody: 'Connect a tablet to a vehicle, then complete or cancel a job. It will appear here automatically.', noMatchTitle: 'No matching jobs', noMatchBody: 'Try a different search, date range, or filter.', manageFleet: 'Manage fleet', failed: 'Could not load reports.', loading: 'Loading reports…', retry: 'Retry GPS lookup', retrying: 'Looking up…', actions: 'Actions', deviceSamples: 'GPS', lastPoint: 'Last point', previous: 'Previous', next: 'Next', page: 'Page', of: 'of', showing: 'Showing', total: 'total', fleet: 'fleet', unknownLocation: 'No GPS point', stationary: 'Stationary', speedUnit: 'km/h',
+    eyebrowToday: 'TODAY', title: 'Operations reports', subtitle: 'Review, filter, print, and retry every saved vehicle job.', search: 'Search reports', searchPlaceholder: 'Vehicle, device, driver, mode, report ID, GPS, or location', dateRange: 'Job list range', reportDate: 'Report date', allDates: 'All dates', today: 'Today', last7: 'Last 7 days', month: 'This month', custom: 'Custom range', startDate: 'Start date', endDate: 'End date', apply: 'Apply', cancel: 'Cancel', previousMonth: 'Previous month', nextMonth: 'Next month', report: 'Report ID', vehicle: 'Vehicle', allVehicles: 'All vehicles', device: 'Device', allDevices: 'All devices', driver: 'Driver', allDrivers: 'All drivers', mode: 'Activity', allModes: 'All activities', status: 'Status', allStatuses: 'All statuses', gps: 'GPS', allGps: 'All GPS states', sort: 'Sort by', sortHint: 'Shift-click headers to sort by up to three columns.', newest: 'Newest first', oldest: 'Oldest first', clear: 'Clear', refresh: 'Refresh', refreshing: 'Refreshing…', print: 'Print report', printVehicle: 'Print vehicle report', jobs: 'Total jobs', jobsSub: 'in the selected range', active: 'Vehicles operating', activeSub: 'vehicles with saved work', queued: 'GPS lookup pending', queuedSub: 'waiting for GPS data', cancelled: 'Cancelled jobs', cancelledSub: 'kept in the audit record', activity: 'Job list', date: 'Date', start: 'Start time', end: 'End time', duration: 'Total time', durationFormat: 'HH:MM:SS', topSpeed: 'Top speed', location: 'Location (GPS)', noJobs: 'No jobs match the current filters.', emptyTitle: 'No jobs recorded yet', emptyBody: 'Connect a tablet to a vehicle, then complete or cancel a job. It will appear here automatically.', noMatchTitle: 'No matching jobs', noMatchBody: 'Try a different search, date range, or filter.', manageFleet: 'Manage fleet', failed: 'Could not load reports.', loading: 'Loading reports…', retry: 'Retry GPS lookup', retrying: 'Looking up…', actions: 'Actions', deviceSamples: 'GPS', lastPoint: 'Last point', previous: 'Previous', next: 'Next', page: 'Page', of: 'of', showing: 'Showing', total: 'total', fleet: 'fleet', unknownLocation: 'No GPS point', stationary: 'Stationary', speedUnit: 'km/h',
   },
   th: {
-    eyebrowToday: 'วันนี้', title: 'รายงานการวิ่งงาน', subtitle: 'ตรวจสอบ กรอง พิมพ์ และค้นหาข้อมูล GPS ของงานรถที่บันทึก', search: 'ค้นหารายงาน', searchPlaceholder: 'รถ อุปกรณ์ พขร. กิจกรรม รหัสรายงาน GPS หรือสถานที่', dateRange: 'ช่วงวันที่', allDates: 'ทุกวัน', today: 'วันนี้', last7: '7 วันที่ผ่านมา', month: 'เดือนนี้', custom: 'กำหนดช่วงเอง', startDate: 'วันที่เริ่ม', endDate: 'วันที่สิ้นสุด', apply: 'ใช้ช่วงวันที่', cancel: 'ยกเลิก', previousMonth: 'เดือนก่อนหน้า', nextMonth: 'เดือนถัดไป', report: 'รหัสรายงาน', vehicle: 'เบอร์รถ', allVehicles: 'รถทั้งหมด', device: 'อุปกรณ์', allDevices: 'อุปกรณ์ทั้งหมด', driver: 'พขร.', allDrivers: 'พขร. ทั้งหมด', mode: 'กิจกรรม', allModes: 'กิจกรรมทั้งหมด', status: 'สถานะ', allStatuses: 'สถานะทั้งหมด', gps: 'GPS', allGps: 'สถานะ GPS ทั้งหมด', sort: 'เรียงตาม', sortHint: 'กด Shift พร้อมหัวตารางเพื่อเรียงได้สูงสุด 3 คอลัมน์', newest: 'ใหม่ไปเก่า', oldest: 'เก่าไปใหม่', clear: 'ล้างตัวกรอง', refresh: 'รีเฟรช', refreshing: 'กำลังรีเฟรช…', print: 'พิมพ์รายงาน', printVehicle: 'พิมพ์รายงานรถ', jobs: 'งานทั้งหมด', jobsSub: 'ในช่วงวันที่ที่เลือก', active: 'รถที่วิ่งงาน', activeSub: 'รถที่มีงานบันทึก', queued: 'รอค้นหา GPS', queuedSub: 'กำลังรอข้อมูล GPS', cancelled: 'งานที่ยกเลิก', cancelledSub: 'เก็บไว้ในประวัติการตรวจสอบ', activity: 'รายการงาน', date: 'วันที่', start: 'เวลาเริ่ม', end: 'เวลาจบ', duration: 'รวมเวลา', durationFormat: 'ชม:นาที:วินาที', topSpeed: 'ความเร็วสูงสุด', location: 'สถานที่ (GPS)', noJobs: 'ไม่พบงานตามตัวกรองนี้', emptyTitle: 'ยังไม่มีงานที่บันทึก', emptyBody: 'เชื่อมต่อแท็บเล็ตกับรถ แล้วจบหรือยกเลิกงาน รายการจะปรากฏที่นี่โดยอัตโนมัติ', noMatchTitle: 'ไม่พบงานที่ตรงกัน', noMatchBody: 'ลองเปลี่ยนคำค้นหา ช่วงวันที่ หรือตัวกรอง', manageFleet: 'จัดการรถ', failed: 'ไม่สามารถโหลดรายงานได้', loading: 'กำลังโหลดรายงาน…', retry: 'ค้นหา GPS อีกครั้ง', retrying: 'กำลังค้นหา…', actions: 'การดำเนินการ', deviceSamples: 'GPS', lastPoint: 'จุดล่าสุด', previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', showing: 'แสดง', total: 'ทั้งหมด', fleet: 'คันทั้งหมด', unknownLocation: 'ไม่มีพิกัด GPS', stationary: 'จอดนิ่ง', speedUnit: 'กม./ชม.',
+    eyebrowToday: 'วันนี้', title: 'รายงานการวิ่งงาน', subtitle: 'ตรวจสอบ กรอง พิมพ์ และค้นหาข้อมูล GPS ของงานรถที่บันทึก', search: 'ค้นหารายงาน', searchPlaceholder: 'รถ อุปกรณ์ พขร. กิจกรรม รหัสรายงาน GPS หรือสถานที่', dateRange: 'ช่วงวันที่รายการงาน', reportDate: 'วันที่รายงาน', allDates: 'ทุกวัน', today: 'วันนี้', last7: '7 วันที่ผ่านมา', month: 'เดือนนี้', custom: 'กำหนดช่วงเอง', startDate: 'วันที่เริ่ม', endDate: 'วันที่สิ้นสุด', apply: 'ใช้ช่วงวันที่', cancel: 'ยกเลิก', previousMonth: 'เดือนก่อนหน้า', nextMonth: 'เดือนถัดไป', report: 'รหัสรายงาน', vehicle: 'เบอร์รถ', allVehicles: 'รถทั้งหมด', device: 'อุปกรณ์', allDevices: 'อุปกรณ์ทั้งหมด', driver: 'พขร.', allDrivers: 'พขร. ทั้งหมด', mode: 'กิจกรรม', allModes: 'กิจกรรมทั้งหมด', status: 'สถานะ', allStatuses: 'สถานะทั้งหมด', gps: 'GPS', allGps: 'สถานะ GPS ทั้งหมด', sort: 'เรียงตาม', sortHint: 'กด Shift พร้อมหัวตารางเพื่อเรียงได้สูงสุด 3 คอลัมน์', newest: 'ใหม่ไปเก่า', oldest: 'เก่าไปใหม่', clear: 'ล้างตัวกรอง', refresh: 'รีเฟรช', refreshing: 'กำลังรีเฟรช…', print: 'พิมพ์รายงาน', printVehicle: 'พิมพ์รายงานรถ', jobs: 'งานทั้งหมด', jobsSub: 'ในช่วงวันที่ที่เลือก', active: 'รถที่วิ่งงาน', activeSub: 'รถที่มีงานบันทึก', queued: 'รอค้นหา GPS', queuedSub: 'กำลังรอข้อมูล GPS', cancelled: 'งานที่ยกเลิก', cancelledSub: 'เก็บไว้ในประวัติการตรวจสอบ', activity: 'รายการงาน', date: 'วันที่', start: 'เวลาเริ่ม', end: 'เวลาจบ', duration: 'รวมเวลา', durationFormat: 'ชม:นาที:วินาที', topSpeed: 'ความเร็วสูงสุด', location: 'สถานที่ (GPS)', noJobs: 'ไม่พบงานตามตัวกรองนี้', emptyTitle: 'ยังไม่มีงานที่บันทึก', emptyBody: 'เชื่อมต่อแท็บเล็ตกับรถ แล้วจบหรือยกเลิกงาน รายการจะปรากฏที่นี่โดยอัตโนมัติ', noMatchTitle: 'ไม่พบงานที่ตรงกัน', noMatchBody: 'ลองเปลี่ยนคำค้นหา ช่วงวันที่ หรือตัวกรอง', manageFleet: 'จัดการรถ', failed: 'ไม่สามารถโหลดรายงานได้', loading: 'กำลังโหลดรายงาน…', retry: 'ค้นหา GPS อีกครั้ง', retrying: 'กำลังค้นหา…', actions: 'การดำเนินการ', deviceSamples: 'GPS', lastPoint: 'จุดล่าสุด', previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', showing: 'แสดง', total: 'ทั้งหมด', fleet: 'คันทั้งหมด', unknownLocation: 'ไม่มีพิกัด GPS', stationary: 'จอดนิ่ง', speedUnit: 'กม./ชม.',
   },
 };
 
@@ -265,6 +266,7 @@ export default function FullReportDashboard({ lang }) {
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [printDate, setPrintDate] = useState(() => reportDateKey(new Date().toISOString()));
   const [vehicle, setVehicle] = useState('');
   const [device, setDevice] = useState('');
   const [driver, setDriver] = useState('');
@@ -280,6 +282,7 @@ export default function FullReportDashboard({ lang }) {
   const [selectedReport, setSelectedReport] = useState(null);
   const reportRequestSequence = useRef(0);
   const facetsLoaded = useRef(false);
+  const printDateInputRef = useRef(null);
   const deferredSearch = useDeferredValue(search);
   const sortKey = sorts[0]?.key || 'startTime';
   const sortDirection = sorts[0]?.direction || 'desc';
@@ -322,7 +325,7 @@ export default function FullReportDashboard({ lang }) {
       const data = await adminFetch('/api/admin/reports/retry', { method: 'POST', body: JSON.stringify({ reportId }) });
       setReports(items => items.map(item => item.id === reportId ? { ...item, ...data.report } : item));
       const source = data.gpsReconciliation?.deviceSource;
-      setRetryNotice(source?.message || (lang === 'en' ? 'GPS lookup completed.' : 'ค้นหาข้อมูล GPS แล้ว'));
+      setRetryNotice(displayGpsLookupMessage(source?.message, lang) || (lang === 'en' ? 'GPS lookup completed.' : 'ค้นหาข้อมูล GPS แล้ว'));
       await loadReports({ silent: true });
     } catch (errorValue) {
       setError(localizedDashboardReportError(errorValue instanceof Error ? errorValue.message : '', lang, t.failed));
@@ -356,13 +359,11 @@ export default function FullReportDashboard({ lang }) {
     setSearch(''); setStartDate(''); setEndDate(''); setVehicle(''); setDevice(''); setDriver(''); setMode(''); setStatus(''); setGps(''); setSorts([{ key: 'startTime', direction: 'desc' }]);
   }
   function printReports() {
-    const selected = visibleReports.find(report => !vehicle || report.vehicleNumber === vehicle) || visibleReports[0];
-    const portraitVehicle = vehicle || selected?.vehicleNumber || '';
-    const portraitDate = startDate && startDate === endDate
-      ? startDate
-      : reportDateKey(selected?.startTime);
-    if (!portraitVehicle || !portraitDate) return;
-    window.location.assign(`/print/portrait?vehicle=${encodeURIComponent(portraitVehicle)}&date=${encodeURIComponent(portraitDate)}&lang=${lang}`);
+    const selectedPrintDate = printDateInputRef.current?.value || printDate;
+    if (!selectedPrintDate) return;
+    const params = new URLSearchParams({ date: selectedPrintDate, lang });
+    if (vehicle) params.set('vehicle', vehicle);
+    window.location.assign(`/print/portrait?${params}`);
   }
   function printVehicle(report) {
     const params = new URLSearchParams({ vehicle: report.vehicleNumber || '', date: reportDateKey(report.startTime), lang });
@@ -389,8 +390,9 @@ export default function FullReportDashboard({ lang }) {
         <div><div className="eyebrow">{t.eyebrowToday} · {formatReportDate(reportDateKey(new Date().toISOString()), lang)}</div><h1>{t.title}</h1><p>{g.subtitle}</p></div>
         <div className="header-actions">
           <DateRangePicker lang={lang} t={t} startDate={startDate} endDate={endDate} onChange={(start, end) => { setStartDate(start); setEndDate(end); }} />
+          <label className="date-input report-date-input"><span>{t.reportDate}</span><input ref={printDateInputRef} type="date" value={printDate} onChange={event => setPrintDate(event.target.value)} /></label>
           <button className="secondary" type="button" onClick={() => void loadReports()} disabled={loading}>{loading ? t.refreshing : t.refresh}</button>
-          <button className="primary" type="button" onClick={printReports} disabled={!totalReports}>{t.print}</button>
+          <button className="primary" type="button" onClick={printReports} disabled={!printDate || (!totalReports && !hasAnyReportData)}>{t.print}</button>
         </div>
       </div>
 
@@ -401,7 +403,7 @@ export default function FullReportDashboard({ lang }) {
         <div><span>{g.needsAttention}</span><strong className="danger-text">{gpsNeedsAttention}</strong><small>{g.needsAttentionSub}</small></div>
       </div>
 
-      <TimelineDashboard lang={lang} embedded sourceReports={visibleReports} sourceLoading={loading} sourceError={error} />
+      <TimelineDashboard lang={lang} embedded />
 
       <section className="panel report-panel" aria-busy={loading || search !== deferredSearch}>
         <div className="section-heading report-section-heading"><div><h2>{t.activity}</h2><p className="sort-hint">{t.sortHint}</p></div><span className="result-count" aria-live="polite">{t.showing} {pageInfo.start}–{pageInfo.end} {t.of} {pageInfo.total}</span></div>

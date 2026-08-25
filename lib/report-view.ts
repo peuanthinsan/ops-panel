@@ -97,6 +97,17 @@ export function formatReportCoordinate(value: number | string | null | undefined
   return Number.isFinite(coordinate) ? coordinate.toFixed(5) : null;
 }
 
+export function displayGpsLookupMessage(value: string | null | undefined, language: 'en' | 'th' = 'en') {
+  const message = String(value || '').trim();
+  if (!message) return '';
+  if (/returned no gps records/i.test(message)) {
+    return language === 'th' ? 'ไม่พบข้อมูล GPS' : 'No GPS records were found.';
+  }
+  return message
+    .replace(/Data-FM\s+GPS/gi, 'GPS')
+    .replace(/Data-FM/gi, 'GPS provider');
+}
+
 export function reportSortValue(report: ReportView, key: string): string | number {
   if (key === 'startTime' || key === 'endTime') return dateValue(report[key as 'startTime' | 'endTime'])?.getTime() ?? 0;
   if (key === 'duration') {

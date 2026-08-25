@@ -202,7 +202,7 @@ function dataFmStatusMessage(code) {
     3: 'Data-FM rejected a history window longer than 24 hours.',
     4: 'Data-FM reported a system exception.',
     5: 'Data-FM rejected the integration login.',
-    6: 'Data-FM returned no GPS records.',
+    6: 'No GPS records were found.',
     7: 'Data-FM request limit was exceeded.',
   };
   return messages[code] || `Data-FM returned response code ${code ?? 'unknown'}.`;
@@ -307,7 +307,7 @@ export async function fetchDataFmGpsHistory({
     return {
       status: 'received',
       payload: { positions },
-      message: `Data-FM returned ${positions.length} normalized GPS record${positions.length === 1 ? '' : 's'}.`,
+      message: `${positions.length} GPS record${positions.length === 1 ? '' : 's'} found.`,
     };
   } catch (error) {
     return {

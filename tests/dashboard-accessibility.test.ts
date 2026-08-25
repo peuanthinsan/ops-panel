@@ -38,7 +38,8 @@ test('reports expose labeled filters and sort direction to assistive technology'
   assert.match(source, /className="table-wrap" tabIndex=\{0\}/);
   assert.match(source, /localizedDashboardReportError/);
   assert.match(source, /print: 'Print report'/);
-  assert.match(source, /window\.location\.assign\(`\/print\/portrait\?vehicle=/);
+  assert.match(source, /new URLSearchParams\(\{ date: selectedPrintDate, lang \}\)/);
+  assert.match(source, /className="date-input report-date-input"/);
   assert.doesNotMatch(source, /window\.location\.assign\(`\/print\/landscape/);
 });
 
@@ -47,13 +48,31 @@ test('reports combine the timeline and saved jobs before opening the one-page ve
   const shell = await readFile(fileURLToPath(new NodeUrl('../web/app/page.jsx', import.meta.url)), 'utf8');
   const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
   const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
-  assert.match(dashboard, /<TimelineDashboard lang=\{lang\} embedded sourceReports=\{visibleReports\}/);
+  assert.match(dashboard, /<TimelineDashboard lang=\{lang\} embedded \/>/);
+  assert.doesNotMatch(dashboard, /embedded sourceReports=\{visibleReports\}/);
   assert.match(timeline, /embedded = false, sourceReports = null/);
   assert.match(timeline, /embedded \? null : <button className="primary"/);
   assert.doesNotMatch(shell, /\{ href: '\/timeline', key: 'timeline' \}/);
   assert.match(print, /className="report-section"/);
   assert.match(print, /className="simple-job-table"/);
   assert.match(print, /className="signature-footer"/);
+});
+
+test('daily report is landscape, date-selectable, speed-enabled, and uses the official logo pin', async () => {
+  const dashboard = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
+  const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
+  const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
+  const printStyles = await readFile(fileURLToPath(new NodeUrl('../web/app/print/portrait/portrait-print.css', import.meta.url)), 'utf8');
+  assert.match(dashboard, /dateRange: 'Job list range'/);
+  assert.match(dashboard, /reportDate: 'Report date'/);
+  assert.match(timeline, /adminFetchAllReports\(\{ startDate: targetDate, endDate: targetDate \}\)/);
+  assert.match(timeline, /<SpeedTimelineOverlay/);
+  assert.match(print, /onDateChange=\{changeReportDate\}/);
+  assert.match(print, /'View date'/);
+  assert.match(print, /src="\/songdee-gps-pin\.svg"/);
+  assert.match(print, /startMinute=\{6 \* 60\} endMinute=\{24 \* 60\}/);
+  assert.match(printStyles, /@page\{size:A4 landscape;margin:0\}/);
+  assert.match(printStyles, /width:297mm;height:210mm/);
 });
 
 test('job GPS detail is an accessible, cancellable GPS modal', async () => {
@@ -104,7 +123,7 @@ test('empty dashboard states guide an administrator to fleet setup without offer
   const reports = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
   const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
   const fleet = await readFile(fileURLToPath(new NodeUrl('../web/app/fleet-dashboard.jsx', import.meta.url)), 'utf8');
-  assert.match(reports, /disabled=\{!totalReports\}/);
+  assert.match(reports, /disabled=\{!printDate \|\| \(!totalReports && !hasAnyReportData\)\}/);
   assert.match(reports, /href="\/admin"/);
   assert.match(reports, /emptyTitle: 'No jobs recorded yet'/);
   assert.match(reports, /Math\.max\(fleetSize, activeVehicles\)/);

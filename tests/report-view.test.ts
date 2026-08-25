@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { compareReports, formatReportCoordinate, formatReportDateTime, formatReportDuration, reportDateKey, searchableReportText } from '../lib/report-view.ts';
+import { compareReports, displayGpsLookupMessage, formatReportCoordinate, formatReportDateTime, formatReportDuration, reportDateKey, searchableReportText } from '../lib/report-view.ts';
+
+test('GPS lookup messages do not expose the provider name in the frontend', () => {
+  assert.equal(displayGpsLookupMessage('Data-FM returned no GPS records.', 'en'), 'No GPS records were found.');
+  assert.equal(displayGpsLookupMessage('Data-FM GPS point matched.', 'en'), 'GPS point matched.');
+  assert.equal(displayGpsLookupMessage('Data-FM returned no GPS records.', 'th'), 'ไม่พบข้อมูล GPS');
+});
 
 test('report dates are grouped by the Thailand operating day, not UTC', () => {
   assert.equal(reportDateKey('2026-08-17T18:30:00.000Z'), '2026-08-18');
