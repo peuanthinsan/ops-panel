@@ -41,3 +41,13 @@ test('vehicle filters and facets treat casing variants as one fleet vehicle', ()
   assert.equal(result.summary.total, 2);
   assert.equal(result.summary.activeVehicles, 1);
 });
+
+test('local dashboard query accepts repeated multi-select filters', () => {
+  const params = new URLSearchParams({ startDate: '2026-08-18' });
+  params.append('vehicle', '2');
+  params.append('vehicle', '10');
+  params.append('mode', 'Load');
+  params.append('mode', 'Unload');
+  const result = queryLocalReports(reports, [], params);
+  assert.deepEqual(result.reports.map(report => report.id), ['R2', 'R1']);
+});

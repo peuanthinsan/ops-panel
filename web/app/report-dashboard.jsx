@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -52,10 +52,10 @@ const gpsUiText = {
 };
 const text = {
   en: {
-    eyebrowToday: 'TODAY', title: 'Operations reports', subtitle: 'Review, filter, print, and retry every saved vehicle job.', search: 'Search reports', searchPlaceholder: 'Vehicle, device, driver, mode, report ID, GPS, or location', dateRange: 'Date range', allDates: 'All dates', today: 'Today', last7: 'Last 7 days', month: 'This month', apply: 'Apply', cancel: 'Cancel', previousMonth: 'Previous month', nextMonth: 'Next month', report: 'Report ID', vehicle: 'Vehicle', allVehicles: 'All vehicles', device: 'Device', allDevices: 'All devices', driver: 'Driver', allDrivers: 'All drivers', mode: 'Activity', allModes: 'All activities', status: 'Status', allStatuses: 'All statuses', gps: 'GPS', allGps: 'All GPS states', sort: 'Sort by', sortHint: 'Shift-click headers to sort by up to three columns.', newest: 'Newest first', oldest: 'Oldest first', clear: 'Clear', refresh: 'Refresh', refreshing: 'Refreshing…', print: 'Print daily report', printVehicle: 'Print vehicle report', jobs: 'Total jobs', jobsSub: 'in the selected range', active: 'Vehicles operating', activeSub: 'vehicles with saved work', queued: 'GPS lookup pending', queuedSub: 'waiting for GPS data', cancelled: 'Cancelled jobs', cancelledSub: 'kept in the audit record', activity: 'Job list', date: 'Date', start: 'Start time', end: 'End time', duration: 'Total time', durationFormat: 'HH:MM:SS', topSpeed: 'Top speed', location: 'Location (GPS)', noJobs: 'No jobs match the current filters.', emptyTitle: 'No jobs recorded yet', emptyBody: 'Connect a tablet to a vehicle, then complete or cancel a job. It will appear here automatically.', noMatchTitle: 'No matching jobs', noMatchBody: 'Try a different date range, search, or filter.', manageFleet: 'Manage fleet', failed: 'Could not load reports.', loading: 'Loading reports…', retry: 'Retry GPS lookup', retrying: 'Looking up…', actions: 'Actions', deviceSamples: 'GPS', lastPoint: 'Last point', previous: 'Previous', next: 'Next', page: 'Page', of: 'of', showing: 'Showing', total: 'total', fleet: 'fleet', unknownLocation: 'No GPS point', stationary: 'Stationary', speedUnit: 'km/h',
+    eyebrowToday: 'TODAY', title: 'Operations reports', subtitle: 'Review, filter, print, and retry every saved vehicle job.', filtersTitle: 'Shared report filters', sharedFiltersHint: 'Search, multi-select filters, and column sorting apply to both the timeline and Job List.', search: 'Search reports', searchPlaceholder: 'Vehicle, device, driver, activity, report ID, GPS, speed, or location', dateRange: 'Date range', allDates: 'All dates', today: 'Today', last7: 'Last 7 days', month: 'This month', apply: 'Apply', cancel: 'Cancel', previousMonth: 'Previous month', nextMonth: 'Next month', report: 'Report ID', vehicle: 'Vehicle', allVehicles: 'All vehicles', device: 'Device', allDevices: 'All devices', driver: 'Driver', allDrivers: 'All drivers', mode: 'Activity', allModes: 'All activities', status: 'Status', allStatuses: 'All statuses', gps: 'GPS', allGps: 'All GPS states', sortHint: 'Click a column header to sort. Shift-click to sort by up to three columns.', clear: 'Clear', refresh: 'Refresh', refreshing: 'Refreshing…', print: 'Print daily report', printVehicle: 'Print vehicle report', jobs: 'Total jobs', jobsSub: 'in the selected range', active: 'Vehicles operating', activeSub: 'vehicles with saved work', queued: 'GPS lookup pending', queuedSub: 'waiting for GPS data', cancelled: 'Cancelled jobs', cancelledSub: 'kept in the audit record', activity: 'Job list', date: 'Date', start: 'Start time', end: 'End time', duration: 'Total time', durationFormat: 'HH:MM:SS', topSpeed: 'Top speed', location: 'Location (GPS)', noJobs: 'No jobs match the current filters.', emptyTitle: 'No jobs recorded yet', emptyBody: 'Connect a tablet to a vehicle, then complete or cancel a job. It will appear here automatically.', noMatchTitle: 'No matching jobs', noMatchBody: 'Try a different date range, search, or filter.', manageFleet: 'Manage fleet', failed: 'Could not load reports.', loading: 'Loading reports…', retry: 'Retry GPS lookup', retrying: 'Looking up…', actions: 'Actions', deviceSamples: 'GPS', lastPoint: 'Last point', previous: 'Previous', next: 'Next', page: 'Page', of: 'of', showing: 'Showing', total: 'total', fleet: 'fleet', unknownLocation: 'No GPS point', stationary: 'Stationary', speedUnit: 'km/h',
   },
   th: {
-    eyebrowToday: 'วันนี้', title: 'รายงานการวิ่งงาน', subtitle: 'ตรวจสอบ กรอง พิมพ์ และค้นหาข้อมูล GPS ของงานรถที่บันทึก', search: 'ค้นหารายงาน', searchPlaceholder: 'รถ อุปกรณ์ พขร. กิจกรรม รหัสรายงาน GPS หรือสถานที่', dateRange: 'ช่วงวันที่', allDates: 'ทุกวัน', today: 'วันนี้', last7: '7 วันที่ผ่านมา', month: 'เดือนนี้', apply: 'ใช้ช่วงวันที่', cancel: 'ยกเลิก', previousMonth: 'เดือนก่อนหน้า', nextMonth: 'เดือนถัดไป', report: 'รหัสรายงาน', vehicle: 'เบอร์รถ', allVehicles: 'รถทั้งหมด', device: 'อุปกรณ์', allDevices: 'อุปกรณ์ทั้งหมด', driver: 'พขร.', allDrivers: 'พขร. ทั้งหมด', mode: 'กิจกรรม', allModes: 'กิจกรรมทั้งหมด', status: 'สถานะ', allStatuses: 'สถานะทั้งหมด', gps: 'GPS', allGps: 'สถานะ GPS ทั้งหมด', sort: 'เรียงตาม', sortHint: 'กด Shift พร้อมหัวตารางเพื่อเรียงได้สูงสุด 3 คอลัมน์', newest: 'ใหม่ไปเก่า', oldest: 'เก่าไปใหม่', clear: 'ล้างตัวกรอง', refresh: 'รีเฟรช', refreshing: 'กำลังรีเฟรช…', print: 'พิมพ์รายงานประจำวัน', printVehicle: 'พิมพ์รายงานรถ', jobs: 'งานทั้งหมด', jobsSub: 'ในช่วงวันที่ที่เลือก', active: 'รถที่วิ่งงาน', activeSub: 'รถที่มีงานบันทึก', queued: 'รอค้นหา GPS', queuedSub: 'กำลังรอข้อมูล GPS', cancelled: 'งานที่ยกเลิก', cancelledSub: 'เก็บไว้ในประวัติการตรวจสอบ', activity: 'รายการงาน', date: 'วันที่', start: 'เวลาเริ่ม', end: 'เวลาจบ', duration: 'รวมเวลา', durationFormat: 'ชม:นาที:วินาที', topSpeed: 'ความเร็วสูงสุด', location: 'สถานที่ (GPS)', noJobs: 'ไม่พบงานตามตัวกรองนี้', emptyTitle: 'ยังไม่มีงานที่บันทึก', emptyBody: 'เชื่อมต่อแท็บเล็ตกับรถ แล้วจบหรือยกเลิกงาน รายการจะปรากฏที่นี่โดยอัตโนมัติ', noMatchTitle: 'ไม่พบงานที่ตรงกัน', noMatchBody: 'ลองเปลี่ยนช่วงวันที่ คำค้นหา หรือตัวกรอง', manageFleet: 'จัดการรถ', failed: 'ไม่สามารถโหลดรายงานได้', loading: 'กำลังโหลดรายงาน…', retry: 'ค้นหา GPS อีกครั้ง', retrying: 'กำลังค้นหา…', actions: 'การดำเนินการ', deviceSamples: 'GPS', lastPoint: 'จุดล่าสุด', previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', showing: 'แสดง', total: 'ทั้งหมด', fleet: 'คันทั้งหมด', unknownLocation: 'ไม่มีพิกัด GPS', stationary: 'จอดนิ่ง', speedUnit: 'กม./ชม.',
+    eyebrowToday: 'วันนี้', title: 'รายงานการวิ่งงาน', subtitle: 'ตรวจสอบ กรอง พิมพ์ และค้นหาข้อมูล GPS ของงานรถที่บันทึก', filtersTitle: 'ตัวกรองรายงานร่วม', sharedFiltersHint: 'การค้นหา ตัวกรองแบบหลายค่า และการเรียงตามคอลัมน์ใช้กับทั้งไทม์ไลน์และรายการงาน', search: 'ค้นหารายงาน', searchPlaceholder: 'รถ อุปกรณ์ พขร. กิจกรรม รหัสรายงาน GPS ความเร็ว หรือสถานที่', dateRange: 'ช่วงวันที่', allDates: 'ทุกวัน', today: 'วันนี้', last7: '7 วันที่ผ่านมา', month: 'เดือนนี้', apply: 'ใช้ช่วงวันที่', cancel: 'ยกเลิก', previousMonth: 'เดือนก่อนหน้า', nextMonth: 'เดือนถัดไป', report: 'รหัสรายงาน', vehicle: 'เบอร์รถ', allVehicles: 'รถทั้งหมด', device: 'อุปกรณ์', allDevices: 'อุปกรณ์ทั้งหมด', driver: 'พขร.', allDrivers: 'พขร. ทั้งหมด', mode: 'กิจกรรม', allModes: 'กิจกรรมทั้งหมด', status: 'สถานะ', allStatuses: 'สถานะทั้งหมด', gps: 'GPS', allGps: 'สถานะ GPS ทั้งหมด', sortHint: 'คลิกหัวคอลัมน์เพื่อเรียง หรือกด Shift พร้อมคลิกเพื่อเรียงได้สูงสุด 3 คอลัมน์', clear: 'ล้างตัวกรอง', refresh: 'รีเฟรช', refreshing: 'กำลังรีเฟรช…', print: 'พิมพ์รายงานประจำวัน', printVehicle: 'พิมพ์รายงานรถ', jobs: 'งานทั้งหมด', jobsSub: 'ในช่วงวันที่ที่เลือก', active: 'รถที่วิ่งงาน', activeSub: 'รถที่มีงานบันทึก', queued: 'รอค้นหา GPS', queuedSub: 'กำลังรอข้อมูล GPS', cancelled: 'งานที่ยกเลิก', cancelledSub: 'เก็บไว้ในประวัติการตรวจสอบ', activity: 'รายการงาน', date: 'วันที่', start: 'เวลาเริ่ม', end: 'เวลาจบ', duration: 'รวมเวลา', durationFormat: 'ชม:นาที:วินาที', topSpeed: 'ความเร็วสูงสุด', location: 'สถานที่ (GPS)', noJobs: 'ไม่พบงานตามตัวกรองนี้', emptyTitle: 'ยังไม่มีงานที่บันทึก', emptyBody: 'เชื่อมต่อแท็บเล็ตกับรถ แล้วจบหรือยกเลิกงาน รายการจะปรากฏที่นี่โดยอัตโนมัติ', noMatchTitle: 'ไม่พบงานที่ตรงกัน', noMatchBody: 'ลองเปลี่ยนช่วงวันที่ คำค้นหา หรือตัวกรอง', manageFleet: 'จัดการรถ', failed: 'ไม่สามารถโหลดรายงานได้', loading: 'กำลังโหลดรายงาน…', retry: 'ค้นหา GPS อีกครั้ง', retrying: 'กำลังค้นหา…', actions: 'การดำเนินการ', deviceSamples: 'GPS', lastPoint: 'จุดล่าสุด', previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', showing: 'แสดง', total: 'ทั้งหมด', fleet: 'คันทั้งหมด', unknownLocation: 'ไม่มีพิกัด GPS', stationary: 'จอดนิ่ง', speedUnit: 'กม./ชม.',
   },
 };
 
@@ -225,12 +225,12 @@ export default function FullReportDashboard({ lang }) {
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState(() => reportDateKey(new Date().toISOString()));
   const [endDate, setEndDate] = useState(() => reportDateKey(new Date().toISOString()));
-  const [vehicle, setVehicle] = useState('');
-  const [device, setDevice] = useState('');
-  const [driver, setDriver] = useState('');
-  const [mode, setMode] = useState('');
-  const [status, setStatus] = useState('');
-  const [gps, setGps] = useState('');
+  const [vehicles, setVehicles] = useState([]);
+  const [devices, setDevices] = useState([]);
+  const [drivers, setDrivers] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [gpsStates, setGpsStates] = useState([]);
   const [sorts, setSorts] = useState([{ key: 'startTime', direction: 'desc' }]);
   const [loading, setLoading] = useState(true);
   const [retryingId, setRetryingId] = useState('');
@@ -243,6 +243,18 @@ export default function FullReportDashboard({ lang }) {
   const deferredSearch = useDeferredValue(search);
   const sortKey = sorts[0]?.key || 'startTime';
   const sortDirection = sorts[0]?.direction || 'desc';
+  const sharedFilters = useMemo(() => ({
+    search: deferredSearch,
+    startDate,
+    endDate,
+    vehicle: vehicles,
+    device: devices,
+    driver: drivers,
+    mode: activities,
+    status: statuses,
+    gps: gpsStates,
+    sort: sorts.map(sort => `${sort.key}:${sort.direction}`).join(','),
+  }), [activities, deferredSearch, devices, drivers, endDate, gpsStates, sorts, startDate, statuses, vehicles]);
 
   const loadReports = useCallback(async ({ silent = false } = {}) => {
     const requestId = ++reportRequestSequence.current;
@@ -250,9 +262,10 @@ export default function FullReportDashboard({ lang }) {
     setError('');
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: String(reportPageSize) });
-      const filterValues = { search: deferredSearch, startDate, endDate, vehicle, device, driver, mode, status, gps };
-      for (const [key, value] of Object.entries(filterValues)) if (String(value || '').trim()) params.set(key, String(value).trim());
-      params.set('sort', sorts.map(sort => `${sort.key}:${sort.direction}`).join(','));
+      for (const [key, value] of Object.entries(sharedFilters)) {
+        const values = Array.isArray(value) ? value : [value];
+        for (const item of values) if (String(item || '').trim()) params.append(key, String(item).trim());
+      }
       const [data, facetData] = await Promise.all([
         adminFetch(`/api/reports?${params}`),
         facetsLoaded.current ? Promise.resolve(null) : adminFetch('/api/admin/reports/facets'),
@@ -271,7 +284,7 @@ export default function FullReportDashboard({ lang }) {
     } finally {
       if (requestId === reportRequestSequence.current && !silent) setLoading(false);
     }
-  }, [deferredSearch, startDate, endDate, vehicle, device, driver, mode, status, gps, sorts, page, lang, t.failed]);
+  }, [sharedFilters, page, lang, t.failed]);
 
   async function retryReport(reportId) {
     if (retryingId) return;
@@ -296,7 +309,7 @@ export default function FullReportDashboard({ lang }) {
     document.addEventListener('visibilitychange', refreshVisibleReports);
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refreshVisibleReports); };
   }, [loadReports]);
-  useEffect(() => { setPage(1); }, [deferredSearch, startDate, endDate, vehicle, device, driver, mode, status, gps, sorts]);
+  useEffect(() => { setPage(1); }, [sharedFilters]);
   const visibleReports = reports;
   const renderedReports = reports;
 
@@ -313,12 +326,12 @@ export default function FullReportDashboard({ lang }) {
     });
   }
   function clearFilters() {
-    setSearch(''); setVehicle(''); setDevice(''); setDriver(''); setMode(''); setStatus(''); setGps(''); setSorts([{ key: 'startTime', direction: 'desc' }]);
+    setSearch(''); setVehicles([]); setDevices([]); setDrivers([]); setActivities([]); setStatuses([]); setGpsStates([]); setSorts([{ key: 'startTime', direction: 'desc' }]);
   }
   function printReports() {
     if (!selectedPrintDate) return;
     const params = new URLSearchParams({ date: selectedPrintDate, lang });
-    if (vehicle) params.set('vehicle', vehicle);
+    if (vehicles.length === 1) params.set('vehicle', vehicles[0]);
     window.location.assign(`/print/portrait?${params}`);
   }
   function printVehicle(report) {
@@ -326,7 +339,7 @@ export default function FullReportDashboard({ lang }) {
     window.location.assign(`/print/portrait?${params}`);
   }
 
-  const hasFilters = Boolean(search || vehicle || device || driver || mode || status || gps || sorts.length > 1 || sortKey !== 'startTime' || sortDirection !== 'desc');
+  const hasFilters = Boolean(search || vehicles.length || devices.length || drivers.length || activities.length || statuses.length || gpsStates.length || sorts.length > 1 || sortKey !== 'startTime' || sortDirection !== 'desc');
   const activeVehicles = Number(summary.activeVehicles || 0);
   const gpsMatchedJobs = Number(summary.gpsMatched || 0);
   const gpsNeedsAttention = Number(summary.gpsNeedsAttention || 0);
@@ -336,9 +349,6 @@ export default function FullReportDashboard({ lang }) {
   const selectedPrintDate = endDate || startDate || reportDateKey(reports[0]?.startTime) || reportDateKey(new Date().toISOString());
   const columns = [
     ['vehicleNumber', t.vehicle], ['driverName', t.driver], ['mode', t.mode], ['startTime', t.date], ['startClock', t.start], ['endTime', t.end], ['duration', t.duration], ['topSpeed', t.topSpeed], ['gpsCoverage', g.gpsCoverage], ['gpsState', g.lastPosition], ['status', t.status],
-  ];
-  const sortOptions = [
-    ['startTime:desc', t.newest], ['startTime:asc', t.oldest], ['startClock:asc', `${t.start} ↑`], ['startClock:desc', `${t.start} ↓`], ['vehicleNumber:asc', `${t.vehicle} A–Z`], ['driverName:asc', `${t.driver} A–Z`], ['mode:asc', `${t.mode} A–Z`], ['endTime:desc', `${t.end} ↓`], ['duration:desc', `${t.duration} ↓`], ['topSpeed:desc', `${t.topSpeed} ↓`], ['status:asc', `${t.status} A–Z`], ['gpsState:asc', `${t.gps} A–Z`],
   ];
 
   return (
@@ -359,23 +369,23 @@ export default function FullReportDashboard({ lang }) {
         <div><span>{g.needsAttention}</span><strong className="danger-text">{gpsNeedsAttention}</strong><small>{g.needsAttentionSub}</small></div>
       </div>
 
-      <TimelineDashboard lang={lang} embedded selectedStartDate={startDate} selectedEndDate={endDate} />
+      <section className="panel shared-report-filters" aria-label={lang === 'en' ? 'Shared timeline and Job List filters' : 'ตัวกรองร่วมของไทม์ไลน์และรายการงาน'}>
+        <div className="section-heading shared-filter-heading"><div><h2>{t.filtersTitle}</h2><p>{t.sharedFiltersHint}</p></div><button className="secondary" type="button" onClick={clearFilters} disabled={!hasFilters}>{t.clear}</button></div>
+        <label className="search-field"><span className="sr-only">{t.search}</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder={t.searchPlaceholder} /></label>
+        <div className="filter-grid shared-filter-grid">
+          <SearchableCombobox multiple label={t.vehicle} value={vehicles} onChange={setVehicles} options={options.vehicles} allLabel={t.allVehicles} lang={lang} />
+          <SearchableCombobox multiple label={t.device} value={devices} onChange={setDevices} options={options.devices} allLabel={t.allDevices} lang={lang} />
+          <SearchableCombobox multiple label={t.driver} value={drivers} onChange={setDrivers} options={options.drivers} allLabel={t.allDrivers} lang={lang} />
+          <SearchableCombobox multiple label={t.mode} value={activities} onChange={setActivities} options={modes} allLabel={t.allModes} lang={lang} getOptionLabel={value => displayMode(value, lang)} />
+          <SearchableCombobox multiple label={t.status} value={statuses} onChange={setStatuses} options={options.statuses} allLabel={t.allStatuses} lang={lang} getOptionLabel={value => displayStatus(value, lang)} />
+          <SearchableCombobox multiple label={t.gps} value={gpsStates} onChange={setGpsStates} options={options.gpsStates} allLabel={t.allGps} lang={lang} getOptionLabel={value => displayGps(value, lang)} />
+        </div>
+      </section>
+
+      <TimelineDashboard lang={lang} embedded sharedFilters={sharedFilters} />
 
       <section className="panel report-panel" aria-busy={loading || search !== deferredSearch}>
         <div className="section-heading report-section-heading"><div><h2>{t.activity}</h2><p className="sort-hint">{t.sortHint}</p></div><span className="result-count" aria-live="polite">{t.showing} {pageInfo.start}–{pageInfo.end} {t.of} {pageInfo.total}</span></div>
-        <section className="filter-panel" aria-label={lang === 'en' ? 'Report filters' : 'ตัวกรองรายงาน'}>
-          <label className="search-field"><span className="sr-only">{t.search}</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder={t.searchPlaceholder} /></label>
-          <div className="filter-grid">
-            <SearchableCombobox label={t.vehicle} value={vehicle} onChange={setVehicle} options={options.vehicles} allLabel={t.allVehicles} lang={lang} />
-            <SearchableCombobox label={t.device} value={device} onChange={setDevice} options={options.devices} allLabel={t.allDevices} lang={lang} />
-            <SearchableCombobox label={t.driver} value={driver} onChange={setDriver} options={options.drivers} allLabel={t.allDrivers} lang={lang} />
-            <SearchableCombobox label={t.mode} value={mode} onChange={setMode} options={modes} allLabel={t.allModes} lang={lang} getOptionLabel={value => displayMode(value, lang)} />
-            <SearchableCombobox label={t.status} value={status} onChange={setStatus} options={options.statuses} allLabel={t.allStatuses} lang={lang} getOptionLabel={value => displayStatus(value, lang)} />
-            <SearchableCombobox label={t.gps} value={gps} onChange={setGps} options={options.gpsStates} allLabel={t.allGps} lang={lang} getOptionLabel={value => displayGps(value, lang)} />
-            <SearchableCombobox label={t.sort} value={`${sortKey}:${sortDirection}`} onChange={value => { const [key, direction] = value.split(':'); if (key && direction) setSorts([{ key, direction }]); }} options={sortOptions.map(([optionValue, optionLabel]) => ({ value: optionValue, label: optionLabel }))} allLabel={t.newest} lang={lang} />
-            <button className="secondary clear-filters" type="button" onClick={clearFilters} disabled={!hasFilters}>{t.clear}</button>
-          </div>
-        </section>
         {error ? <p className="error" role="alert">{error}</p> : null}
         {retryNotice ? <div className="inline-message success" role="status">{retryNotice}</div> : null}
         {loading && !reports.length ? <p className="loading-message" role="status">{t.loading}</p> : null}
@@ -384,7 +394,6 @@ export default function FullReportDashboard({ lang }) {
             <caption className="sr-only">{t.activity}</caption>
             <colgroup><col className="col-vehicle" /><col className="col-driver" /><col className="col-mode" /><col className="col-date" /><col className="col-time" /><col className="col-time" /><col className="col-duration" /><col className="col-speed" /><col className="col-coverage" /><col className="col-location" /><col className="col-status" /><col className="col-actions" /></colgroup>
             <thead><tr>{columns.map(([key, label]) => {
-              if (key === 'gpsCoverage') return <th key={key} scope="col">{label}</th>;
               const sortIndex = sorts.findIndex(sort => sort.key === key);
               const columnSort = sortIndex >= 0 ? sorts[sortIndex] : null;
               return <th key={key} scope="col" aria-sort={sortKey === key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}><button className={`table-sort ${key === 'duration' ? 'table-sort-duration' : ''}`} type="button" title={t.sortHint} onClick={event => changeSort(key, event)}><span>{label}{columnSort ? ` ${columnSort.direction === 'asc' ? '↑' : '↓'}${sorts.length > 1 ? sortIndex + 1 : ''}` : ''}</span>{key === 'duration' ? <small>{t.durationFormat}</small> : null}</button></th>;

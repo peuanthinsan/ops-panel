@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { formatReportDate, formatReportDuration, reportDateKey } from '../lib/report-view';
 import { reportableOperations } from '../lib/actions';
+import { reportMatchesFilters } from '../lib/report-filter';
 import { paginateReports } from '../lib/report-pagination';
 import { reportModeColor } from '../lib/report-mode-meta';
 import { localizedDashboardReportError } from '../lib/dashboard-errors';
@@ -15,6 +16,7 @@ import { useReportSpeedSeries } from './report-speed-series';
 import SpeedTimelineOverlay from './speed-timeline';
 
 const pageSize = 20;
+const emptySharedFilters = Object.freeze({});
 const timelineModes = reportableOperations.map(action => action[2]);
 const modeCopy = Object.fromEntries(reportableOperations.map(action => [action[2], { en: action[2], th: action[1] }]));
 const text = {
@@ -70,7 +72,7 @@ function timelineSegment(report, lang, labels) {
   };
 }
 
-export default function TimelineDashboard({ lang, embedded = false, sourceReports = null, sourceLoading = false, sourceError = '', selectedStartDate = '', selectedEndDate = '' }) {
+export default function TimelineDashboard({ lang, embedded = false, sourceReports = null, sourceLoading = false, sourceError = '', sharedFilters = null }) {
   const t = text[lang];
   const [reports, setReports] = useState([]);
   const [date, setDate] = useState('');
@@ -85,8 +87,9 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
   const timelineRequestSequence = useRef(0);
   const initializedDate = useRef(false);
   const usesSourceReports = Array.isArray(sourceReports);
-  const effectiveStartDate = embedded ? selectedStartDate : date;
-  const effectiveEndDate = embedded ? selectedEndDate : date;
+  const sharedQuery = embedded ? sharedFilters || emptySharedFilters : emptySharedFilters;
+  const effectiveStartDate = embedded ? String(sharedQuery.startDate || '') : date;
+  const effectiveEndDate = embedded ? String(sharedQuery.endDate || '') : date;
   const showRowDate = !effectiveStartDate || effectiveStartDate !== effectiveEndDate;
   const timelineReports = usesSourceReports ? sourceReports : reports;
   const timelineLoading = usesSourceReports ? sourceLoading : loading;
@@ -105,7 +108,8 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
         targetStartDate = reportDateKey(latest.reports?.[0]?.startTime) || reportDateKey(new Date().toISOString());
         targetEndDate = targetStartDate;
       }
-      const nextReports = await adminFetchAllReports({ startDate: targetStartDate, endDate: targetEndDate });
+      const requestFilters = embedded ? sharedQuery : { startDate: targetStartDate, endDate: targetEndDate };
+      const nextReports = await adminFetchAllReports(requestFilters);
       if (requestId !== timelineRequestSequence.current) return;
       setReports(nextReports);
       if (!initializedDate.current && !embedded) {
@@ -118,7 +122,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
     } finally {
       if (requestId === timelineRequestSequence.current && !silent) setLoading(false);
     }
-  }, [effectiveEndDate, effectiveStartDate, embedded, lang, t.failed, usesSourceReports]);
+  }, [effectiveEndDate, effectiveStartDate, embedded, lang, sharedQuery, t.failed, usesSourceReports]);
 
   useEffect(() => {
     if (usesSourceReports) return undefined;
@@ -138,25 +142,26 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
   }, [date, embedded, sourceReports, usesSourceReports]);
 
   const rows = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = embedded ? '' : search.trim().toLowerCase();
     const grouped = new Map();
     const activeFilters = { showCompleted, showCancelled, selectedModes };
-    for (const report of timelineReports) {
+    for (let reportIndex = 0; reportIndex < timelineReports.length; reportIndex += 1) {
+      const report = timelineReports[reportIndex];
       const day = reportDateKey(report.startTime);
       if (effectiveStartDate && day < effectiveStartDate) continue;
       if (effectiveEndDate && day > effectiveEndDate) continue;
-      if (!timelineReportMatchesFilters(report, activeFilters)) continue;
+      if (embedded ? !reportMatchesFilters(report, sharedQuery, lang) : !timelineReportMatchesFilters(report, activeFilters)) continue;
       const searchable = `${report.vehicleNumber || ''} ${report.driverName || ''} ${report.driverId || ''}`.toLowerCase();
       if (query && !searchable.includes(query)) continue;
       const key = `${day}\u0000${report.vehicleNumber || '—'}\u0000${report.driverName || '—'}`;
-      if (!grouped.has(key)) grouped.set(key, { date: day, vehicle: report.vehicleNumber || '—', driver: report.driverName || '—', reports: [] });
+      if (!grouped.has(key)) grouped.set(key, { date: day, vehicle: report.vehicleNumber || '—', driver: report.driverName || '—', order: reportIndex, reports: [] });
       grouped.get(key).reports.push(report);
     }
     return [...grouped.values()].map(row => ({
       ...row,
       segments: row.reports.map(report => timelineSegment(report, lang, t)).filter(Boolean),
-    })).filter(row => row.segments.length).sort((left, right) => right.date.localeCompare(left.date) || left.vehicle.localeCompare(right.vehicle, undefined, { numeric: true }));
-  }, [timelineReports, effectiveStartDate, effectiveEndDate, search, showCompleted, showCancelled, selectedModes, lang, t]);
+    })).filter(row => row.segments.length).sort((left, right) => left.order - right.order);
+  }, [timelineReports, effectiveStartDate, effectiveEndDate, embedded, search, sharedQuery, showCompleted, showCancelled, selectedModes, lang, t]);
   const timelinePage = useMemo(() => paginateReports(rows, page, pageSize), [rows, page]);
   const speedReports = useMemo(() => timelinePage.items.flatMap(row => row.reports), [timelinePage.items]);
   const speedSeries = useReportSpeedSeries(speedReports);
@@ -170,7 +175,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
         : showCompleted && !showCancelled
           ? t.emptyCompleted
           : t.empty;
-  useEffect(() => { setPage(1); setTooltip(null); }, [effectiveStartDate, effectiveEndDate, search, showCompleted, showCancelled, selectedModes]);
+  useEffect(() => { setPage(1); setTooltip(null); }, [effectiveStartDate, effectiveEndDate, embedded, search, sharedQuery, showCompleted, showCancelled, selectedModes]);
   useEffect(() => {
     if (!tooltip) return undefined;
     const close = event => { if (event.type !== 'keydown' || event.key === 'Escape') setTooltip(null); };
@@ -231,8 +236,8 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
         {embedded ? null : <div className="timeline-header-actions"><label className="date-input"><span>{t.date}</span><input type="date" value={date} onChange={event => { initializedDate.current = true; setDate(event.target.value); }} /></label><button className="primary" type="button" disabled={!date || timelineLoading} onClick={printTimeline}>{t.printTimeline}</button></div>}
       </div>
       <section className="panel timeline-panel" aria-busy={timelineLoading}>
-        <div className="timeline-toolbar">
-          <div className="timeline-controls">
+        <div className={`timeline-toolbar ${embedded ? 'timeline-toolbar-shared' : ''}`}>
+          {embedded ? null : <div className="timeline-controls">
             <label className="timeline-search"><span className="sr-only">{t.search}</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder={t.search} /></label>
             <details className="timeline-filter-menu" onKeyDown={event => { if (event.key === 'Escape' && event.currentTarget.open) { event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}>
               <summary aria-controls="timeline-filter-options"><span>{t.filterJobs}</span><small>{selectedModes.size}/{timelineModes.length} · {statusSummary}</small></summary>
@@ -249,7 +254,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
                 <div className="timeline-filter-actions"><button className="small-button secondary" type="button" onClick={() => setSelectedModes(new Set(timelineModes))}>{t.selectAll}</button><button className="small-button secondary" type="button" onClick={() => setSelectedModes(new Set())}>{t.clearAll}</button><button className="small-button secondary timeline-filter-reset" type="button" onClick={resetFilters}>{t.resetFilters}</button></div>
               </div>
             </details>
-          </div>
+          </div>}
           <div className="timeline-legend" role="group" aria-label={lang === 'en' ? 'Timeline legend' : 'คำอธิบายสีไทม์ไลน์'}>
             {reportableOperations.map(([number, thai, english]) => <span key={number}><i style={{ backgroundColor: reportModeColor(english) }} aria-hidden="true" /><b className="timeline-mode-number">{number}</b>{lang === 'th' ? thai : english}</span>)}<span><i className="legend-speed" aria-hidden="true" />{t.speed}</span><small>{t.gaps}</small>
           </div>
@@ -284,7 +289,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
         </aside> : null}
         {timelineLoading ? <p className="empty" role="status">{t.loading}</p> : null}
         {timelineError ? <p className="error" role="alert">{timelineError}</p> : null}
-        {!timelineLoading && !timelineError && !rows.length ? timelineReports.length ? <div className="empty-state compact-empty-state"><h3>{emptyFilterMessage}</h3></div> : <div className="empty-state compact-empty-state">
+        {!timelineLoading && !timelineError && !rows.length ? timelineReports.length || embedded ? <div className="empty-state compact-empty-state"><h3>{embedded ? t.empty : emptyFilterMessage}</h3></div> : <div className="empty-state compact-empty-state">
           <Image src="/songdee-gps-pin.svg" alt="" width={180} height={220} />
           <h3>{t.emptyTitle}</h3>
           <p>{t.emptyBody}</p>

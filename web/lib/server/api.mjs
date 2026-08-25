@@ -677,6 +677,7 @@ async function getReportsPage(request) {
     )
     SELECT
       ${reportColumns()},
+      (SELECT max(sample.device_speed_mps) * 3.6 FROM gps_sync_samples sample WHERE sample.job_id = report.id) AS "topSpeed",
       COALESCE(gps_summary.device_gps_samples, 0)::int AS "deviceGpsSamples",
       COALESCE(gps_summary.fms_gps_samples, 0)::int AS "fmsGpsSamples",
       COALESCE(gps_summary.paired_gps_samples, 0)::int AS "pairedGpsSamples",

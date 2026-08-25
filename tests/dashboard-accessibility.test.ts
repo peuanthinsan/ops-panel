@@ -33,8 +33,10 @@ test('dashboard login supports explicit Enter submission and route focus does no
 
 test('reports expose labeled filters and sort direction to assistive technology', async () => {
   const source = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
-  assert.match(source, /aria-label=\{lang === 'en' \? 'Report filters'/);
+  assert.match(source, /aria-label=\{lang === 'en' \? 'Shared timeline and Job List filters'/);
   assert.match(source, /aria-sort=\{sortKey === key/);
+  assert.match(source, /onClick=\{event => changeSort\(key, event\)\}/);
+  assert.doesNotMatch(source, /label=\{t\.sort\}|sortOptions/);
   assert.match(source, /className="table-wrap" tabIndex=\{0\}/);
   assert.match(source, /localizedDashboardReportError/);
   assert.match(source, /print: 'Print daily report'/);
@@ -52,11 +54,14 @@ test('reports combine the timeline and saved jobs before opening the daily vehic
   const shell = await readFile(fileURLToPath(new NodeUrl('../web/app/page.jsx', import.meta.url)), 'utf8');
   const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
   const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
-  assert.match(dashboard, /<TimelineDashboard lang=\{lang\} embedded selectedStartDate=\{startDate\} selectedEndDate=\{endDate\} \/>/);
+  assert.match(dashboard, /<TimelineDashboard lang=\{lang\} embedded sharedFilters=\{sharedFilters\} \/>/);
   assert.doesNotMatch(dashboard, /embedded sourceReports=\{visibleReports\}/);
-  assert.match(timeline, /embedded = false, sourceReports = null, sourceLoading = false, sourceError = '', selectedStartDate = '', selectedEndDate = ''/);
-  assert.match(timeline, /const effectiveStartDate = embedded \? selectedStartDate : date/);
-  assert.match(timeline, /const effectiveEndDate = embedded \? selectedEndDate : date/);
+  assert.match(timeline, /embedded = false, sourceReports = null, sourceLoading = false, sourceError = '', sharedFilters = null/);
+  assert.match(timeline, /const effectiveStartDate = embedded \? String\(sharedQuery\.startDate \|\| ''\) : date/);
+  assert.match(timeline, /const effectiveEndDate = embedded \? String\(sharedQuery\.endDate \|\| ''\) : date/);
+  assert.match(timeline, /embedded \? !reportMatchesFilters\(report, sharedQuery, lang\)/);
+  assert.match(timeline, /const requestFilters = embedded \? sharedQuery/);
+  assert.match(timeline, /embedded \? null : <div className="timeline-controls">/);
   assert.match(timeline, /const key = `\$\{day\}\\u0000\$\{report\.vehicleNumber/);
   assert.match(timeline, /className="timeline-row-date"/);
   assert.match(timeline, /\{embedded \? null : <div className="timeline-header-actions">/);
@@ -77,9 +82,11 @@ test('daily report is landscape, date-selectable, speed-enabled, and uses the of
   const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
   const printStyles = await readFile(fileURLToPath(new NodeUrl('../web/app/print/portrait/portrait-print.css', import.meta.url)), 'utf8');
   assert.match(dashboard, /print: 'Print daily report'/);
-  assert.match(dashboard, /const filterValues = \{ search: deferredSearch, startDate, endDate/);
+  assert.match(dashboard, /const sharedFilters = useMemo\(\(\) => \(\{/);
+  assert.match(dashboard, /vehicle: vehicles/);
+  assert.match(dashboard, /sort: sorts\.map/);
   assert.match(dashboard, /const selectedPrintDate = endDate \|\| startDate/);
-  assert.match(timeline, /adminFetchAllReports\(\{ startDate: targetStartDate, endDate: targetEndDate \}\)/);
+  assert.match(timeline, /adminFetchAllReports\(requestFilters\)/);
   assert.match(timeline, /if \(effectiveStartDate && day < effectiveStartDate\) continue/);
   assert.match(timeline, /if \(effectiveEndDate && day > effectiveEndDate\) continue/);
   assert.match(timeline, /<SpeedTimelineOverlay/);
@@ -125,18 +132,19 @@ test('timeline segments expose detailed tooltips to pointer, keyboard, and touch
   for (const detail of ['start', 'end', 'duration', 'speed', 'vehicle', 'driver', 'device', 'gps', 'location', 'reportId']) assert.match(source, new RegExp(`tooltip\\.segment\\.detail\\.${detail}`));
 });
 
-test('large fleet filters use bounded searchable comboboxes instead of native selects', async () => {
+test('large fleet filters use bounded searchable multi-comboboxes instead of native selects', async () => {
   const reports = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
   const combobox = await readFile(fileURLToPath(new NodeUrl('../web/app/searchable-combobox.jsx', import.meta.url)), 'utf8');
   assert.doesNotMatch(reports, /<select\b/);
-  assert.match(reports, /<SearchableCombobox label=\{t\.vehicle\}/);
-  assert.match(reports, /<SearchableCombobox label=\{t\.device\}/);
-  assert.match(reports, /<SearchableCombobox label=\{t\.driver\}/);
+  for (const field of ['vehicle', 'device', 'driver', 'mode', 'status', 'gps']) assert.match(reports, new RegExp(`<SearchableCombobox multiple label=\\{t\\.${field}\\}`));
   assert.match(combobox, /MAX_VISIBLE_COMBOBOX_OPTIONS = 100/);
   assert.match(combobox, /matches\.slice\(0, maxResults\)/);
   assert.match(combobox, /role="combobox"/);
   assert.match(combobox, /role="listbox"/);
+  assert.match(combobox, /aria-multiselectable=\{multiple \|\| undefined\}/);
   assert.match(combobox, /role="option"/);
+  assert.match(combobox, /const next = new Set\(selectedValues\)/);
+  assert.match(combobox, /className="multi-combobox-chips"/);
   assert.match(combobox, /aria-activedescendant/);
   assert.match(combobox, /onClick=.*setOpen\(true\)/);
 });

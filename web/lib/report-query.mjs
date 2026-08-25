@@ -6,6 +6,8 @@ const sortExpressions = {
   driverName: 'report.driver_name',
   mode: 'report.mode',
   duration: 'EXTRACT(EPOCH FROM (report.end_time - report.start_time))',
+  topSpeed: '(SELECT max(sample.device_speed_mps) * 3.6 FROM gps_sync_samples sample WHERE sample.job_id = report.id)',
+  gpsCoverage: '(SELECT COALESCE(summary.device_samples, 0) FROM job_gps_summaries summary WHERE summary.job_id = report.id)',
   status: 'report.status',
   gpsState: "COALESCE(report.gps_lookup_status, report.gps, '')",
   startClock: "EXTRACT(HOUR FROM report.start_time AT TIME ZONE 'Asia/Bangkok') * 60 + EXTRACT(MINUTE FROM report.start_time AT TIME ZONE 'Asia/Bangkok')",
@@ -19,6 +21,12 @@ function positiveInteger(value, fallback, maximum) {
 function validDate(value) {
   const text = String(value || '').trim();
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+}
+
+function boundedValues(searchParams, key, maximumLength, maximumValues = 100) {
+  return [...new Set(searchParams.getAll(key)
+    .map(value => String(value || '').trim().slice(0, maximumLength))
+    .filter(Boolean))].slice(0, maximumValues);
 }
 
 export function parseReportSort(value) {
@@ -37,24 +45,24 @@ export function buildReportQuery(searchParams) {
     search: String(searchParams.get('search') || '').trim().slice(0, 180),
     startDate: validDate(searchParams.get('startDate')),
     endDate: validDate(searchParams.get('endDate')),
-    vehicle: String(searchParams.get('vehicle') || '').trim().slice(0, 80),
-    device: String(searchParams.get('device') || '').trim().slice(0, 180),
-    driver: String(searchParams.get('driver') || '').trim().slice(0, 180),
-    mode: String(searchParams.get('mode') || '').trim().slice(0, 80),
-    status: String(searchParams.get('status') || '').trim().slice(0, 180),
-    gps: String(searchParams.get('gps') || '').trim().slice(0, 180),
+    vehicle: boundedValues(searchParams, 'vehicle', 80),
+    device: boundedValues(searchParams, 'device', 180),
+    driver: boundedValues(searchParams, 'driver', 180),
+    mode: boundedValues(searchParams, 'mode', 80),
+    status: boundedValues(searchParams, 'status', 180),
+    gps: boundedValues(searchParams, 'gps', 180),
   };
   const values = [];
   const clauses = [];
   const parameter = value => { values.push(value); return `$${values.length}`; };
   if (filters.startDate) clauses.push(`report.start_time >= (${parameter(filters.startDate)}::date::timestamp AT TIME ZONE 'Asia/Bangkok')`);
   if (filters.endDate) clauses.push(`report.start_time < ((${parameter(filters.endDate)}::date + 1)::timestamp AT TIME ZONE 'Asia/Bangkok')`);
-  if (filters.vehicle) clauses.push(`lower(report.vehicle_number) = lower(${parameter(filters.vehicle)})`);
-  if (filters.device) clauses.push(`report.device_id = ${parameter(filters.device)}`);
-  if (filters.driver) clauses.push(`report.driver_name = ${parameter(filters.driver)}`);
-  if (filters.mode) clauses.push(`report.mode = ${parameter(filters.mode)}`);
-  if (filters.status) clauses.push(`report.status = ${parameter(filters.status)}`);
-  if (filters.gps) clauses.push(`COALESCE(report.gps_lookup_status, report.gps, '') = ${parameter(filters.gps)}`);
+  if (filters.vehicle.length) clauses.push(`lower(report.vehicle_number) = ANY(${parameter(filters.vehicle.map(value => value.toLocaleLowerCase()))}::text[])`);
+  if (filters.device.length) clauses.push(`report.device_id = ANY(${parameter(filters.device)}::text[])`);
+  if (filters.driver.length) clauses.push(`report.driver_name = ANY(${parameter(filters.driver)}::text[])`);
+  if (filters.mode.length) clauses.push(`report.mode = ANY(${parameter(filters.mode)}::text[])`);
+  if (filters.status.length) clauses.push(`report.status = ANY(${parameter(filters.status)}::text[])`);
+  if (filters.gps.length) clauses.push(`COALESCE(report.gps_lookup_status, report.gps, '') = ANY(${parameter(filters.gps)}::text[])`);
   if (filters.search) {
     clauses.push(`concat_ws(' ', report.id, report.vehicle_number, report.device_id, report.driver_name, report.driver_id, report.mode, report.status, report.gps, report.gps_lookup_status, report.gps_lookup_message) ILIKE ${parameter(`%${filters.search}%`)}`);
   }

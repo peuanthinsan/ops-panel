@@ -20,6 +20,7 @@ export default function SearchableCombobox({
   options,
   allLabel,
   lang,
+  multiple = false,
   getOptionLabel = defaultOptionLabel,
   maxResults = MAX_VISIBLE_COMBOBOX_OPTIONS,
 }) {
@@ -38,11 +39,18 @@ export default function SearchableCombobox({
     () => options.map(option => normalizeOption(option, getOptionLabel)).filter(option => option.value),
     [options, getOptionLabel],
   );
-  const selectedOption = useMemo(
-    () => normalizedOptions.find(option => option.value === value),
-    [normalizedOptions, value],
-  );
-  const selectedLabel = selectedOption?.label || allLabel;
+  const selectedValues = useMemo(() => new Set((multiple
+    ? (Array.isArray(value) ? value : value ? [value] : [])
+    : value ? [value] : []).map(item => String(item))), [multiple, value]);
+  const selectedOptions = useMemo(() => [...selectedValues].map(selectedValue => (
+    normalizedOptions.find(option => option.value === selectedValue)
+      || { value: selectedValue, label: String(getOptionLabel(selectedValue)) }
+  )), [getOptionLabel, normalizedOptions, selectedValues]);
+  const selectedLabel = multiple
+    ? selectedValues.size
+      ? (lang === 'th' ? `เลือกแล้ว ${selectedValues.size} รายการ` : `${selectedValues.size} selected`)
+      : allLabel
+    : selectedOptions[0]?.label || allLabel;
 
   const matches = useMemo(() => {
     const needle = deferredQuery.trim().toLocaleLowerCase(lang === 'th' ? 'th' : 'en');
@@ -51,9 +59,9 @@ export default function SearchableCombobox({
   }, [deferredQuery, lang, normalizedOptions]);
   const visibleOptions = useMemo(() => {
     const firstMatches = matches.slice(0, maxResults);
-    if (!selectedOption || firstMatches.some(option => option.value === selectedOption.value)) return firstMatches;
-    return [selectedOption, ...firstMatches.slice(0, Math.max(0, maxResults - 1))];
-  }, [matches, maxResults, selectedOption]);
+    const pinnedSelections = selectedOptions.filter(option => !firstMatches.some(match => match.value === option.value));
+    return [...pinnedSelections, ...firstMatches].slice(0, maxResults);
+  }, [matches, maxResults, selectedOptions]);
   const menuOptions = useMemo(() => [{ value: '', label: allLabel }, ...visibleOptions], [allLabel, visibleOptions]);
 
   useEffect(() => {
@@ -77,9 +85,25 @@ export default function SearchableCombobox({
   }
 
   function choose(option) {
-    onChange(option.value);
-    setQuery(option.label);
-    setOpen(false);
+    if (multiple) {
+      if (!option.value) onChange([]);
+      else {
+        const next = new Set(selectedValues);
+        if (next.has(option.value)) next.delete(option.value); else next.add(option.value);
+        onChange([...next]);
+      }
+      setQuery('');
+      setOpen(true);
+    } else {
+      onChange(option.value);
+      setQuery(option.label);
+      setOpen(false);
+    }
+    inputRef.current?.focus({ preventScroll: true });
+  }
+
+  function removeSelection(selectedValue) {
+    onChange([...selectedValues].filter(valueItem => valueItem !== selectedValue));
     inputRef.current?.focus({ preventScroll: true });
   }
 
@@ -131,22 +155,26 @@ export default function SearchableCombobox({
         />
         <svg className="combobox-chevron" aria-hidden="true" viewBox="0 0 20 20"><path d="m5 7.5 5 5 5-5" /></svg>
         {open ? <div className="combobox-popover">
-          <div className="combobox-results" id={listboxId} role="listbox" aria-labelledby={labelId}>
+          <div className="combobox-results" id={listboxId} role="listbox" aria-labelledby={labelId} aria-multiselectable={multiple || undefined}>
             {menuOptions.map((option, index) => <div
               id={`${id}-option-${index}`}
               className={`combobox-option ${index === activeIndex ? 'active' : ''}`}
               key={`${option.value}-${index}`}
               role="option"
-              aria-selected={option.value === value}
+              aria-selected={option.value ? selectedValues.has(option.value) : selectedValues.size === 0}
               onMouseEnter={() => setActiveIndex(index)}
               onMouseDown={event => event.preventDefault()}
               onClick={() => choose(option)}
-            ><span>{option.label}</span>{option.value === value ? <strong aria-hidden="true">✓</strong> : null}</div>)}
+            ><span>{option.label}</span>{(option.value ? selectedValues.has(option.value) : selectedValues.size === 0) ? <strong aria-hidden="true">✓</strong> : null}</div>)}
             {!matches.length ? <p className="combobox-empty" role="status">{lang === 'th' ? 'ไม่พบรายการที่ตรงกัน' : 'No matching options'}</p> : null}
           </div>
           <p className="combobox-summary" aria-live="polite">{resultMessage}</p>
         </div> : null}
       </div>
+      {multiple && selectedOptions.length ? <div className="multi-combobox-chips" aria-label={lang === 'th' ? `${label} ที่เลือก` : `Selected ${label.toLowerCase()}`}>
+        {selectedOptions.slice(0, 3).map(option => <button key={option.value} type="button" title={lang === 'th' ? `นำ ${option.label} ออก` : `Remove ${option.label}`} onClick={() => removeSelection(option.value)}><span>{option.label}</span><b aria-hidden="true">×</b></button>)}
+        {selectedOptions.length > 3 ? <span>+{selectedOptions.length - 3}</span> : null}
+      </div> : null}
     </div>
   );
 }

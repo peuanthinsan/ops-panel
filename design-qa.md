@@ -1,4 +1,4 @@
-# Design QA — Daily Landscape Vehicle Report
+# Design QA — Operations Reports and Daily Landscape Vehicle Report
 
 ## Findings
 
@@ -23,6 +23,12 @@
 
 - The dashboard exposes one Date range control for the summary, timeline, and Job List; there are no additional dashboard date inputs.
 - Choosing Last 7 days (19–25 Aug 2026) updated all three dashboard surfaces to the same range: 20 KPI jobs, two dated vehicle timeline rows, and 20 Job List records.
+- One shared search plus Vehicle, Device, Driver, Activity, Status, and GPS filters now control both the embedded Timeline and Job List.
+- All six facets accept multiple values. Browser validation selected both vehicles and both Load and Unload; the KPI total, timeline segments, and Job List all resolved to the same five jobs.
+- The shared query sends repeated bounded parameters to both the local and production report APIs, with match-any behavior inside each facet and match-all behavior across facets.
+- The embedded Timeline no longer exposes duplicate search or job-filter controls; the standalone Timeline route keeps its independent controls.
+- The Sort by dropdown was removed. Clicking Vehicle sorted both Job List rows and timeline groups ascending, then descending; Shift-click still supports up to three table-column sorts.
+- GPS coverage and top speed are sortable table columns, and the production report query now returns top speed for display and ordering.
 - Multi-day timeline results are grouped by date as well as vehicle and driver, so work from different days is never overlaid in one row.
 - Pressing Print daily report opened only the range end day at `/print/portrait?date=2026-08-25&lang=en`.
 - Changing the date inside the print toolbar and pressing View date updated only the daily-report route.
@@ -45,6 +51,7 @@
 - The report uses `/songdee-gps-pin.svg`, the official pin from the product logo, instead of the earlier lettered report-pin asset.
 - Live values intentionally replace the sample names, dates, locations, and metrics shown in the mockup.
 - At 390 px, report controls and KPI cards reflow without page-level clipping; the wide timeline stays inside its dedicated horizontal scroll container.
+- At 390 px, all six shared multi-selects stack cleanly and the Job List switches to cards; at desktop widths, the sortable table keeps readable column widths and contains every row action.
 
 ## Comparison history
 
@@ -70,12 +77,18 @@
 20. Fix: one dashboard Date now drives the summary, timeline, Job List, and Print daily report; the print view keeps its own date chooser.
 21. P1: consolidating to a single dashboard day removed the Job List's useful multi-day browsing.
 22. Fix: the one dashboard control is now a Date range shared by KPIs, dated per-vehicle timeline rows, and the Job List; Print daily report still sends only the range end date.
+23. P1: Timeline and Job List had separate search/filter behavior, and each facet accepted only one value.
+24. Fix: a shared filter model now carries repeated Vehicle, Device, Driver, Activity, Status, and GPS values into both surfaces.
+25. P2: a Sort by dropdown duplicated table sorting and did not make the Timeline order follow the Job List.
+26. Fix: sorting now lives in the table headers, including GPS and top speed, and the embedded Timeline consumes the same ordered query.
+27. P2: exposing sortable columns at normal desktop widths initially compressed the right side of the table.
+28. Fix: the table now uses a bounded horizontal layout with explicit location/action widths and wrapped actions, while mobile keeps its card layout.
 
 ## Verification
 
-- `node --test tests/report-print-pages.test.ts tests/speed-timeline.test.ts tests/dashboard-accessibility.test.ts` — 15 passed.
+- `node --test tests/report-query.test.mjs tests/local-report-query.test.mjs tests/report-filter.test.ts tests/dashboard-accessibility.test.ts tests/report-print-pages.test.ts tests/speed-timeline.test.ts` — 25 passed.
 - `npm --prefix web run build` — passed.
 - `git diff --check` — passed.
-- Browser checks: desktop and responsive dashboard, one shared dashboard date range, 19–25 Aug range propagation across all web surfaces, Print daily report end-date handoff, print-view single-day switching without an inferred vehicle filter, all nine modes, exact point and activity speed tooltips, 19 jobs across two landscape sheets, final-page signatures, and no truncation copy — passed.
+- Browser checks: 2048 × 1100 and 390 × 844 dashboard layouts; one shared search; all six listboxes marked multi-select; simultaneous Vehicle and Activity selections; synchronized KPI, Timeline, and Job List results; table-column ascending/descending order propagated to Timeline groups; no Sort by dropdown; no duplicate embedded Timeline search; no page-level mobile overflow; no console warnings or errors — passed.
 
 final result: passed

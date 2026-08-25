@@ -13,8 +13,18 @@ test('print filters preserve the dashboard search and every exact filter in the 
     device: 'D2', driver: 'Driver Two', mode: 'Unload', status: 'Cancelled', gps: 'not_applicable',
   });
   assert.deepEqual(reportFiltersFromSearchParams(params), {
-    search: 'Depot', startDate: '2026-08-19', endDate: '2026-08-19', vehicle: '74-0904',
-    device: 'D2', driver: 'Driver Two', mode: 'Unload', status: 'Cancelled', gps: 'not_applicable',
+    search: 'Depot', startDate: '2026-08-19', endDate: '2026-08-19', vehicle: ['74-0904'],
+    device: ['D2'], driver: ['Driver Two'], mode: ['Unload'], status: ['Cancelled'], gps: ['not_applicable'],
+  });
+});
+
+test('print filters preserve repeated multi-select values', () => {
+  const params = appendReportFilters(new URLSearchParams(), {
+    vehicle: ['70-1234', '74-0904'], mode: ['Load', 'Unload'], status: ['Completed', 'Cancelled'],
+  });
+  assert.deepEqual(params.getAll('vehicle'), ['70-1234', '74-0904']);
+  assert.deepEqual(reportFiltersFromSearchParams(params), {
+    vehicle: ['70-1234', '74-0904'], mode: ['Load', 'Unload'], status: ['Completed', 'Cancelled'],
   });
 });
 
@@ -22,4 +32,5 @@ test('the print dataset matches dashboard-style date, search, and exact filters'
   assert.deepEqual(filterReports(reports, { search: 'warehouse' }, 'en').map(report => report.id), ['R1']);
   assert.deepEqual(filterReports(reports, { startDate: '2026-08-19', endDate: '2026-08-19' }, 'en').map(report => report.id), ['R2']);
   assert.deepEqual(filterReports(reports, { vehicle: '74-0904', status: 'Cancelled', gps: 'not_applicable' }, 'en').map(report => report.id), ['R2']);
+  assert.deepEqual(filterReports(reports, { vehicle: ['70-1234', '74-0904'], mode: ['Load', 'Unload'] }, 'en').map(report => report.id), ['R1', 'R2']);
 });

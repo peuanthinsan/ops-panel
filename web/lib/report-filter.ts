@@ -12,24 +12,37 @@ export const reportFilterKeys = [
   'gps',
 ] as const;
 
-export type ReportFilters = Partial<Record<(typeof reportFilterKeys)[number], string>>;
+export type ReportFilterValue = string | string[];
+export type ReportFilters = Partial<Record<(typeof reportFilterKeys)[number], ReportFilterValue>>;
 
-type SearchParamsReader = { get(name: string): string | null };
+type SearchParamsReader = { get(name: string): string | null; getAll?(name: string): string[] };
+const multiValueKeys = new Set(['vehicle', 'device', 'driver', 'mode', 'status', 'gps']);
+
+function filterValues(value: ReportFilterValue | undefined) {
+  const source = Array.isArray(value) ? value : [value];
+  return [...new Set(source.map(item => String(item || '').trim()).filter(Boolean))];
+}
+
+function firstFilterValue(value: ReportFilterValue | undefined) {
+  return filterValues(value)[0] || '';
+}
 
 function gpsValue(report: Record<string, unknown>) {
   return String(report.gpsLookupStatus || report.gps || '');
 }
 
 export function reportFiltersFromSearchParams(params: SearchParamsReader): ReportFilters {
-  return Object.fromEntries(reportFilterKeys
-    .map(key => [key, String(params.get(key) || '').trim()])
-    .filter(([, value]) => value)) as ReportFilters;
+  return Object.fromEntries(reportFilterKeys.map(key => {
+    const values = multiValueKeys.has(key)
+      ? [...new Set((params.getAll?.(key) || [params.get(key)]).map(value => String(value || '').trim()).filter(Boolean))]
+      : String(params.get(key) || '').trim();
+    return [key, values];
+  }).filter(([, value]) => Array.isArray(value) ? value.length : value)) as ReportFilters;
 }
 
 export function appendReportFilters(params: URLSearchParams, filters: ReportFilters) {
   for (const key of reportFilterKeys) {
-    const value = String(filters[key] || '').trim();
-    if (value) params.set(key, value);
+    for (const value of filterValues(filters[key])) params.append(key, value);
   }
   return params;
 }
@@ -40,15 +53,27 @@ export function reportMatchesFilters(
   language: 'en' | 'th',
 ) {
   const date = reportDateKey(report.startTime);
-  if (filters.startDate && date < filters.startDate) return false;
-  if (filters.endDate && date > filters.endDate) return false;
-  if (filters.vehicle && report.vehicleNumber !== filters.vehicle) return false;
-  if (filters.device && report.deviceId !== filters.device) return false;
-  if (filters.driver && report.driverName !== filters.driver) return false;
-  if (filters.mode && report.mode !== filters.mode) return false;
-  if (filters.status && report.status !== filters.status) return false;
-  if (filters.gps && gpsValue(report) !== filters.gps) return false;
-  const query = String(filters.search || '').trim().toLocaleLowerCase(language === 'th' ? 'th' : 'en');
+  const startDate = firstFilterValue(filters.startDate);
+  const endDate = firstFilterValue(filters.endDate);
+  if (startDate && date < startDate) return false;
+  if (endDate && date > endDate) return false;
+  const exactFilters: Array<[ReportFilterValue | undefined, unknown, boolean?]> = [
+    [filters.vehicle, report.vehicleNumber, true],
+    [filters.device, report.deviceId],
+    [filters.driver, report.driverName],
+    [filters.mode, report.mode],
+    [filters.status, report.status],
+    [filters.gps, gpsValue(report)],
+  ];
+  for (const [filter, actual, caseInsensitive = false] of exactFilters) {
+    const values = filterValues(filter);
+    if (!values.length) continue;
+    const actualValue = String(actual || '');
+    if (caseInsensitive
+      ? !values.some(value => value.toLocaleLowerCase() === actualValue.toLocaleLowerCase())
+      : !values.includes(actualValue)) return false;
+  }
+  const query = firstFilterValue(filters.search).toLocaleLowerCase(language === 'th' ? 'th' : 'en');
   if (!query) return true;
   const extendedSearch = [
     searchableReportText(report, language),
@@ -74,6 +99,6 @@ export function filterReports(
 }
 
 export function hasRestrictiveReportFilters(filters: ReportFilters) {
-  return Boolean(filters.search || filters.vehicle || filters.device || filters.driver
-    || filters.mode || filters.status || filters.gps);
+  return ['search', 'vehicle', 'device', 'driver', 'mode', 'status', 'gps']
+    .some(key => filterValues(filters[key as keyof ReportFilters]).length > 0);
 }

@@ -77,8 +77,11 @@ export async function adminFetch(path, options = {}) {
 export async function adminFetchAllReports(filters = {}) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
-    const text = String(value || '').trim();
-    if (text) params.set(key, text);
+    const values = Array.isArray(value) ? value : [value];
+    for (const item of values) {
+      const text = String(item || '').trim();
+      if (text) params.append(key, text);
+    }
   }
   params.set('pageSize', '100');
   const reports = [];
