@@ -37,38 +37,60 @@ test('reports expose labeled filters and sort direction to assistive technology'
   assert.match(source, /aria-sort=\{sortKey === key/);
   assert.match(source, /className="table-wrap" tabIndex=\{0\}/);
   assert.match(source, /localizedDashboardReportError/);
-  assert.match(source, /print: 'Print report'/);
+  assert.match(source, /print: 'Print daily report'/);
   assert.match(source, /new URLSearchParams\(\{ date: selectedPrintDate, lang \}\)/);
-  assert.match(source, /className="date-input report-date-input"/);
+  assert.match(source, /dateRange: 'Date range'/);
+  assert.match(source, /function DateRangePicker/);
+  assert.equal(source.match(/<DateRangePicker\b/g)?.length ?? 0, 1);
+  assert.equal(source.match(/<input type="date"/g)?.length ?? 0, 0);
+  assert.doesNotMatch(source, /report-date-input|Job list range|Report date/);
   assert.doesNotMatch(source, /window\.location\.assign\(`\/print\/landscape/);
 });
 
-test('reports combine the timeline and saved jobs before opening the one-page vehicle print', async () => {
+test('reports combine the timeline and saved jobs before opening the daily vehicle print', async () => {
   const dashboard = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
   const shell = await readFile(fileURLToPath(new NodeUrl('../web/app/page.jsx', import.meta.url)), 'utf8');
   const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
   const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
-  assert.match(dashboard, /<TimelineDashboard lang=\{lang\} embedded \/>/);
+  assert.match(dashboard, /<TimelineDashboard lang=\{lang\} embedded selectedStartDate=\{startDate\} selectedEndDate=\{endDate\} \/>/);
   assert.doesNotMatch(dashboard, /embedded sourceReports=\{visibleReports\}/);
-  assert.match(timeline, /embedded = false, sourceReports = null/);
-  assert.match(timeline, /embedded \? null : <button className="primary"/);
+  assert.match(timeline, /embedded = false, sourceReports = null, sourceLoading = false, sourceError = '', selectedStartDate = '', selectedEndDate = ''/);
+  assert.match(timeline, /const effectiveStartDate = embedded \? selectedStartDate : date/);
+  assert.match(timeline, /const effectiveEndDate = embedded \? selectedEndDate : date/);
+  assert.match(timeline, /const key = `\$\{day\}\\u0000\$\{report\.vehicleNumber/);
+  assert.match(timeline, /className="timeline-row-date"/);
+  assert.match(timeline, /\{embedded \? null : <div className="timeline-header-actions">/);
   assert.doesNotMatch(shell, /\{ href: '\/timeline', key: 'timeline' \}/);
   assert.match(print, /className="report-section"/);
   assert.match(print, /className="simple-job-table"/);
   assert.match(print, /className="signature-footer"/);
+  assert.match(print, /paginateDailyReportJobs\(summary\.rows\)/);
+  assert.match(print, /JOB LIST — CONTINUED/);
+  assert.doesNotMatch(print, /additional jobs · see dashboard for details/);
+  assert.doesNotMatch(print, /Up to 8 jobs shown/);
 });
 
 test('daily report is landscape, date-selectable, speed-enabled, and uses the official logo pin', async () => {
   const dashboard = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
   const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
+  const speedTimeline = await readFile(fileURLToPath(new NodeUrl('../web/app/speed-timeline.jsx', import.meta.url)), 'utf8');
   const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
   const printStyles = await readFile(fileURLToPath(new NodeUrl('../web/app/print/portrait/portrait-print.css', import.meta.url)), 'utf8');
-  assert.match(dashboard, /dateRange: 'Job list range'/);
-  assert.match(dashboard, /reportDate: 'Report date'/);
-  assert.match(timeline, /adminFetchAllReports\(\{ startDate: targetDate, endDate: targetDate \}\)/);
+  assert.match(dashboard, /print: 'Print daily report'/);
+  assert.match(dashboard, /const filterValues = \{ search: deferredSearch, startDate, endDate/);
+  assert.match(dashboard, /const selectedPrintDate = endDate \|\| startDate/);
+  assert.match(timeline, /adminFetchAllReports\(\{ startDate: targetStartDate, endDate: targetEndDate \}\)/);
+  assert.match(timeline, /if \(effectiveStartDate && day < effectiveStartDate\) continue/);
+  assert.match(timeline, /if \(effectiveEndDate && day > effectiveEndDate\) continue/);
   assert.match(timeline, /<SpeedTimelineOverlay/);
+  assert.match(timeline, /reportableOperations\.map\(\(\[number, thai, english\]\)/);
+  assert.match(speedTimeline, /item\.points\.map\(point =>/);
+  assert.match(speedTimeline, /className=\{`speed-point/);
+  assert.match(speedTimeline, /className="speed-point-hit"/);
+  assert.match(speedTimeline, /className="speed-point-tooltip" role="tooltip"/);
   assert.match(print, /onDateChange=\{changeReportDate\}/);
   assert.match(print, /'View date'/);
+  assert.match(print, /if \(requestedVehicle\) params\.set\('vehicle', requestedVehicle\)/);
   assert.match(print, /src="\/songdee-gps-pin\.svg"/);
   assert.match(print, /startMinute=\{6 \* 60\} endMinute=\{24 \* 60\}/);
   assert.match(printStyles, /@page\{size:A4 landscape;margin:0\}/);
@@ -100,7 +122,7 @@ test('timeline segments expose detailed tooltips to pointer, keyboard, and touch
   assert.match(source, /onClick=/);
   assert.match(source, /role="tooltip"/);
   assert.match(source, /event\.key === 'Escape'/);
-  for (const detail of ['start', 'end', 'duration', 'vehicle', 'driver', 'device', 'gps', 'location', 'reportId']) assert.match(source, new RegExp(`tooltip\\.segment\\.detail\\.${detail}`));
+  for (const detail of ['start', 'end', 'duration', 'speed', 'vehicle', 'driver', 'device', 'gps', 'location', 'reportId']) assert.match(source, new RegExp(`tooltip\\.segment\\.detail\\.${detail}`));
 });
 
 test('large fleet filters use bounded searchable comboboxes instead of native selects', async () => {
@@ -123,7 +145,7 @@ test('empty dashboard states guide an administrator to fleet setup without offer
   const reports = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
   const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
   const fleet = await readFile(fileURLToPath(new NodeUrl('../web/app/fleet-dashboard.jsx', import.meta.url)), 'utf8');
-  assert.match(reports, /disabled=\{!printDate \|\| \(!totalReports && !hasAnyReportData\)\}/);
+  assert.match(reports, /disabled=\{!selectedPrintDate \|\| \(!totalReports && !hasAnyReportData\)\}/);
   assert.match(reports, /href="\/admin"/);
   assert.match(reports, /emptyTitle: 'No jobs recorded yet'/);
   assert.match(reports, /Math\.max\(fleetSize, activeVehicles\)/);

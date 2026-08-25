@@ -52,10 +52,10 @@ const gpsUiText = {
 };
 const text = {
   en: {
-    eyebrowToday: 'TODAY', title: 'Operations reports', subtitle: 'Review, filter, print, and retry every saved vehicle job.', search: 'Search reports', searchPlaceholder: 'Vehicle, device, driver, mode, report ID, GPS, or location', dateRange: 'Job list range', reportDate: 'Report date', allDates: 'All dates', today: 'Today', last7: 'Last 7 days', month: 'This month', custom: 'Custom range', startDate: 'Start date', endDate: 'End date', apply: 'Apply', cancel: 'Cancel', previousMonth: 'Previous month', nextMonth: 'Next month', report: 'Report ID', vehicle: 'Vehicle', allVehicles: 'All vehicles', device: 'Device', allDevices: 'All devices', driver: 'Driver', allDrivers: 'All drivers', mode: 'Activity', allModes: 'All activities', status: 'Status', allStatuses: 'All statuses', gps: 'GPS', allGps: 'All GPS states', sort: 'Sort by', sortHint: 'Shift-click headers to sort by up to three columns.', newest: 'Newest first', oldest: 'Oldest first', clear: 'Clear', refresh: 'Refresh', refreshing: 'Refreshing…', print: 'Print report', printVehicle: 'Print vehicle report', jobs: 'Total jobs', jobsSub: 'in the selected range', active: 'Vehicles operating', activeSub: 'vehicles with saved work', queued: 'GPS lookup pending', queuedSub: 'waiting for GPS data', cancelled: 'Cancelled jobs', cancelledSub: 'kept in the audit record', activity: 'Job list', date: 'Date', start: 'Start time', end: 'End time', duration: 'Total time', durationFormat: 'HH:MM:SS', topSpeed: 'Top speed', location: 'Location (GPS)', noJobs: 'No jobs match the current filters.', emptyTitle: 'No jobs recorded yet', emptyBody: 'Connect a tablet to a vehicle, then complete or cancel a job. It will appear here automatically.', noMatchTitle: 'No matching jobs', noMatchBody: 'Try a different search, date range, or filter.', manageFleet: 'Manage fleet', failed: 'Could not load reports.', loading: 'Loading reports…', retry: 'Retry GPS lookup', retrying: 'Looking up…', actions: 'Actions', deviceSamples: 'GPS', lastPoint: 'Last point', previous: 'Previous', next: 'Next', page: 'Page', of: 'of', showing: 'Showing', total: 'total', fleet: 'fleet', unknownLocation: 'No GPS point', stationary: 'Stationary', speedUnit: 'km/h',
+    eyebrowToday: 'TODAY', title: 'Operations reports', subtitle: 'Review, filter, print, and retry every saved vehicle job.', search: 'Search reports', searchPlaceholder: 'Vehicle, device, driver, mode, report ID, GPS, or location', dateRange: 'Date range', allDates: 'All dates', today: 'Today', last7: 'Last 7 days', month: 'This month', apply: 'Apply', cancel: 'Cancel', previousMonth: 'Previous month', nextMonth: 'Next month', report: 'Report ID', vehicle: 'Vehicle', allVehicles: 'All vehicles', device: 'Device', allDevices: 'All devices', driver: 'Driver', allDrivers: 'All drivers', mode: 'Activity', allModes: 'All activities', status: 'Status', allStatuses: 'All statuses', gps: 'GPS', allGps: 'All GPS states', sort: 'Sort by', sortHint: 'Shift-click headers to sort by up to three columns.', newest: 'Newest first', oldest: 'Oldest first', clear: 'Clear', refresh: 'Refresh', refreshing: 'Refreshing…', print: 'Print daily report', printVehicle: 'Print vehicle report', jobs: 'Total jobs', jobsSub: 'in the selected range', active: 'Vehicles operating', activeSub: 'vehicles with saved work', queued: 'GPS lookup pending', queuedSub: 'waiting for GPS data', cancelled: 'Cancelled jobs', cancelledSub: 'kept in the audit record', activity: 'Job list', date: 'Date', start: 'Start time', end: 'End time', duration: 'Total time', durationFormat: 'HH:MM:SS', topSpeed: 'Top speed', location: 'Location (GPS)', noJobs: 'No jobs match the current filters.', emptyTitle: 'No jobs recorded yet', emptyBody: 'Connect a tablet to a vehicle, then complete or cancel a job. It will appear here automatically.', noMatchTitle: 'No matching jobs', noMatchBody: 'Try a different date range, search, or filter.', manageFleet: 'Manage fleet', failed: 'Could not load reports.', loading: 'Loading reports…', retry: 'Retry GPS lookup', retrying: 'Looking up…', actions: 'Actions', deviceSamples: 'GPS', lastPoint: 'Last point', previous: 'Previous', next: 'Next', page: 'Page', of: 'of', showing: 'Showing', total: 'total', fleet: 'fleet', unknownLocation: 'No GPS point', stationary: 'Stationary', speedUnit: 'km/h',
   },
   th: {
-    eyebrowToday: 'วันนี้', title: 'รายงานการวิ่งงาน', subtitle: 'ตรวจสอบ กรอง พิมพ์ และค้นหาข้อมูล GPS ของงานรถที่บันทึก', search: 'ค้นหารายงาน', searchPlaceholder: 'รถ อุปกรณ์ พขร. กิจกรรม รหัสรายงาน GPS หรือสถานที่', dateRange: 'ช่วงวันที่รายการงาน', reportDate: 'วันที่รายงาน', allDates: 'ทุกวัน', today: 'วันนี้', last7: '7 วันที่ผ่านมา', month: 'เดือนนี้', custom: 'กำหนดช่วงเอง', startDate: 'วันที่เริ่ม', endDate: 'วันที่สิ้นสุด', apply: 'ใช้ช่วงวันที่', cancel: 'ยกเลิก', previousMonth: 'เดือนก่อนหน้า', nextMonth: 'เดือนถัดไป', report: 'รหัสรายงาน', vehicle: 'เบอร์รถ', allVehicles: 'รถทั้งหมด', device: 'อุปกรณ์', allDevices: 'อุปกรณ์ทั้งหมด', driver: 'พขร.', allDrivers: 'พขร. ทั้งหมด', mode: 'กิจกรรม', allModes: 'กิจกรรมทั้งหมด', status: 'สถานะ', allStatuses: 'สถานะทั้งหมด', gps: 'GPS', allGps: 'สถานะ GPS ทั้งหมด', sort: 'เรียงตาม', sortHint: 'กด Shift พร้อมหัวตารางเพื่อเรียงได้สูงสุด 3 คอลัมน์', newest: 'ใหม่ไปเก่า', oldest: 'เก่าไปใหม่', clear: 'ล้างตัวกรอง', refresh: 'รีเฟรช', refreshing: 'กำลังรีเฟรช…', print: 'พิมพ์รายงาน', printVehicle: 'พิมพ์รายงานรถ', jobs: 'งานทั้งหมด', jobsSub: 'ในช่วงวันที่ที่เลือก', active: 'รถที่วิ่งงาน', activeSub: 'รถที่มีงานบันทึก', queued: 'รอค้นหา GPS', queuedSub: 'กำลังรอข้อมูล GPS', cancelled: 'งานที่ยกเลิก', cancelledSub: 'เก็บไว้ในประวัติการตรวจสอบ', activity: 'รายการงาน', date: 'วันที่', start: 'เวลาเริ่ม', end: 'เวลาจบ', duration: 'รวมเวลา', durationFormat: 'ชม:นาที:วินาที', topSpeed: 'ความเร็วสูงสุด', location: 'สถานที่ (GPS)', noJobs: 'ไม่พบงานตามตัวกรองนี้', emptyTitle: 'ยังไม่มีงานที่บันทึก', emptyBody: 'เชื่อมต่อแท็บเล็ตกับรถ แล้วจบหรือยกเลิกงาน รายการจะปรากฏที่นี่โดยอัตโนมัติ', noMatchTitle: 'ไม่พบงานที่ตรงกัน', noMatchBody: 'ลองเปลี่ยนคำค้นหา ช่วงวันที่ หรือตัวกรอง', manageFleet: 'จัดการรถ', failed: 'ไม่สามารถโหลดรายงานได้', loading: 'กำลังโหลดรายงาน…', retry: 'ค้นหา GPS อีกครั้ง', retrying: 'กำลังค้นหา…', actions: 'การดำเนินการ', deviceSamples: 'GPS', lastPoint: 'จุดล่าสุด', previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', showing: 'แสดง', total: 'ทั้งหมด', fleet: 'คันทั้งหมด', unknownLocation: 'ไม่มีพิกัด GPS', stationary: 'จอดนิ่ง', speedUnit: 'กม./ชม.',
+    eyebrowToday: 'วันนี้', title: 'รายงานการวิ่งงาน', subtitle: 'ตรวจสอบ กรอง พิมพ์ และค้นหาข้อมูล GPS ของงานรถที่บันทึก', search: 'ค้นหารายงาน', searchPlaceholder: 'รถ อุปกรณ์ พขร. กิจกรรม รหัสรายงาน GPS หรือสถานที่', dateRange: 'ช่วงวันที่', allDates: 'ทุกวัน', today: 'วันนี้', last7: '7 วันที่ผ่านมา', month: 'เดือนนี้', apply: 'ใช้ช่วงวันที่', cancel: 'ยกเลิก', previousMonth: 'เดือนก่อนหน้า', nextMonth: 'เดือนถัดไป', report: 'รหัสรายงาน', vehicle: 'เบอร์รถ', allVehicles: 'รถทั้งหมด', device: 'อุปกรณ์', allDevices: 'อุปกรณ์ทั้งหมด', driver: 'พขร.', allDrivers: 'พขร. ทั้งหมด', mode: 'กิจกรรม', allModes: 'กิจกรรมทั้งหมด', status: 'สถานะ', allStatuses: 'สถานะทั้งหมด', gps: 'GPS', allGps: 'สถานะ GPS ทั้งหมด', sort: 'เรียงตาม', sortHint: 'กด Shift พร้อมหัวตารางเพื่อเรียงได้สูงสุด 3 คอลัมน์', newest: 'ใหม่ไปเก่า', oldest: 'เก่าไปใหม่', clear: 'ล้างตัวกรอง', refresh: 'รีเฟรช', refreshing: 'กำลังรีเฟรช…', print: 'พิมพ์รายงานประจำวัน', printVehicle: 'พิมพ์รายงานรถ', jobs: 'งานทั้งหมด', jobsSub: 'ในช่วงวันที่ที่เลือก', active: 'รถที่วิ่งงาน', activeSub: 'รถที่มีงานบันทึก', queued: 'รอค้นหา GPS', queuedSub: 'กำลังรอข้อมูล GPS', cancelled: 'งานที่ยกเลิก', cancelledSub: 'เก็บไว้ในประวัติการตรวจสอบ', activity: 'รายการงาน', date: 'วันที่', start: 'เวลาเริ่ม', end: 'เวลาจบ', duration: 'รวมเวลา', durationFormat: 'ชม:นาที:วินาที', topSpeed: 'ความเร็วสูงสุด', location: 'สถานที่ (GPS)', noJobs: 'ไม่พบงานตามตัวกรองนี้', emptyTitle: 'ยังไม่มีงานที่บันทึก', emptyBody: 'เชื่อมต่อแท็บเล็ตกับรถ แล้วจบหรือยกเลิกงาน รายการจะปรากฏที่นี่โดยอัตโนมัติ', noMatchTitle: 'ไม่พบงานที่ตรงกัน', noMatchBody: 'ลองเปลี่ยนช่วงวันที่ คำค้นหา หรือตัวกรอง', manageFleet: 'จัดการรถ', failed: 'ไม่สามารถโหลดรายงานได้', loading: 'กำลังโหลดรายงาน…', retry: 'ค้นหา GPS อีกครั้ง', retrying: 'กำลังค้นหา…', actions: 'การดำเนินการ', deviceSamples: 'GPS', lastPoint: 'จุดล่าสุด', previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', showing: 'แสดง', total: 'ทั้งหมด', fleet: 'คันทั้งหมด', unknownLocation: 'ไม่มีพิกัด GPS', stationary: 'จอดนิ่ง', speedUnit: 'กม./ชม.',
   },
 };
 
@@ -93,7 +93,6 @@ function rangeLabel(startDate, endDate, t, lang) {
   if (startDate === endDate) return formatReportDate(startDate, lang);
   return `${startDate ? formatReportDate(startDate, lang) : '…'} – ${endDate ? formatReportDate(endDate, lang) : '…'}`;
 }
-
 function monthKey(dateKey) { return String(dateKey || '').slice(0, 7); }
 function shiftMonth(value, amount) {
   const [year, month] = value.split('-').map(Number);
@@ -109,14 +108,9 @@ function calendarDays(value) {
     return day >= 1 && day <= daysInMonth ? `${value}-${String(day).padStart(2, '0')}` : '';
   });
 }
-
 function accessibleDayLabel(day, lang) {
   return new Intl.DateTimeFormat(lang === 'th' ? 'th-TH' : 'en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
   }).format(new Date(`${day}T12:00:00Z`));
 }
 
@@ -133,6 +127,7 @@ function DateRangePicker({ lang, t, startDate, endDate, onChange }) {
   const weekdays = lang === 'th' ? ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'] : ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
   const monthLabel = new Intl.DateTimeFormat(lang === 'th' ? 'th-TH' : 'en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })
     .format(new Date(`${cursorMonth}-01T12:00:00Z`));
+
   useEffect(() => {
     if (open) {
       previousFocusRef.current = document.activeElement;
@@ -147,13 +142,8 @@ function DateRangePicker({ lang, t, startDate, endDate, onChange }) {
 
   useEffect(() => {
     if (!open) return undefined;
-    const close = () => setOpen(false);
     const onKeyDown = event => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        close();
-        return;
-      }
+      if (event.key === 'Escape') { event.preventDefault(); setOpen(false); return; }
       if (event.key !== 'Tab') return;
       const controls = [...(dialogRef.current?.querySelectorAll('button:not([disabled])') || [])];
       if (!controls.length) return;
@@ -167,7 +157,7 @@ function DateRangePicker({ lang, t, startDate, endDate, onChange }) {
   }, [open]);
 
   useEffect(() => {
-    if (open) return undefined;
+    if (open) { wasOpenRef.current = true; return undefined; }
     if (!wasOpenRef.current) return undefined;
     wasOpenRef.current = false;
     const frame = window.requestAnimationFrame(() => {
@@ -178,24 +168,14 @@ function DateRangePicker({ lang, t, startDate, endDate, onChange }) {
     return () => window.cancelAnimationFrame(frame);
   }, [open]);
 
-  useEffect(() => {
-    if (open) wasOpenRef.current = true;
-  }, [open]);
-
   function preset(start, end) {
     setDraftStart(start);
     setDraftEnd(end);
     onChange(start, end);
     setOpen(false);
   }
-
   function chooseDay(day) {
-    if (!draftStart || draftEnd) {
-      setDraftStart(day);
-      setDraftEnd('');
-      return;
-    }
-    if (day < draftStart) {
+    if (!draftStart || draftEnd || day < draftStart) {
       setDraftStart(day);
       setDraftEnd('');
       return;
@@ -203,42 +183,21 @@ function DateRangePicker({ lang, t, startDate, endDate, onChange }) {
     setDraftEnd(day);
   }
 
-  return (
-    <div className="date-range-control">
-      <button ref={triggerRef} className="date-range-button" type="button" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(value => !value)}><span>{t.dateRange}</span><strong>{rangeLabel(startDate, endDate, t, lang)}</strong></button>
-      {open ? <>
-        <button className="picker-scrim" type="button" aria-label={lang === 'en' ? 'Close date picker' : 'ปิดตัวเลือกวันที่'} onClick={() => setOpen(false)} />
-        <section ref={dialogRef} className="date-popover" role="dialog" aria-modal="true" aria-labelledby="date-range-title">
-          <div className="preset-row">
-            <button type="button" onClick={() => preset(today, today)}>{t.today}</button>
-            <button type="button" onClick={() => preset(offsetDate(today, -6), today)}>{t.last7}</button>
-            <button type="button" onClick={() => preset(`${today.slice(0, 7)}-01`, today)}>{t.month}</button>
-            <button type="button" onClick={() => preset('', '')}>{t.allDates}</button>
-          </div>
-          <div className="calendar-heading">
-            <button type="button" aria-label={t.previousMonth} onClick={() => setCursorMonth(value => shiftMonth(value, -1))}>‹</button>
-            <strong id="date-range-title">{monthLabel}</strong>
-            <button type="button" aria-label={t.nextMonth} onClick={() => setCursorMonth(value => shiftMonth(value, 1))}>›</button>
-          </div>
-          <div className="calendar-grid" role="group" aria-label={monthLabel}>
-            {weekdays.map((day, index) => <span className="calendar-weekday" key={`${day}-${index}`} aria-hidden="true">{day}</span>)}
-            {calendarDays(cursorMonth).map((day, index) => day
-              ? <button
-                className={`${day === today ? 'today' : ''} ${day === draftStart || day === draftEnd ? 'selected' : ''} ${draftStart && draftEnd && day > draftStart && day < draftEnd ? 'in-range' : ''}`}
-                key={day}
-                type="button"
-                aria-current={day === today ? 'date' : undefined}
-                aria-label={accessibleDayLabel(day, lang)}
-                aria-pressed={day === draftStart || day === draftEnd}
-                onClick={() => chooseDay(day)}
-              >{Number(day.slice(-2))}</button>
-              : <span key={`blank-${index}`} aria-hidden="true" />)}
-          </div>
-          <div className="date-popover-footer"><span aria-live="polite">{rangeLabel(draftStart, draftEnd, t, lang)}</span><div className="date-popover-actions"><button className="secondary small-button" type="button" onClick={() => setOpen(false)}>{t.cancel}</button><button className="primary small-button" type="button" onClick={() => { onChange(draftStart, draftEnd || draftStart); setOpen(false); }}>{t.apply}</button></div></div>
-        </section>
-      </> : null}
-    </div>
-  );
+  return <div className="date-range-control">
+    <button ref={triggerRef} className="date-range-button" type="button" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(value => !value)}><span>{t.dateRange}</span><strong>{rangeLabel(startDate, endDate, t, lang)}</strong></button>
+    {open ? <>
+      <button className="picker-scrim" type="button" aria-label={lang === 'en' ? 'Close date picker' : 'ปิดตัวเลือกวันที่'} onClick={() => setOpen(false)} />
+      <section ref={dialogRef} className="date-popover" role="dialog" aria-modal="true" aria-labelledby="date-range-title">
+        <div className="preset-row"><button type="button" onClick={() => preset(today, today)}>{t.today}</button><button type="button" onClick={() => preset(offsetDate(today, -6), today)}>{t.last7}</button><button type="button" onClick={() => preset(`${today.slice(0, 7)}-01`, today)}>{t.month}</button><button type="button" onClick={() => preset('', '')}>{t.allDates}</button></div>
+        <div className="calendar-heading"><button type="button" aria-label={t.previousMonth} onClick={() => setCursorMonth(value => shiftMonth(value, -1))}>‹</button><strong id="date-range-title">{monthLabel}</strong><button type="button" aria-label={t.nextMonth} onClick={() => setCursorMonth(value => shiftMonth(value, 1))}>›</button></div>
+        <div className="calendar-grid" role="group" aria-label={monthLabel}>
+          {weekdays.map((day, index) => <span className="calendar-weekday" key={`${day}-${index}`} aria-hidden="true">{day}</span>)}
+          {calendarDays(cursorMonth).map((day, index) => day ? <button className={`${day === today ? 'today' : ''} ${day === draftStart || day === draftEnd ? 'selected' : ''} ${draftStart && draftEnd && day > draftStart && day < draftEnd ? 'in-range' : ''}`} key={day} type="button" aria-current={day === today ? 'date' : undefined} aria-label={accessibleDayLabel(day, lang)} aria-pressed={day === draftStart || day === draftEnd} onClick={() => chooseDay(day)}>{Number(day.slice(-2))}</button> : <span key={`blank-${index}`} aria-hidden="true" />)}
+        </div>
+        <div className="date-popover-footer"><span aria-live="polite">{rangeLabel(draftStart, draftEnd, t, lang)}</span><div className="date-popover-actions"><button className="secondary small-button" type="button" onClick={() => setOpen(false)}>{t.cancel}</button><button className="primary small-button" type="button" onClick={() => { onChange(draftStart, draftEnd || draftStart); setOpen(false); }}>{t.apply}</button></div></div>
+      </section>
+    </> : null}
+  </div>;
 }
 
 function gpsDetails(report, t, lang) {
@@ -264,9 +223,8 @@ export default function FullReportDashboard({ lang }) {
   const [pageInfo, setPageInfo] = useState({ page: 1, pageSize: reportPageSize, total: 0, totalPages: 1, start: 0, end: 0 });
   const [options, setOptions] = useState({ vehicles: [], devices: [], drivers: [], statuses: [], gpsStates: [] });
   const [search, setSearch] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [printDate, setPrintDate] = useState(() => reportDateKey(new Date().toISOString()));
+  const [startDate, setStartDate] = useState(() => reportDateKey(new Date().toISOString()));
+  const [endDate, setEndDate] = useState(() => reportDateKey(new Date().toISOString()));
   const [vehicle, setVehicle] = useState('');
   const [device, setDevice] = useState('');
   const [driver, setDriver] = useState('');
@@ -282,7 +240,6 @@ export default function FullReportDashboard({ lang }) {
   const [selectedReport, setSelectedReport] = useState(null);
   const reportRequestSequence = useRef(0);
   const facetsLoaded = useRef(false);
-  const printDateInputRef = useRef(null);
   const deferredSearch = useDeferredValue(search);
   const sortKey = sorts[0]?.key || 'startTime';
   const sortDirection = sorts[0]?.direction || 'desc';
@@ -356,10 +313,9 @@ export default function FullReportDashboard({ lang }) {
     });
   }
   function clearFilters() {
-    setSearch(''); setStartDate(''); setEndDate(''); setVehicle(''); setDevice(''); setDriver(''); setMode(''); setStatus(''); setGps(''); setSorts([{ key: 'startTime', direction: 'desc' }]);
+    setSearch(''); setVehicle(''); setDevice(''); setDriver(''); setMode(''); setStatus(''); setGps(''); setSorts([{ key: 'startTime', direction: 'desc' }]);
   }
   function printReports() {
-    const selectedPrintDate = printDateInputRef.current?.value || printDate;
     if (!selectedPrintDate) return;
     const params = new URLSearchParams({ date: selectedPrintDate, lang });
     if (vehicle) params.set('vehicle', vehicle);
@@ -370,13 +326,14 @@ export default function FullReportDashboard({ lang }) {
     window.location.assign(`/print/portrait?${params}`);
   }
 
-  const hasFilters = Boolean(search || startDate || endDate || vehicle || device || driver || mode || status || gps || sorts.length > 1 || sortKey !== 'startTime' || sortDirection !== 'desc');
+  const hasFilters = Boolean(search || vehicle || device || driver || mode || status || gps || sorts.length > 1 || sortKey !== 'startTime' || sortDirection !== 'desc');
   const activeVehicles = Number(summary.activeVehicles || 0);
   const gpsMatchedJobs = Number(summary.gpsMatched || 0);
   const gpsNeedsAttention = Number(summary.gpsNeedsAttention || 0);
   const totalReports = Number(summary.total || 0);
   const fleetSize = Number(summary.fleetSize || 0);
   const hasAnyReportData = Object.values(options).some(values => Array.isArray(values) && values.length > 0);
+  const selectedPrintDate = endDate || startDate || reportDateKey(reports[0]?.startTime) || reportDateKey(new Date().toISOString());
   const columns = [
     ['vehicleNumber', t.vehicle], ['driverName', t.driver], ['mode', t.mode], ['startTime', t.date], ['startClock', t.start], ['endTime', t.end], ['duration', t.duration], ['topSpeed', t.topSpeed], ['gpsCoverage', g.gpsCoverage], ['gpsState', g.lastPosition], ['status', t.status],
   ];
@@ -390,9 +347,8 @@ export default function FullReportDashboard({ lang }) {
         <div><div className="eyebrow">{t.eyebrowToday} · {formatReportDate(reportDateKey(new Date().toISOString()), lang)}</div><h1>{t.title}</h1><p>{g.subtitle}</p></div>
         <div className="header-actions">
           <DateRangePicker lang={lang} t={t} startDate={startDate} endDate={endDate} onChange={(start, end) => { setStartDate(start); setEndDate(end); }} />
-          <label className="date-input report-date-input"><span>{t.reportDate}</span><input ref={printDateInputRef} type="date" value={printDate} onChange={event => setPrintDate(event.target.value)} /></label>
           <button className="secondary" type="button" onClick={() => void loadReports()} disabled={loading}>{loading ? t.refreshing : t.refresh}</button>
-          <button className="primary" type="button" onClick={printReports} disabled={!printDate || (!totalReports && !hasAnyReportData)}>{t.print}</button>
+          <button className="primary" type="button" onClick={printReports} disabled={!selectedPrintDate || (!totalReports && !hasAnyReportData)}>{t.print}</button>
         </div>
       </div>
 
@@ -403,7 +359,7 @@ export default function FullReportDashboard({ lang }) {
         <div><span>{g.needsAttention}</span><strong className="danger-text">{gpsNeedsAttention}</strong><small>{g.needsAttentionSub}</small></div>
       </div>
 
-      <TimelineDashboard lang={lang} embedded />
+      <TimelineDashboard lang={lang} embedded selectedStartDate={startDate} selectedEndDate={endDate} />
 
       <section className="panel report-panel" aria-busy={loading || search !== deferredSearch}>
         <div className="section-heading report-section-heading"><div><h2>{t.activity}</h2><p className="sort-hint">{t.sortHint}</p></div><span className="result-count" aria-live="polite">{t.showing} {pageInfo.start}–{pageInfo.end} {t.of} {pageInfo.total}</span></div>

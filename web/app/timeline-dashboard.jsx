@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { formatReportDuration, reportDateKey } from '../lib/report-view';
+import { formatReportDate, formatReportDuration, reportDateKey } from '../lib/report-view';
 import { reportableOperations } from '../lib/actions';
 import { paginateReports } from '../lib/report-pagination';
+import { reportModeColor } from '../lib/report-mode-meta';
 import { localizedDashboardReportError } from '../lib/dashboard-errors';
 import { timelineReportMatchesFilters } from '../lib/timeline-filter';
 import { TIMELINE_AXIS_LABELS, timelinePosition } from '../lib/timeline-position';
@@ -17,16 +18,9 @@ const pageSize = 20;
 const timelineModes = reportableOperations.map(action => action[2]);
 const modeCopy = Object.fromEntries(reportableOperations.map(action => [action[2], { en: action[2], th: action[1] }]));
 const text = {
-  en: { eyebrow: 'DAILY OPERATIONS', title: 'Per-vehicle timeline', subtitle: 'See real saved jobs and GPS speed in sequence for each vehicle.', date: 'Date', search: 'Search vehicle or driver', printTimeline: 'Print timeline', filterJobs: 'Filter jobs', jobTypes: 'Job types', selectAll: 'Select all', clearAll: 'Clear', resetFilters: 'Reset filters', noneSelected: 'None', load: 'Load', unload: 'Unload', stop: 'Stop / wait', other: 'Break / other', speed: 'Speed (km/h)', gaps: 'Gaps are driving or no recorded job', vehicleDriver: 'Vehicle / driver', loading: 'Loading timeline…', failed: 'Could not load reports.', empty: 'No saved jobs match this date and search.', emptyCompleted: 'No completed jobs match this date and search.', emptyCancelled: 'No cancelled jobs match this date and search.', emptyNoStatus: 'Select at least one status to display timeline jobs.', emptyNoMode: 'Select at least one job type to display timeline jobs.', emptyTitle: 'No timeline activity yet', emptyBody: 'Completed and cancelled tablet jobs will be arranged here by vehicle and time.', manageFleet: 'Manage fleet', showing: 'Showing', of: 'of', page: 'Page', previous: 'Previous', next: 'Next', cancelled: 'Cancelled', completed: 'Completed', activity: 'Activity', status: 'Status', start: 'Start', end: 'End', duration: 'Duration', vehicle: 'Vehicle', driver: 'Driver', device: 'Device', gps: 'GPS points', location: 'Location', reportId: 'Report ID', unknown: 'Not available' },
-  th: { eyebrow: 'การปฏิบัติงานรายวัน', title: 'ไทม์ไลน์รายรถ', subtitle: 'ดูงานที่บันทึกและความเร็ว GPS ตามลำดับเวลาของรถแต่ละคัน', date: 'วันที่', search: 'ค้นหารถหรือคนขับ', printTimeline: 'พิมพ์ไทม์ไลน์', filterJobs: 'กรองงาน', jobTypes: 'ประเภทงาน', selectAll: 'เลือกทั้งหมด', clearAll: 'ล้าง', resetFilters: 'รีเซ็ตตัวกรอง', noneSelected: 'ไม่ได้เลือก', load: 'ขึ้นสินค้า', unload: 'ลงสินค้า', stop: 'หยุด / รอ', other: 'พัก / อื่น ๆ', speed: 'ความเร็ว (กม./ชม.)', gaps: 'ช่องว่างคือช่วงขับรถหรือไม่มีงานที่บันทึก', vehicleDriver: 'รถ / คนขับ', loading: 'กำลังโหลดไทม์ไลน์…', failed: 'ไม่สามารถโหลดรายงานได้', empty: 'ไม่พบงานที่บันทึกตรงกับวันที่และคำค้นหา', emptyCompleted: 'ไม่พบงานที่เสร็จตรงกับวันที่และคำค้นหา', emptyCancelled: 'ไม่พบงานที่ยกเลิกตรงกับวันที่และคำค้นหา', emptyNoStatus: 'เลือกอย่างน้อยหนึ่งสถานะเพื่อแสดงงานในไทม์ไลน์', emptyNoMode: 'เลือกอย่างน้อยหนึ่งประเภทงานเพื่อแสดงงานในไทม์ไลน์', emptyTitle: 'ยังไม่มีกิจกรรมในไทม์ไลน์', emptyBody: 'งานที่จบและงานที่ยกเลิกจากแท็บเล็ตจะแสดงตามรถและเวลาในหน้านี้', manageFleet: 'จัดการรถ', showing: 'แสดง', of: 'จาก', page: 'หน้า', previous: 'ก่อนหน้า', next: 'ถัดไป', cancelled: 'ยกเลิก', completed: 'เสร็จสิ้น', activity: 'กิจกรรม', status: 'สถานะ', start: 'เริ่ม', end: 'จบ', duration: 'ระยะเวลา', vehicle: 'รถ', driver: 'พขร.', device: 'อุปกรณ์', gps: 'จุด GPS', location: 'ตำแหน่ง', reportId: 'รหัสรายงาน', unknown: 'ไม่มีข้อมูล' },
+  en: { eyebrow: 'DAILY OPERATIONS', title: 'Per-vehicle timeline', subtitle: 'See real saved jobs and GPS speed in sequence for each vehicle.', date: 'Date', search: 'Search vehicle or driver', printTimeline: 'Print timeline', filterJobs: 'Filter jobs', jobTypes: 'Job types', selectAll: 'Select all', clearAll: 'Clear', resetFilters: 'Reset filters', noneSelected: 'None', load: 'Load', unload: 'Unload', stop: 'Stop / wait', other: 'Break / other', speed: 'Speed (km/h)', topSpeed: 'Top speed', gaps: 'Gaps are driving or no recorded job', vehicleDriver: 'Vehicle / driver', vehicleDriverDate: 'Vehicle / driver / date', loading: 'Loading timeline…', failed: 'Could not load reports.', empty: 'No saved jobs match this date range and search.', emptyCompleted: 'No completed jobs match this date range and search.', emptyCancelled: 'No cancelled jobs match this date range and search.', emptyNoStatus: 'Select at least one status to display timeline jobs.', emptyNoMode: 'Select at least one job type to display timeline jobs.', emptyTitle: 'No timeline activity yet', emptyBody: 'Completed and cancelled tablet jobs will be arranged here by vehicle, date, and time.', manageFleet: 'Manage fleet', showing: 'Showing', of: 'of', page: 'Page', previous: 'Previous', next: 'Next', cancelled: 'Cancelled', completed: 'Completed', activity: 'Activity', status: 'Status', start: 'Start', end: 'End', duration: 'Duration', vehicle: 'Vehicle', driver: 'Driver', device: 'Device', gps: 'GPS points', location: 'Location', reportId: 'Report ID', unknown: 'Not available' },
+  th: { eyebrow: 'การปฏิบัติงานรายวัน', title: 'ไทม์ไลน์รายรถ', subtitle: 'ดูงานที่บันทึกและความเร็ว GPS ตามลำดับเวลาของรถแต่ละคัน', date: 'วันที่', search: 'ค้นหารถหรือคนขับ', printTimeline: 'พิมพ์ไทม์ไลน์', filterJobs: 'กรองงาน', jobTypes: 'ประเภทงาน', selectAll: 'เลือกทั้งหมด', clearAll: 'ล้าง', resetFilters: 'รีเซ็ตตัวกรอง', noneSelected: 'ไม่ได้เลือก', load: 'ขึ้นสินค้า', unload: 'ลงสินค้า', stop: 'หยุด / รอ', other: 'พัก / อื่น ๆ', speed: 'ความเร็ว (กม./ชม.)', topSpeed: 'ความเร็วสูงสุด', gaps: 'ช่องว่างคือช่วงขับรถหรือไม่มีงานที่บันทึก', vehicleDriver: 'รถ / คนขับ', vehicleDriverDate: 'รถ / คนขับ / วันที่', loading: 'กำลังโหลดไทม์ไลน์…', failed: 'ไม่สามารถโหลดรายงานได้', empty: 'ไม่พบงานที่บันทึกตรงกับช่วงวันที่และคำค้นหา', emptyCompleted: 'ไม่พบงานที่เสร็จตรงกับช่วงวันที่และคำค้นหา', emptyCancelled: 'ไม่พบงานที่ยกเลิกตรงกับช่วงวันที่และคำค้นหา', emptyNoStatus: 'เลือกอย่างน้อยหนึ่งสถานะเพื่อแสดงงานในไทม์ไลน์', emptyNoMode: 'เลือกอย่างน้อยหนึ่งประเภทงานเพื่อแสดงงานในไทม์ไลน์', emptyTitle: 'ยังไม่มีกิจกรรมในไทม์ไลน์', emptyBody: 'งานที่จบและงานที่ยกเลิกจากแท็บเล็ตจะแสดงตามรถ วันที่ และเวลา', manageFleet: 'จัดการรถ', showing: 'แสดง', of: 'จาก', page: 'หน้า', previous: 'ก่อนหน้า', next: 'ถัดไป', cancelled: 'ยกเลิก', completed: 'เสร็จสิ้น', activity: 'กิจกรรม', status: 'สถานะ', start: 'เริ่ม', end: 'จบ', duration: 'ระยะเวลา', vehicle: 'รถ', driver: 'พขร.', device: 'อุปกรณ์', gps: 'จุด GPS', location: 'ตำแหน่ง', reportId: 'รหัสรายงาน', unknown: 'ไม่มีข้อมูล' },
 };
-
-function modeColor(mode) {
-  if (mode === 'Load') return '#D5283D';
-  if (mode === 'Unload') return '#203854';
-  if (mode === 'Stop vehicle') return '#DFA036';
-  return '#68727D';
-}
 
 function formatTimelineDateTime(value, lang) {
   const date = value ? new Date(value) : null;
@@ -39,6 +33,12 @@ function timelineLocation(report, fallback) {
   const latitude = Number(report.lastDeviceLatitude ?? report.latitude);
   const longitude = Number(report.lastDeviceLongitude ?? report.longitude);
   return Number.isFinite(latitude) && Number.isFinite(longitude) ? `${latitude.toFixed(5)}, ${longitude.toFixed(5)}` : fallback;
+}
+
+function timelineSpeed(report, lang, fallback) {
+  const value = Number(report.topSpeed ?? report.maxSpeed ?? report.maximumSpeed);
+  if (!Number.isFinite(value)) return fallback;
+  return `${Number(value.toFixed(1)).toLocaleString(lang === 'th' ? 'th-TH' : 'en-GB')} ${lang === 'th' ? 'กม./ชม.' : 'km/h'}`;
 }
 
 function timelineSegment(report, lang, labels) {
@@ -56,6 +56,7 @@ function timelineSegment(report, lang, labels) {
     driver: report.driverName || labels.unknown,
     device: report.deviceId || labels.unknown,
     gps: String(Number(report.deviceGpsSamples) || 0),
+    speed: timelineSpeed(report, lang, labels.unknown),
     location: timelineLocation(report, labels.unknown),
     reportId: report.id || labels.unknown,
   };
@@ -64,12 +65,12 @@ function timelineSegment(report, lang, labels) {
     tooltipId: `timeline-tooltip-${String(report.id || `${report.vehicleNumber}-${report.startTime}`).replace(/[^a-zA-Z0-9_-]/g, '-')}`,
     title: `${modeLabel}${cancelled ? ` · ${labels.cancelled}` : ''}`,
     detail,
-    accessibleLabel: `${labels.activity}: ${detail.activity}. ${labels.status}: ${detail.status}. ${labels.start}: ${detail.start}. ${labels.end}: ${detail.end}. ${labels.duration}: ${detail.duration}. ${labels.vehicle}: ${detail.vehicle}. ${labels.driver}: ${detail.driver}. ${labels.device}: ${detail.device}. ${labels.gps}: ${detail.gps}. ${labels.location}: ${detail.location}. ${labels.reportId}: ${detail.reportId}.`,
-    style: { left: `${position.left}%`, width: `${Math.max(0.5, position.width)}%`, backgroundColor: modeColor(report.mode), opacity: cancelled ? 0.42 : 1 },
+    accessibleLabel: `${labels.activity}: ${detail.activity}. ${labels.status}: ${detail.status}. ${labels.start}: ${detail.start}. ${labels.end}: ${detail.end}. ${labels.duration}: ${detail.duration}. ${labels.topSpeed}: ${detail.speed}. ${labels.vehicle}: ${detail.vehicle}. ${labels.driver}: ${detail.driver}. ${labels.device}: ${detail.device}. ${labels.gps}: ${detail.gps}. ${labels.location}: ${detail.location}. ${labels.reportId}: ${detail.reportId}.`,
+    style: { left: `${position.left}%`, width: `${Math.max(0.5, position.width)}%`, backgroundColor: reportModeColor(report.mode), opacity: cancelled ? 0.42 : 1 },
   };
 }
 
-export default function TimelineDashboard({ lang, embedded = false, sourceReports = null, sourceLoading = false, sourceError = '' }) {
+export default function TimelineDashboard({ lang, embedded = false, sourceReports = null, sourceLoading = false, sourceError = '', selectedStartDate = '', selectedEndDate = '' }) {
   const t = text[lang];
   const [reports, setReports] = useState([]);
   const [date, setDate] = useState('');
@@ -81,38 +82,43 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tooltip, setTooltip] = useState(null);
-  const requestInFlight = useRef(false);
+  const timelineRequestSequence = useRef(0);
   const initializedDate = useRef(false);
   const usesSourceReports = Array.isArray(sourceReports);
+  const effectiveStartDate = embedded ? selectedStartDate : date;
+  const effectiveEndDate = embedded ? selectedEndDate : date;
+  const showRowDate = !effectiveStartDate || effectiveStartDate !== effectiveEndDate;
   const timelineReports = usesSourceReports ? sourceReports : reports;
   const timelineLoading = usesSourceReports ? sourceLoading : loading;
   const timelineError = usesSourceReports ? sourceError : error;
 
   const loadReports = useCallback(async ({ silent = false } = {}) => {
     if (usesSourceReports) return;
-    if (requestInFlight.current) return;
-    requestInFlight.current = true;
+    const requestId = ++timelineRequestSequence.current;
     if (!silent) setLoading(true);
     setError('');
     try {
-      let targetDate = date;
-      if (!targetDate) {
+      let targetStartDate = effectiveStartDate;
+      let targetEndDate = effectiveEndDate;
+      if (!embedded && !targetStartDate) {
         const latest = await adminFetch('/api/reports?page=1&pageSize=1');
-        targetDate = reportDateKey(latest.reports?.[0]?.startTime) || reportDateKey(new Date().toISOString());
+        targetStartDate = reportDateKey(latest.reports?.[0]?.startTime) || reportDateKey(new Date().toISOString());
+        targetEndDate = targetStartDate;
       }
-      const nextReports = await adminFetchAllReports({ startDate: targetDate, endDate: targetDate });
+      const nextReports = await adminFetchAllReports({ startDate: targetStartDate, endDate: targetEndDate });
+      if (requestId !== timelineRequestSequence.current) return;
       setReports(nextReports);
-      if (!initializedDate.current) {
-        setDate(targetDate);
+      if (!initializedDate.current && !embedded) {
+        setDate(targetStartDate);
         initializedDate.current = true;
       }
     } catch (errorValue) {
+      if (requestId !== timelineRequestSequence.current) return;
       setError(localizedDashboardReportError(errorValue instanceof Error ? errorValue.message : '', lang, t.failed));
     } finally {
-      requestInFlight.current = false;
-      if (!silent) setLoading(false);
+      if (requestId === timelineRequestSequence.current && !silent) setLoading(false);
     }
-  }, [date, lang, t.failed, usesSourceReports]);
+  }, [effectiveEndDate, effectiveStartDate, embedded, lang, t.failed, usesSourceReports]);
 
   useEffect(() => {
     if (usesSourceReports) return undefined;
@@ -124,31 +130,33 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
   }, [loadReports, usesSourceReports]);
 
   useEffect(() => {
-    if (!usesSourceReports) return;
+    if (!usesSourceReports || embedded) return;
     const availableDates = [...new Set(sourceReports.map(report => reportDateKey(report.startTime)).filter(Boolean))].sort().reverse();
     if (!availableDates.length || availableDates.includes(date)) return;
     initializedDate.current = true;
     setDate(availableDates[0]);
-  }, [date, sourceReports, usesSourceReports]);
+  }, [date, embedded, sourceReports, usesSourceReports]);
 
   const rows = useMemo(() => {
     const query = search.trim().toLowerCase();
     const grouped = new Map();
     const activeFilters = { showCompleted, showCancelled, selectedModes };
     for (const report of timelineReports) {
-      if (date && reportDateKey(report.startTime) !== date) continue;
+      const day = reportDateKey(report.startTime);
+      if (effectiveStartDate && day < effectiveStartDate) continue;
+      if (effectiveEndDate && day > effectiveEndDate) continue;
       if (!timelineReportMatchesFilters(report, activeFilters)) continue;
       const searchable = `${report.vehicleNumber || ''} ${report.driverName || ''} ${report.driverId || ''}`.toLowerCase();
       if (query && !searchable.includes(query)) continue;
-      const key = `${report.vehicleNumber || '—'}\u0000${report.driverName || '—'}`;
-      if (!grouped.has(key)) grouped.set(key, { vehicle: report.vehicleNumber || '—', driver: report.driverName || '—', reports: [] });
+      const key = `${day}\u0000${report.vehicleNumber || '—'}\u0000${report.driverName || '—'}`;
+      if (!grouped.has(key)) grouped.set(key, { date: day, vehicle: report.vehicleNumber || '—', driver: report.driverName || '—', reports: [] });
       grouped.get(key).reports.push(report);
     }
     return [...grouped.values()].map(row => ({
       ...row,
       segments: row.reports.map(report => timelineSegment(report, lang, t)).filter(Boolean),
-    })).filter(row => row.segments.length).sort((left, right) => left.vehicle.localeCompare(right.vehicle, undefined, { numeric: true }));
-  }, [timelineReports, date, search, showCompleted, showCancelled, selectedModes, lang, t]);
+    })).filter(row => row.segments.length).sort((left, right) => right.date.localeCompare(left.date) || left.vehicle.localeCompare(right.vehicle, undefined, { numeric: true }));
+  }, [timelineReports, effectiveStartDate, effectiveEndDate, search, showCompleted, showCancelled, selectedModes, lang, t]);
   const timelinePage = useMemo(() => paginateReports(rows, page, pageSize), [rows, page]);
   const speedReports = useMemo(() => timelinePage.items.flatMap(row => row.reports), [timelinePage.items]);
   const speedSeries = useReportSpeedSeries(speedReports);
@@ -162,7 +170,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
         : showCompleted && !showCancelled
           ? t.emptyCompleted
           : t.empty;
-  useEffect(() => { setPage(1); setTooltip(null); }, [date, search, showCompleted, showCancelled, selectedModes]);
+  useEffect(() => { setPage(1); setTooltip(null); }, [effectiveStartDate, effectiveEndDate, search, showCompleted, showCancelled, selectedModes]);
   useEffect(() => {
     if (!tooltip) return undefined;
     const close = event => { if (event.type !== 'keydown' || event.key === 'Escape') setTooltip(null); };
@@ -185,8 +193,10 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
   }
 
   function printTimeline() {
-    if (!date) return;
-    const params = new URLSearchParams({ view: 'timeline', lang, startDate: date, endDate: date });
+    const printStartDate = effectiveStartDate || effectiveEndDate;
+    const printEndDate = effectiveEndDate || effectiveStartDate;
+    if (!printStartDate) return;
+    const params = new URLSearchParams({ view: 'timeline', lang, startDate: printStartDate, endDate: printEndDate });
     if (search.trim()) params.set('search', search.trim());
     params.set('timelineFilter', '1');
     params.set('timelineShowCompleted', showCompleted ? '1' : '0');
@@ -218,7 +228,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
     <TimelineWorkspace className={embedded ? 'timeline-embedded-workspace' : 'main timeline-workspace'} id={embedded ? undefined : 'main-content'} tabIndex={embedded ? undefined : -1} aria-label={embedded ? t.title : undefined}>
       <div className={embedded ? 'section-heading timeline-embedded-heading' : 'page-header'}>
         <div>{embedded ? null : <div className="eyebrow">{t.eyebrow}</div>}<TimelineHeading>{t.title}</TimelineHeading><p>{t.subtitle}</p></div>
-        <div className="timeline-header-actions"><label className="date-input"><span>{t.date}</span><input type="date" value={date} onChange={event => { initializedDate.current = true; setDate(event.target.value); }} /></label>{embedded ? null : <button className="primary" type="button" disabled={!date || timelineLoading} onClick={printTimeline}>{t.printTimeline}</button>}</div>
+        {embedded ? null : <div className="timeline-header-actions"><label className="date-input"><span>{t.date}</span><input type="date" value={date} onChange={event => { initializedDate.current = true; setDate(event.target.value); }} /></label><button className="primary" type="button" disabled={!date || timelineLoading} onClick={printTimeline}>{t.printTimeline}</button></div>}
       </div>
       <section className="panel timeline-panel" aria-busy={timelineLoading}>
         <div className="timeline-toolbar">
@@ -241,12 +251,12 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
             </details>
           </div>
           <div className="timeline-legend" role="group" aria-label={lang === 'en' ? 'Timeline legend' : 'คำอธิบายสีไทม์ไลน์'}>
-            <span><i className="legend-load" aria-hidden="true" />{t.load}</span><span><i className="legend-unload" aria-hidden="true" />{t.unload}</span><span><i className="legend-stop" aria-hidden="true" />{t.stop}</span><span><i className="legend-other" aria-hidden="true" />{t.other}</span><span><i className="legend-speed" aria-hidden="true" />{t.speed}</span><small>{t.gaps}</small>
+            {reportableOperations.map(([number, thai, english]) => <span key={number}><i style={{ backgroundColor: reportModeColor(english) }} aria-hidden="true" /><b className="timeline-mode-number">{number}</b>{lang === 'th' ? thai : english}</span>)}<span><i className="legend-speed" aria-hidden="true" />{t.speed}</span><small>{t.gaps}</small>
           </div>
         </div>
         <div className="timeline-scroll" id="timeline-results" tabIndex={0} aria-label={lang === 'en' ? 'Scrollable vehicle activity timeline' : 'ไทม์ไลน์กิจกรรมรถ เลื่อนได้'}>
-          <div className="timeline-grid timeline-axis"><span>{t.vehicleDriver}</span><div>{TIMELINE_AXIS_LABELS.map(label => <span key={label}>{label}</span>)}</div></div>
-          {timelinePage.items.map(row => <div className="timeline-grid timeline-row" key={`${row.vehicle}-${row.driver}`} role="group" aria-label={`${t.vehicle}: ${row.vehicle}. ${t.driver}: ${row.driver}`}><div><strong>{row.vehicle}</strong><small>{row.driver}</small></div><div className="timeline-track timeline-speed-track">{row.segments.map(segment => <button
+          <div className="timeline-grid timeline-axis"><span>{showRowDate ? t.vehicleDriverDate : t.vehicleDriver}</span><div>{TIMELINE_AXIS_LABELS.map(label => <span key={label}>{label}</span>)}</div></div>
+          {timelinePage.items.map(row => <div className="timeline-grid timeline-row" key={`${row.date}-${row.vehicle}-${row.driver}`} role="group" aria-label={`${t.vehicle}: ${row.vehicle}. ${t.driver}: ${row.driver}. ${t.date}: ${formatReportDate(row.date, lang)}.`}><div><strong>{row.vehicle}</strong><small>{row.driver}</small>{showRowDate ? <small className="timeline-row-date">{formatReportDate(row.date, lang)}</small> : null}</div><div className="timeline-track timeline-speed-track">{row.segments.map(segment => <button
             key={segment.id}
             type="button"
             className="timeline-segment"
@@ -265,7 +275,8 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
           <div className="timeline-tooltip-heading"><strong>{tooltip.segment.detail.activity}</strong><span className={`status-badge status-${tooltip.segment.detail.status === t.cancelled ? 'cancelled' : 'completed'}`}>{tooltip.segment.detail.status}</span></div>
           <dl>
             <div><dt>{t.start}</dt><dd>{tooltip.segment.detail.start}</dd></div><div><dt>{t.end}</dt><dd>{tooltip.segment.detail.end}</dd></div>
-            <div><dt>{t.duration}</dt><dd>{tooltip.segment.detail.duration}</dd></div><div><dt>{t.vehicle}</dt><dd>{tooltip.segment.detail.vehicle}</dd></div>
+            <div><dt>{t.duration}</dt><dd>{tooltip.segment.detail.duration}</dd></div><div><dt>{t.topSpeed}</dt><dd>{tooltip.segment.detail.speed}</dd></div>
+            <div><dt>{t.vehicle}</dt><dd>{tooltip.segment.detail.vehicle}</dd></div>
             <div><dt>{t.driver}</dt><dd>{tooltip.segment.detail.driver}</dd></div><div><dt>{t.device}</dt><dd>{tooltip.segment.detail.device}</dd></div>
             <div><dt>{t.gps}</dt><dd>{tooltip.segment.detail.gps}</dd></div><div><dt>{t.location}</dt><dd>{tooltip.segment.detail.location}</dd></div>
             <div className="tooltip-report-id"><dt>{t.reportId}</dt><dd>{tooltip.segment.detail.reportId}</dd></div>
