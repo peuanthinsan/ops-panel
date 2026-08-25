@@ -356,6 +356,15 @@ export default function FullReportDashboard({ lang }) {
     setSearch(''); setStartDate(''); setEndDate(''); setVehicle(''); setDevice(''); setDriver(''); setMode(''); setStatus(''); setGps(''); setSorts([{ key: 'startTime', direction: 'desc' }]);
   }
   function printReports() {
+    const filteredVehicles = [...new Set(visibleReports.map(report => report.vehicleNumber).filter(Boolean))];
+    const portraitVehicle = vehicle || (filteredVehicles.length === 1 ? filteredVehicles[0] : '');
+    const portraitDate = startDate && startDate === endDate
+      ? startDate
+      : (portraitVehicle && visibleReports.length ? reportDateKey(visibleReports[0].startTime) : '');
+    if (portraitVehicle && portraitDate) {
+      window.location.assign(`/print/portrait?vehicle=${encodeURIComponent(portraitVehicle)}&date=${encodeURIComponent(portraitDate)}&lang=${lang}`);
+      return;
+    }
     const params = appendReportFilters(new URLSearchParams({ lang }), {
       search: deferredSearch,
       startDate,
