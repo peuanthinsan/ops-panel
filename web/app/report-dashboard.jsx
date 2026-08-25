@@ -111,6 +111,10 @@ function calendarDays(value) {
 
 function DateRangePicker({ lang, t, startDate, endDate, onChange }) {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef(null);
+  const dialogRef = useRef(null);
+  const previousFocusRef = useRef(null);
+  const wasOpenRef = useRef(false);
   const [draftStart, setDraftStart] = useState(startDate);
   const [draftEnd, setDraftEnd] = useState(endDate);
   const today = reportDateKey(new Date().toISOString());
@@ -120,11 +124,52 @@ function DateRangePicker({ lang, t, startDate, endDate, onChange }) {
     .format(new Date(`${cursorMonth}-01T12:00:00Z`));
   useEffect(() => {
     if (open) {
+      previousFocusRef.current = document.activeElement;
       setDraftStart(startDate);
       setDraftEnd(endDate);
       setCursorMonth(monthKey(startDate || endDate || today));
+      const frame = window.requestAnimationFrame(() => dialogRef.current?.querySelector('button:not([disabled])')?.focus());
+      return () => window.cancelAnimationFrame(frame);
     }
+    return undefined;
   }, [open, startDate, endDate, today]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = () => setOpen(false);
+    const onKeyDown = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        close();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const controls = [...(dialogRef.current?.querySelectorAll('button:not([disabled])') || [])];
+      if (!controls.length) return;
+      const first = controls[0];
+      const last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) return undefined;
+    if (!wasOpenRef.current) return undefined;
+    wasOpenRef.current = false;
+    const frame = window.requestAnimationFrame(() => {
+      const target = previousFocusRef.current instanceof HTMLElement ? previousFocusRef.current : triggerRef.current;
+      target?.focus();
+      previousFocusRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) wasOpenRef.current = true;
+  }, [open]);
 
   function preset(start, end) {
     setDraftStart(start);
@@ -149,10 +194,10 @@ function DateRangePicker({ lang, t, startDate, endDate, onChange }) {
 
   return (
     <div className="date-range-control">
-      <button className="date-range-button" type="button" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(value => !value)}><span>{t.dateRange}</span><strong>{rangeLabel(startDate, endDate, t, lang)}</strong></button>
+      <button ref={triggerRef} className="date-range-button" type="button" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(value => !value)}><span>{t.dateRange}</span><strong>{rangeLabel(startDate, endDate, t, lang)}</strong></button>
       {open ? <>
         <button className="picker-scrim" type="button" aria-label={lang === 'en' ? 'Close date picker' : 'ปิดตัวเลือกวันที่'} onClick={() => setOpen(false)} />
-        <section className="date-popover" role="dialog" aria-label={t.dateRange}>
+        <section ref={dialogRef} className="date-popover" role="dialog" aria-modal="true" aria-labelledby="date-range-title">
           <div className="preset-row">
             <button type="button" onClick={() => preset(today, today)}>{t.today}</button>
             <button type="button" onClick={() => preset(offsetDate(today, -6), today)}>{t.last7}</button>
@@ -161,7 +206,7 @@ function DateRangePicker({ lang, t, startDate, endDate, onChange }) {
           </div>
           <div className="calendar-heading">
             <button type="button" aria-label={t.previousMonth} onClick={() => setCursorMonth(value => shiftMonth(value, -1))}>‹</button>
-            <strong>{monthLabel}</strong>
+            <strong id="date-range-title">{monthLabel}</strong>
             <button type="button" aria-label={t.nextMonth} onClick={() => setCursorMonth(value => shiftMonth(value, 1))}>›</button>
           </div>
           <div className="calendar-grid" role="grid" aria-label={monthLabel}>
