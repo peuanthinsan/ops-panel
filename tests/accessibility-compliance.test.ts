@@ -35,6 +35,7 @@ test('repeated dashboard actions identify their report or tablet to screen reade
   assert.match(reports, /aria-label=\{`\$\{t\.retry\}: \$\{report\.id\}`\}/);
   assert.match(reports, /aria-label=\{`\$\{g\.viewGps\}: \$\{report\.id\}`\}/);
   assert.match(reports, /aria-label=\{`\$\{t\.printVehicle\}: \$\{report\.vehicleNumber\}`\}/);
+  assert.match(reports, /aria-describedby="daily-print-vehicle-message"/);
   assert.match(fleet, /aria-label=\{`\$\{t\.resetAccess\}: \$\{binding\.deviceId\}`\}/);
   assert.match(fleet, /resetAccess: 'Repair tablet connection'/);
   assert.match(fleet, /vehicle binding, device ID, and saved jobs stay unchanged/);

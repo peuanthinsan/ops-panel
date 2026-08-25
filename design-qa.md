@@ -30,10 +30,13 @@
 - The Sort by dropdown was removed. Clicking Vehicle sorted both Job List rows and timeline groups ascending, then descending; Shift-click still supports up to three table-column sorts.
 - GPS coverage and top speed are sortable table columns, and the production report query now returns top speed for display and ordering.
 - Multi-day timeline results are grouped by date as well as vehicle and driver, so work from different days is never overlaid in one row.
-- Pressing Print daily report opened only the range end day at `/print/portrait?date=2026-08-25&lang=en`.
+- Print daily report is available only when exactly one vehicle is selected and opens the range end day with that vehicle in the URL.
 - Changing the date inside the print toolbar and pressing View date updated only the daily-report route.
-- The print toolbar preserves a vehicle constraint only when the user explicitly opened a vehicle report; a fleet-level daily report does not gain an accidental vehicle filter while changing dates.
+- The print toolbar always preserves the required vehicle constraint when changing dates; the daily report never falls back to an arbitrary fleet vehicle.
 - A Ford T daily report rendered all 19 jobs, 75.1 km, two alerts, and the speed graph derived from twelve GPS samples.
+- Daily print rows use the same `HH:MM:SS` duration calculation and stored-duration fallback as the dashboard; sub-minute jobs no longer collapse to `00:00`.
+- Print start/end values, shift times, alert times, KPI durations, print timestamps, and timeline tick labels use `HH:MM:SS`.
+- When GPS exists without a place name, print rows show the available device or FMS coordinates instead of “Location unavailable.”
 - The Timeline and Job List remain on the same Reports page.
 - The Timeline speed graph is drawn over the same time scale as the colored job segments, with a separate path for each saved job so unrecorded gaps are not falsely connected.
 - Every GPS sample is drawn as a visible point on the speed line; dashboard points expose the exact time and speed in a pointer, keyboard, or touch popup.
@@ -83,12 +86,20 @@
 26. Fix: sorting now lives in the table headers, including GPS and top speed, and the embedded Timeline consumes the same ordered query.
 27. P2: exposing sortable columns at normal desktop widths initially compressed the right side of the table.
 28. Fix: the table now uses a bounded horizontal layout with explicit location/action widths and wrapped actions, while mobile keeps its card layout.
+29. P1: the daily print table removed seconds from durations, turning a nonzero sub-minute duration such as `00:00:08` into `00:00`; it also discarded GPS coordinates when no place name existed.
+30. Fix: print uses the shared duration formatter without truncation and falls back from place name to device coordinates, FMS coordinates, then the unavailable label.
+31. P1: Print daily report could open without a selected vehicle, causing the print view to choose the first available fleet vehicle.
+32. Fix: the toolbar requires exactly one selected vehicle, row actions carry their row vehicle and date, and the print route refuses a missing vehicle instead of falling back.
 
 ## Verification
 
 - `node --test tests/report-query.test.mjs tests/local-report-query.test.mjs tests/report-filter.test.ts tests/dashboard-accessibility.test.ts tests/report-print-pages.test.ts tests/speed-timeline.test.ts` — 25 passed.
+- `node --test tests/report-view.test.ts tests/report-print-view.test.ts tests/dashboard-accessibility.test.ts tests/report-print-pages.test.ts` — 22 passed.
+- `node --test tests/dashboard-accessibility.test.ts tests/accessibility-compliance.test.ts tests/report-print-pages.test.ts tests/report-print-view.test.ts tests/report-view.test.ts` — 28 passed.
 - `npm --prefix web run build` — passed.
 - `git diff --check` — passed.
 - Browser checks: 2048 × 1100 and 390 × 844 dashboard layouts; one shared search; all six listboxes marked multi-select; simultaneous Vehicle and Activity selections; synchronized KPI, Timeline, and Job List results; table-column ascending/descending order propagated to Timeline groups; no Sort by dropdown; no duplicate embedded Timeline search; no page-level mobile overflow; no console warnings or errors — passed.
+- Browser print check: 24 Aug Ford T rows retained seconds in start, end, and duration; shift, KPI, alert, print, and axis times rendered with seconds; no framework overlay or console warnings/errors — passed.
+- Browser vehicle-scope check: zero or multiple vehicle selections disabled Print daily report; one Ford T selection opened a Ford-only 19-job report; the 700-4172 row action opened only its one-job report; date changes preserved the vehicle query; a vehicle-less URL showed Vehicle required; mobile controls did not clip — passed.
 
 final result: passed

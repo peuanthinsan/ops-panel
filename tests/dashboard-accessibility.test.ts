@@ -41,6 +41,9 @@ test('reports expose labeled filters and sort direction to assistive technology'
   assert.match(source, /localizedDashboardReportError/);
   assert.match(source, /print: 'Print daily report'/);
   assert.match(source, /new URLSearchParams\(\{ date: selectedPrintDate, lang \}\)/);
+  assert.match(source, /if \(!selectedPrintDate \|\| vehicles\.length !== 1\) return/);
+  assert.match(source, /params\.set\('vehicle', vehicles\[0\]\)/);
+  assert.match(source, /aria-describedby="daily-print-vehicle-message"/);
   assert.match(source, /dateRange: 'Date range'/);
   assert.match(source, /function DateRangePicker/);
   assert.equal(source.match(/<DateRangePicker\b/g)?.length ?? 0, 1);
@@ -97,9 +100,14 @@ test('daily report is landscape, date-selectable, speed-enabled, and uses the of
   assert.match(speedTimeline, /className="speed-point-tooltip" role="tooltip"/);
   assert.match(print, /onDateChange=\{changeReportDate\}/);
   assert.match(print, /'View date'/);
-  assert.match(print, /if \(requestedVehicle\) params\.set\('vehicle', requestedVehicle\)/);
+  assert.match(print, /params\.set\('vehicle', vehicle\)/);
   assert.match(print, /src="\/songdee-gps-pin\.svg"/);
   assert.match(print, /startMinute=\{6 \* 60\} endMinute=\{24 \* 60\}/);
+  assert.match(print, /formatReportDuration\(report\.startTime, report\.endTime, report\.duration\)/);
+  assert.doesNotMatch(print, /\.slice\(0, 5\)|function shortTime|durationShort/);
+  assert.match(print, /second: '2-digit'/);
+  assert.match(print, /printReportLocation\(report, lang\)/);
+  assert.match(print, /axisTime\(label\)/);
   assert.match(printStyles, /@page\{size:A4 landscape;margin:0\}/);
   assert.match(printStyles, /width:297mm;height:210mm/);
 });
@@ -149,11 +157,25 @@ test('large fleet filters use bounded searchable multi-comboboxes instead of nat
   assert.match(combobox, /onClick=.*setOpen\(true\)/);
 });
 
+test('daily print requires exactly one vehicle and never falls back to a fleet vehicle', async () => {
+  const reports = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
+  const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
+  assert.match(reports, /const canPrintDailyReport = Boolean\(selectedPrintDate && vehicles\.length === 1/);
+  assert.match(reports, /disabled=\{!canPrintDailyReport\}/);
+  assert.match(reports, /printVehicleRequired: 'Select exactly one vehicle in the shared filters\.'/);
+  assert.match(reports, /const vehicle = String\(report\.vehicleNumber \|\| ''\)\.trim\(\)/);
+  assert.match(reports, /new URLSearchParams\(\{ vehicle, date, lang \}\)/);
+  assert.match(print, /const vehicle = String\(requestedVehicle \|\| ''\)\.trim\(\)/);
+  assert.match(print, /vehicle \? \{ vehicle: \[vehicle\] \} : \{\}/);
+  assert.match(print, /if \(!vehicle\) return <MissingVehiclePrintState lang=\{lang\} \/>/);
+  assert.doesNotMatch(print, /reports\.find\(report => report\.vehicleNumber\)|bindings\[0\]\?\.vehicleNumber/);
+});
+
 test('empty dashboard states guide an administrator to fleet setup without offering an empty print', async () => {
   const reports = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
   const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
   const fleet = await readFile(fileURLToPath(new NodeUrl('../web/app/fleet-dashboard.jsx', import.meta.url)), 'utf8');
-  assert.match(reports, /disabled=\{!selectedPrintDate \|\| \(!totalReports && !hasAnyReportData\)\}/);
+  assert.match(reports, /disabled=\{!canPrintDailyReport\}/);
   assert.match(reports, /href="\/admin"/);
   assert.match(reports, /emptyTitle: 'No jobs recorded yet'/);
   assert.match(reports, /Math\.max\(fleetSize, activeVehicles\)/);
