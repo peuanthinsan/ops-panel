@@ -117,6 +117,20 @@ button:disabled{opacity:.48;cursor:default}
 @media(max-width:600px){.gps-detail-summary{grid-template-columns:1fr 1fr}.gps-detail-summary>div:last-child{grid-column:auto}.gps-sample-table{min-width:0}}
 @media(max-width:600px){.timeline-header-actions{display:grid;grid-template-columns:1fr;width:100%}.timeline-header-actions .primary{width:100%}}
 
+/* Accessibility refinements */
+.main:focus{outline:none}.main:focus-visible{outline:3px solid #E31B23;outline-offset:-3px}
+button:focus-visible{outline:3px solid #111;outline-offset:2px;box-shadow:0 0 0 5px #fff}
+.sidebar button:focus-visible{outline-color:#fff;box-shadow:0 0 0 5px #111}
+.date-input:focus-within{outline:3px solid #E31B23;outline-offset:2px}.date-input input:focus-visible{outline:0}
+.date-popover-actions{display:flex;gap:6px}
+.eyebrow,p{color:#5E6872}
+.calendar-grid .calendar-weekday,.location-cell>small,.table-sort-duration small,.duration-format-inline,.secondary-line,.gps-sync,.fleet-heading p,.timeline-legend small,.gps-coverage-cell small,.gps-sample-table td small,.fleet-job-print-table td small,.portrait-job-table td:nth-child(6) small{color:#5E6872}
+.warning-text,.print-warning{color:#8A5D00!important}
+.coverage-state{min-height:24px}
+.timeline-track{height:32px;overflow:visible}.timeline-segment{top:4px;bottom:4px;min-width:24px;min-height:24px}
+@media(max-width:600px){.date-popover-footer{align-items:stretch;flex-direction:column}.date-popover-actions{display:grid;grid-template-columns:1fr 1fr}.date-popover-actions button{width:100%}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
 /* Print reports */
 .print-preview{min-height:100vh;padding:72px 24px 40px;background:#D7DBDF;color:#111}.print-toolbar{position:fixed;z-index:100;top:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;padding:7px;border:1px solid #C8CDD2;border-radius:10px;background:rgba(255,255,255,.96);box-shadow:0 8px 24px rgba(17,17,17,.14)}.print-toolbar button{border:1px solid #C8CDD2;border-radius:7px;padding:7px 12px;background:#fff;color:#111;font-size:12px;font-weight:800;cursor:pointer}.print-toolbar .primary{border-color:#E31B23;background:#E31B23;color:#fff}.print-state{min-height:100vh;display:grid;place-content:center;justify-items:center;gap:12px;padding:24px;text-align:center}.print-state img{width:52px;height:64px}.print-state h1{margin:0}.print-state p{margin:0}
 .print-sheet{position:relative;display:flex;flex-direction:column;margin:0 auto 28px;background:#fff;box-shadow:0 5px 28px rgba(17,17,17,.18);overflow:hidden}.portrait-sheet{width:210mm;min-height:297mm;padding:13mm 14mm}.landscape-sheet{width:297mm;min-height:210mm;padding:11mm 13mm}.print-header{display:flex;align-items:center;gap:12px;min-width:0}.print-header>img{width:44px;height:44px;object-fit:contain;flex:none}.print-header>div{display:grid;gap:2px;min-width:0}.print-header strong{font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:800;color:#06264B}.print-header strong span{color:#7A1424}.print-header small{color:#68727D;font-size:10px;font-weight:600}.print-header.compact>img{width:38px;height:38px}.print-header.compact strong{font-size:14px}.print-header.compact small{font-size:9px}.print-footer{display:flex;justify-content:space-between;gap:16px;margin-top:auto;padding-top:8px;border-top:1px solid #C8CDD2;color:#68727D;font-size:8px;font-weight:600}.print-success{color:#14865B!important;font-weight:800}.print-warning{color:#B57A00!important;font-weight:800}.print-danger{color:#B3131A!important;font-weight:800}
@@ -127,3 +141,4 @@ button:disabled{opacity:.48;cursor:default}
 @media print{
   html,body{background:#fff!important}.print-preview{padding:0;background:#fff}.print-toolbar{display:none!important}.print-sheet{margin:0;box-shadow:none;break-after:page;page-break-after:always}.print-sheet:last-child{break-after:auto;page-break-after:auto}.portrait-sheet{width:210mm;height:297mm;min-height:297mm}.landscape-sheet{width:297mm;height:210mm;min-height:210mm}
 }
+.print-warning{color:#8A5D00!important}.fleet-job-print-table td small,.portrait-job-table td:nth-child(6) small{color:#5E6872}

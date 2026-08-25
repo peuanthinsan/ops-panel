@@ -18,6 +18,10 @@ function time(value, lang) {
   const date = dateValue(value);
   return date ? new Intl.DateTimeFormat(lang === 'th' ? 'th-TH' : 'en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(date) : '—';
 }
+function shortTime(value, lang) {
+  const date = dateValue(value);
+  return date ? new Intl.DateTimeFormat(lang === 'th' ? 'th-TH' : 'en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' }).format(date) : '—';
+}
 function longDate(dateKey, lang) {
   return new Intl.DateTimeFormat(lang === 'th' ? 'th-TH' : 'en-GB', { timeZone: 'Asia/Bangkok', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(`${dateKey}T12:00:00+07:00`));
 }
@@ -52,11 +56,24 @@ function location(report, lang) {
 }
 function totalDuration(seconds) { return `${String(Math.floor(seconds / 3600)).padStart(2, '0')}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`; }
 function modeColor(mode) { return MODE_COLORS[mode] || '#68727D'; }
+function alertFor(report) {
+  const explicit = Array.isArray(report.alerts) ? report.alerts : [];
+  const hasHarshBraking = Boolean(report.harshBraking || report.harshBrake || Number(report.harshBrakingCount) > 0 || explicit.some(value => /brak/i.test(String(value))));
+  if (hasHarshBraking) return { type: 'braking', label: 'Harsh Braking', th: 'เบรกกะทันหัน' };
+  if (speed(report) > 90 || report.speeding === true || Number(report.speedingCount) > 0) return { type: 'speeding', label: `Speeding (${speed(report)} km/h)`, th: `ความเร็วเกินกำหนด (${speed(report)} กม./ชม.)` };
+  return null;
+}
 function statusLabel(report, lang) {
   if (report.status === 'Cancelled') return lang === 'th' ? 'ยกเลิก' : 'Cancelled';
   if (hasGps(report)) return lang === 'th' ? 'พบ GPS' : 'GPS found';
   if (isLookupPending(report)) return lang === 'th' ? 'รอค้นหา GPS' : 'GPS pending';
   return report.status || (lang === 'th' ? 'บันทึกแล้ว' : 'Saved');
+}
+
+function useDocumentLanguage(lang) {
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
 }
 
 function PrintToolbar({ lang, onPrint, backPath = '/' }) {
@@ -95,8 +112,8 @@ function usePrintData(filters, lang) {
 }
 
 function PrintState({ lang, loading, error, onRetry }) {
-  if (loading) return <main className="print-state"><Image src="/songdee-gps-pin.svg" alt="" width={180} height={220} loading="eager" /><p>{lang === 'th' ? 'กำลังจัดทำรายงาน…' : 'Preparing report…'}</p></main>;
-  if (error) return <main className="print-state"><h1>{lang === 'th' ? 'เปิดรายงานไม่ได้' : 'Could not open report'}</h1><p>{error}</p><button className="primary" type="button" onClick={onRetry}>{lang === 'th' ? 'ลองใหม่' : 'Try again'}</button></main>;
+  if (loading) return <main className="print-state" role="status" aria-live="polite"><Image src="/songdee-gps-pin.svg" alt="" width={180} height={220} loading="eager" /><p>{lang === 'th' ? 'กำลังจัดทำรายงาน…' : 'Preparing report…'}</p></main>;
+  if (error) return <main className="print-state" role="alert"><h1>{lang === 'th' ? 'เปิดรายงานไม่ได้' : 'Could not open report'}</h1><p>{error}</p><button className="primary" type="button" onClick={onRetry}>{lang === 'th' ? 'ลองใหม่' : 'Try again'}</button></main>;
   return null;
 }
 
@@ -123,11 +140,15 @@ function summaryForVehicle(vehicle, reports) {
 }
 
 function TimelineBar({ rows, lang }) {
-  return <div className="print-timeline-track" aria-label={lang === 'th' ? 'ไทม์ไลน์งาน' : 'Job timeline'}>
+  const details = rows.map(report => `${modeLabel(report, lang)}, ${time(report.startTime, lang)}–${time(report.endTime, lang)}, ${statusLabel(report, lang)}`);
+  const label = details.length
+    ? `${lang === 'th' ? 'ไทม์ไลน์งาน' : 'Job timeline'}: ${details.join('. ')}`
+    : (lang === 'th' ? 'ไม่มีงานที่บันทึก' : 'No recorded jobs');
+  return <div className="print-timeline-track" role="img" aria-label={label}>
     {rows.map(report => {
       const position = timelinePosition(report.startTime, report.endTime);
       if (!position) return null;
-      return <span key={report.id || `${report.vehicleNumber}-${report.startTime}`} title={modeLabel(report, lang)} style={{ left: `${position.left}%`, width: `${Math.max(.7, position.width)}%`, background: modeColor(report.mode), opacity: report.status === 'Cancelled' ? .35 : 1 }} />;
+      return <span aria-hidden="true" key={report.id || `${report.vehicleNumber}-${report.startTime}`} title={modeLabel(report, lang)} style={{ left: `${position.left}%`, width: `${Math.max(.7, position.width)}%`, background: modeColor(report.mode), opacity: report.status === 'Cancelled' ? .35 : 1 }} />;
     })}
   </div>;
 }
@@ -141,7 +162,8 @@ function JobListPrintPage({ rows, lang, page, totalPages }) {
   return <section className="print-sheet landscape-sheet job-list-print-sheet">
     <div className="landscape-header-row"><PrintHeader compact subtitle={lang === 'th' ? 'รายการงานโดยละเอียด · Detailed job list' : 'Detailed job list · รายการงานโดยละเอียด'} /><strong className="print-job-count">{rows.length} {lang === 'th' ? 'งานในหน้านี้' : 'jobs on this page'}</strong></div>
     <table className="fleet-job-print-table">
-      <thead><tr><th>{lang === 'th' ? 'รถ / รหัสงาน' : 'Vehicle / job ID'}</th><th>{lang === 'th' ? 'พขร.' : 'Driver'}</th><th>{lang === 'th' ? 'กิจกรรม' : 'Activity'}</th><th>{lang === 'th' ? 'วันที่' : 'Date'}</th><th>{lang === 'th' ? 'เริ่ม–จบ' : 'Start–end'}</th><th>{lang === 'th' ? 'ระยะเวลา' : 'Duration'}</th><th>{lang === 'th' ? 'เร็วสูงสุด' : 'Max speed'}</th><th>{lang === 'th' ? 'ตำแหน่ง GPS' : 'GPS position'}</th><th>GPS</th><th>{lang === 'th' ? 'สถานะ' : 'Status'}</th></tr></thead>
+      <caption className="sr-only">{lang === 'th' ? 'รายการงานโดยละเอียด' : 'Detailed job list'}</caption>
+      <thead><tr><th scope="col">{lang === 'th' ? 'รถ / รหัสงาน' : 'Vehicle / job ID'}</th><th scope="col">{lang === 'th' ? 'พขร.' : 'Driver'}</th><th scope="col">{lang === 'th' ? 'กิจกรรม' : 'Activity'}</th><th scope="col">{lang === 'th' ? 'วันที่' : 'Date'}</th><th scope="col">{lang === 'th' ? 'เริ่ม–จบ' : 'Start–end'}</th><th scope="col">{lang === 'th' ? 'ระยะเวลา' : 'Duration'}</th><th scope="col">{lang === 'th' ? 'เร็วสูงสุด' : 'Max speed'}</th><th scope="col">{lang === 'th' ? 'ตำแหน่ง GPS' : 'GPS position'}</th><th scope="col">GPS</th><th scope="col">{lang === 'th' ? 'สถานะ' : 'Status'}</th></tr></thead>
       <tbody>{rows.map(report => {
         const place = location(report, lang);
         const reportSpeed = speed(report);
@@ -166,6 +188,7 @@ function JobListPrintPage({ rows, lang, page, totalPages }) {
 
 export function LandscapePrintDashboard({ filters = {}, lang: requestedLang, timelineOnly = false, timelineFilters = null }) {
   const lang = requestedLang === 'en' ? 'en' : 'th';
+  useDocumentLanguage(lang);
   const stableFilters = useMemo(() => filters, [JSON.stringify(filters)]);
   const { reports, bindings, loading, error, load } = usePrintData(stableFilters, lang);
   const timelineReports = useMemo(() => timelineOnly && timelineFilters
@@ -204,7 +227,7 @@ export function LandscapePrintDashboard({ filters = {}, lang: requestedLang, tim
       const knownDistance = page.rows.some(row => row.distance != null);
       const topSpeed = page.rows.reduce((maximum, row) => Math.max(maximum, row.topSpeed ?? -1), -1);
       return <section className="print-sheet landscape-sheet" key={`${page.date}-${pageIndex}`}>
-      <div className="landscape-header-row"><PrintHeader compact subtitle={`${lang === 'th' ? 'สรุปรถทุกคันรายวัน' : 'Daily fleet summary'} · ${longDate(page.date, lang)}`} /><div className="print-legend"><span><i className="load" />{lang === 'th' ? 'ขึ้นสินค้า' : 'Load'}</span><span><i className="unload" />{lang === 'th' ? 'ลงสินค้า' : 'Unload'}</span><span><i className="stop" />{lang === 'th' ? 'หยุดรอ' : 'Stop / wait'}</span><span><i className="other" />{lang === 'th' ? 'พัก/อื่น ๆ' : 'Break / other'}</span></div></div>
+      <div className="landscape-header-row"><PrintHeader compact subtitle={`${lang === 'th' ? 'สรุปรถทุกคันรายวัน' : 'Daily fleet summary'} · ${longDate(page.date, lang)}`} /><div className="print-legend"><span><i className="load" aria-hidden="true" />{lang === 'th' ? 'ขึ้นสินค้า' : 'Load'}</span><span><i className="unload" aria-hidden="true" />{lang === 'th' ? 'ลงสินค้า' : 'Unload'}</span><span><i className="stop" aria-hidden="true" />{lang === 'th' ? 'หยุดรอ' : 'Stop / wait'}</span><span><i className="other" aria-hidden="true" />{lang === 'th' ? 'พัก/อื่น ๆ' : 'Break / other'}</span></div></div>
       <div className="fleet-print-grid fleet-print-heading"><span>{lang === 'th' ? 'เบอร์รถ / พขร. (รูดบัตร)' : 'Vehicle / driver (card)'}</span><div>{TIMELINE_AXIS_LABELS.map(label => <span key={label}>{label}</span>)}</div><span>{lang === 'th' ? 'ชม.กะ' : 'Shift'}</span><span>{lang === 'th' ? 'งาน' : 'Jobs'}</span><span>{lang === 'th' ? 'กม.' : 'km'}</span><span>{lang === 'th' ? 'เร็วสูงสุด' : 'Max'}</span><span>{lang === 'th' ? 'พบ GPS' : 'GPS found'}</span></div>
       <div className="fleet-print-body">{page.rows.map(row => <div className="fleet-print-grid fleet-print-row" key={row.vehicle}>
         <div><strong>{row.vehicle}</strong><small>{row.rows.length ? `${row.driver} · ${time(row.start, lang)}–${time(row.end, lang)}` : (lang === 'th' ? 'ไม่ได้วิ่งงาน' : 'No recorded jobs')}</small></div>
@@ -223,6 +246,7 @@ function PrintFooter({ lang, page }) { return <footer className="print-footer"><
 
 export function PortraitPrintDashboard({ date: requestedDate, vehicle: requestedVehicle, lang: requestedLang }) {
   const lang = requestedLang === 'en' ? 'en' : 'th';
+  useDocumentLanguage(lang);
   const date = validDate(requestedDate);
   const portraitFilters = useMemo(() => ({ startDate: date, endDate: date }), [date]);
   const { reports, bindings, loading, error, load } = usePrintData(portraitFilters, lang);
@@ -246,28 +270,25 @@ export function PortraitPrintDashboard({ date: requestedDate, vehicle: requested
   }, [fleetSummaries]);
   if (loading || error) return <PrintState lang={lang} loading={loading} error={error} onRetry={load} />;
   const totalSeconds = summary.rows.reduce((sum, report) => sum + elapsedSeconds(report), 0);
+  const shiftSeconds = summary.start && summary.end ? Math.max(0, Math.floor((dateValue(summary.end) - dateValue(summary.start)) / 1000)) : 0;
+  const breakSeconds = Math.max(0, shiftSeconds - totalSeconds);
+  const alerts = summary.rows.map(report => ({ report, alert: alertFor(report) })).filter(item => item.alert);
+  const printedAt = new Intl.DateTimeFormat(lang === 'th' ? 'th-TH' : 'en-GB', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date());
+  const documentId = `SD-${date.replaceAll('-', '')}-${vehicle || 'FLEET'}`;
+  const durationShort = seconds => `${Math.floor(seconds / 3600)}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}`;
+  const timelineRows = summary.rows.map(report => {
+    const position = timelinePosition(report.startTime, report.endTime);
+    return position ? { report, position } : null;
+  }).filter(Boolean);
   return <main className="print-preview portrait-preview">
     <PrintToolbar lang={lang} onPrint={() => window.print()} />
     <section className="print-sheet portrait-sheet">
-      <div className="portrait-header-row"><PrintHeader subtitle={lang === 'th' ? 'รายงานประจำวันรายคัน · Daily vehicle report' : 'Daily vehicle report · รายงานประจำวันรายคัน'} /><div className="report-number"><small>{lang === 'th' ? 'เลขที่รายงาน' : 'Report no.'}</small><strong>SD-{date.replaceAll('-', '')}-{vehicle || 'FLEET'}</strong></div></div>
-      <div className="vehicle-print-title"><h1>{lang === 'th' ? 'รถ' : 'Vehicle'} {vehicle || '—'}</h1><strong>{longDate(date, lang)}</strong><span className={summary.gpsPending ? 'print-warning' : 'print-success'}>✓ GPS {summary.gpsMatched}/{summary.rows.length}</span></div>
-      <div className="print-kpis"><Kpi label={lang === 'th' ? 'พขร. (รูดบัตร)' : 'Driver (card)'} value={summary.driver} note={summary.driverId || '—'} /><Kpi label={lang === 'th' ? 'เริ่มกะ – จบกะ' : 'Shift start – end'} value={`${time(summary.start, lang)} – ${time(summary.end, lang)}`} note={summary.shift} /><Kpi label={lang === 'th' ? 'งานที่บันทึก' : 'Recorded jobs'} value={`${summary.rows.length}`} note={`${lang === 'th' ? 'ยกเลิก' : 'Cancelled'} ${summary.cancelled}`} /><Kpi label={lang === 'th' ? 'ระยะทาง (GPS)' : 'Distance (GPS)'} value={summary.distance == null ? '—' : `${summary.distance.toFixed(1)} km`} note={`${lang === 'th' ? 'เร็วสูงสุด' : 'Max speed'} ${summary.topSpeed ?? '—'}`} /><Kpi label={lang === 'th' ? 'เวลางานจริง' : 'Recorded work'} value={totalDuration(totalSeconds)} note={lang === 'th' ? 'รวมเวลางานที่เสร็จแล้ว' : 'Completed job time'} /><Kpi danger label={lang === 'th' ? 'ข้อยกเว้น' : 'Exceptions'} value={`${summary.cancelled + summary.gpsPending}`} note={lang === 'th' ? 'ยกเลิก + รอค้นหา GPS' : 'Cancelled + GPS pending'} /></div>
-      <h2 className="print-section-title">{lang === 'th' ? 'ไทม์ไลน์กิจกรรม' : 'ACTIVITY TIMELINE'}</h2>
-      <table className="portrait-job-table"><thead><tr><th>{lang === 'th' ? 'เริ่ม' : 'Start'}</th><th>{lang === 'th' ? 'จบ' : 'End'}</th><th>{lang === 'th' ? 'กิจกรรม' : 'Activity'}</th><th>{lang === 'th' ? 'ระยะเวลา' : 'Duration'}</th><th>{lang === 'th' ? 'เร็วสูงสุด' : 'Max speed'}</th><th>{lang === 'th' ? 'สถานที่ (GPS)' : 'Location (GPS)'}</th><th>{lang === 'th' ? 'สถานะ' : 'Status'}</th></tr></thead><tbody>{summary.rows.map(report => {
-        const place = location(report, lang); const reportSpeed = speed(report); const meta = MODE_META[report.mode];
-        return <tr className={report.status === 'Cancelled' ? 'cancelled' : ''} key={report.id || report.startTime}><td>{time(report.startTime, lang)}</td><td>{time(report.endTime, lang)}</td><td><i style={{ background: modeColor(report.mode) }}>{meta?.number || '·'}</i><strong>{modeLabel(report, lang)}</strong></td><td>{elapsed(report.startTime, report.endTime)}</td><td className={reportSpeed > 90 ? 'speed-alert' : ''}>{reportSpeed == null ? '—' : reportSpeed === 0 ? (lang === 'th' ? 'จอดนิ่ง' : 'Stationary') : reportSpeed}</td><td><span>{place.name}</span><small>{place.coordinates || '—'}</small></td><td className={report.status === 'Cancelled' ? 'print-danger' : isLookupPending(report) ? 'print-warning' : 'print-success'}>{statusLabel(report, lang)}</td></tr>;
-      })}</tbody></table>
-      {!summary.rows.length ? <p className="print-empty">{lang === 'th' ? 'ไม่มีงานที่บันทึกสำหรับรถและวันที่นี้' : 'No saved jobs for this vehicle and date.'}</p> : null}
-      <div className="portrait-bottom-grid"><div><h2 className="print-section-title">{lang === 'th' ? 'รวมเวลาแยกตามกิจกรรม' : 'TIME BY ACTIVITY'}</h2>{modeTotals.map(([mode, seconds]) => <div className="mode-total" key={mode}><span>{MODE_META[mode]?.[lang] || mode}</span><div><i style={{ width: `${Math.max(3, totalSeconds ? seconds / totalSeconds * 100 : 0)}%`, background: modeColor(mode) }} /></div><strong>{totalDuration(seconds)}</strong></div>)}</div><div><h2 className="print-section-title">{lang === 'th' ? 'ข้อยกเว้นและหมายเหตุ' : 'EXCEPTIONS & NOTES'}</h2><ul className="exception-list">{summary.cancelled ? <li>{lang === 'th' ? `ยกเลิก ${summary.cancelled} งาน` : `${summary.cancelled} cancelled jobs`}</li> : null}{summary.gpsPending ? <li>{lang === 'th' ? `รอค้นหา GPS ${summary.gpsPending} งาน` : `${summary.gpsPending} jobs waiting for GPS lookup`}</li> : null}{!summary.cancelled && !summary.gpsPending ? <li>{lang === 'th' ? 'ไม่พบข้อยกเว้น' : 'No exceptions recorded'}</li> : null}</ul></div></div>
-      <PrintFooter lang={lang} page="1/2" />
-    </section>
-    <section className="print-sheet portrait-sheet">
-      <PrintHeader compact subtitle={`${lang === 'th' ? 'สรุปรายคนขับและรายคัน' : 'Driver and vehicle summary'} · ${longDate(date, lang)}`} />
-      <h2 className="print-section-title large-gap">{lang === 'th' ? 'สรุปรายคนขับ (จากการรูดบัตร)' : 'DRIVER SUMMARY (CARD IDENTIFICATION)'}</h2>
-      <table className="summary-print-table"><thead><tr><th>{lang === 'th' ? 'พขร.' : 'Driver'}</th><th>{lang === 'th' ? 'รถ' : 'Vehicles'}</th><th>{lang === 'th' ? 'ชม.ทำงาน' : 'Work time'}</th><th>{lang === 'th' ? 'งาน' : 'Jobs'}</th><th>{lang === 'th' ? 'เร็วสูงสุด' : 'Max speed'}</th><th>{lang === 'th' ? 'ข้อยกเว้น' : 'Exceptions'}</th></tr></thead><tbody>{driverSummaries.map(driver => <tr key={driver.name}><td><strong>{driver.name}</strong></td><td>{[...driver.vehicles].join(', ')}</td><td>{totalDuration(driver.seconds)}</td><td>{driver.jobs}</td><td className={driver.topSpeed > 90 ? 'speed-alert' : ''}>{driver.topSpeed >= 0 ? driver.topSpeed : '—'}</td><td>{driver.cancelled}</td></tr>)}</tbody></table>
-      <h2 className="print-section-title large-gap">{lang === 'th' ? 'สรุปรายคัน' : 'VEHICLE SUMMARY'}</h2>
-      <table className="summary-print-table"><thead><tr><th>{lang === 'th' ? 'รถ' : 'Vehicle'}</th><th>{lang === 'th' ? 'พขร.' : 'Driver'}</th><th>{lang === 'th' ? 'กะ' : 'Shift'}</th><th>{lang === 'th' ? 'งาน' : 'Jobs'}</th><th>{lang === 'th' ? 'พบ GPS' : 'GPS found'}</th><th>{lang === 'th' ? 'ยกเลิก' : 'Cancelled'}</th></tr></thead><tbody>{fleetSummaries.map(row => <tr key={row.vehicle}><td><strong>{row.vehicle}</strong></td><td>{row.driver}</td><td>{row.shift}</td><td>{row.rows.length}</td><td className={row.gpsPending ? 'print-warning' : 'print-success'}>{row.gpsMatched}/{row.rows.length}</td><td>{row.cancelled}</td></tr>)}</tbody></table>
-      <PrintFooter lang={lang} page="2/2" />
+      <header className="report-masthead"><div className="report-brand"><Image src="/songdee-gps-pin.svg" alt="" width={62} height={76} /><div><strong>SONGDEE GPS</strong><span>FLEET &amp; FIELD OPERATIONS</span></div></div><div className="report-heading"><small>DAILY VEHICLE REPORT</small><h1>{lang === 'th' ? 'รายงานการเดินรถประจำวัน' : 'Daily Vehicle Report'}</h1><p>{lang === 'th' ? `เลขที่เอกสาร ${documentId} · พิมพ์เมื่อ ${printedAt}` : `Document ID ${documentId} · Printed ${printedAt}`}</p></div></header>
+      <div className="trip-info-row"><div><small>{lang === 'th' ? 'ทะเบียนรถ' : 'Vehicle Plate'}</small><strong>{vehicle || '—'}</strong></div><div><small>{lang === 'th' ? 'คนขับ' : 'Driver'}</small><strong>{summary.driver}</strong></div><div><small>{lang === 'th' ? 'วันที่' : 'Date'}</small><strong>{longDate(date, lang)}</strong></div><div><small>{lang === 'th' ? 'เวลาเริ่ม–สิ้นสุด' : 'Shift Start–End'}</small><strong>{shortTime(summary.start, lang)} – {shortTime(summary.end, lang)}</strong></div><div><small>{lang === 'th' ? 'สถานะ' : 'Status'}</small><strong className="trip-status">{lang === 'th' ? (summary.cancelled ? 'มีข้อยกเว้น' : 'เสร็จสิ้น') : (summary.cancelled ? 'Attention' : 'Completed')}</strong></div></div>
+      <div className="report-kpi-grid"><Kpi label={lang === 'th' ? 'ระยะทางรวม' : 'Total Distance'} value={summary.distance == null ? '—' : summary.distance.toFixed(1)} note="km" /><Kpi label={lang === 'th' ? 'งานที่เสร็จ' : 'Jobs Completed'} value={summary.rows.length} note={lang === 'th' ? 'งาน' : 'jobs'} /><Kpi label={lang === 'th' ? 'เวลาทำงานรวม' : 'Total Working Time'} value={durationShort(totalSeconds)} note={lang === 'th' ? 'ชม.' : 'hrs'} /><Kpi label={lang === 'th' ? 'เวลาพัก / รอ' : 'Break / Wait Time'} value={durationShort(breakSeconds)} note={lang === 'th' ? 'ชม.' : 'hrs'} /></div>
+      <section className="report-section"><div className="report-section-heading"><h2>{lang === 'th' ? 'ไทม์ไลน์การเดินรถ' : 'TRIP TIMELINE'}</h2><strong className={alerts.length ? 'timeline-alert-count' : 'timeline-clear'}>△ {alerts.length} {lang === 'th' ? 'การแจ้งเตือนระหว่างทาง' : alerts.length === 1 ? 'alert during this trip' : 'alerts during this trip'}</strong></div><div className="timeline-legend"><span><i className="load" />{lang === 'th' ? 'โหลดสินค้า' : 'Load'}</span><span><i className="unload" />{lang === 'th' ? 'ส่งสินค้า' : 'Unload'}</span><span><i className="stop" />{lang === 'th' ? 'จอด/รอ' : 'Stop / Wait'}</span><span><i className="other" />{lang === 'th' ? 'พัก/อื่นๆ' : 'Break / Other'}</span><span><i className="alert" />{lang === 'th' ? 'การแจ้งเตือน' : 'Alert'}</span></div><div className="trip-timeline" role="img" aria-label={lang === 'th' ? 'ไทม์ไลน์การเดินรถ' : 'Trip timeline'}>{timelineRows.map(({ report, position }) => <span key={report.id || report.startTime} className="timeline-segment" style={{ left: `${position.left}%`, width: `${Math.max(.9, position.width)}%`, background: modeColor(report.mode), opacity: report.status === 'Cancelled' ? .45 : 1 }} />)}{alerts.map(({ report, alert }) => { const position = timelinePosition(report.startTime, report.endTime); return position ? <span key={`flag-${report.id || report.startTime}`} className="timeline-flag" style={{ left: `${position.left}%` }} aria-hidden="true" /> : null; })}</div><div className="timeline-axis">{['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'].map(label => <span key={label}>{label}</span>)}</div><div className="alert-list">{alerts.map(({ report, alert }) => <span key={`alert-${report.id || report.startTime}`}>● {shortTime(report.startTime, lang)} · {lang === 'th' ? alert.th : alert.label}</span>)}</div></section>
+      <section className="report-section job-section"><div className="report-section-heading"><h2>{lang === 'th' ? 'รายการงาน' : 'JOB LIST'}</h2><span>{lang === 'th' ? 'แสดงเฉพาะงานที่มีการบันทึก' : 'Only logged jobs are shown'}</span></div><table className="simple-job-table"><caption className="sr-only">{lang === 'th' ? 'รายการงาน' : 'Job list'}</caption><thead><tr><th>{lang === 'th' ? 'เวลา' : 'TIME'}</th><th>{lang === 'th' ? 'ประเภท' : 'TYPE'}</th><th>{lang === 'th' ? 'สถานที่ / รายละเอียด' : 'LOCATION / DETAILS'}</th><th>{lang === 'th' ? 'ระยะเวลา' : 'DURATION'}</th></tr></thead><tbody>{summary.rows.map(report => { const place = location(report, lang); return <tr key={report.id || report.startTime}><td>{shortTime(report.startTime, lang)}–{shortTime(report.endTime, lang)}</td><td><span className={`job-type ${report.mode === 'Unload' ? 'unload' : 'load'}`}>{modeLabel(report, lang)}</span></td><td>{place.name}</td><td>{elapsed(report.startTime, report.endTime).slice(0, 5)}</td></tr>; })}</tbody></table>{!summary.rows.length ? <p className="print-empty">{lang === 'th' ? 'ไม่มีงานที่บันทึกสำหรับรถและวันที่นี้' : 'No saved jobs for this vehicle and date.'}</p> : null}</section>
+      <footer className="signature-footer"><div><span />{lang === 'th' ? 'ลายเซ็นคนขับ / Driver' : 'Driver Signature'}</div><div><span />{lang === 'th' ? 'ลายเซ็นหัวหน้างาน / Supervisor' : 'Supervisor Signature'}</div><div><span />{lang === 'th' ? 'วันที่ตรวจสอบ / Reviewed date' : 'Reviewed Date'}</div></footer>
     </section>
   </main>;
 }

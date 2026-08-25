@@ -29,7 +29,11 @@ import { serverNowMs } from '../lib/server-clock';
 import { mergeSavedJobs, type SavedJob } from '../lib/saved-jobs';
 
 const actions = operationActions;
-const actionRows = [actions.slice(0, 3), actions.slice(3, 6), actions.slice(6, 9)];
+const ACTION_COLUMN_COUNT = 3;
+const actionRows = Array.from(
+  { length: Math.ceil(actions.length / ACTION_COLUMN_COUNT) },
+  (_, index) => actions.slice(index * ACTION_COLUMN_COUNT, (index + 1) * ACTION_COLUMN_COUNT),
+);
 const JOB_GPS_SYNC_INTERVAL_MS = 60_000;
 const initialJobHistoryQuery: MobileJobQuery = { dayKey: null, endAt: null, startAt: null, monthKey: null, mode: null, search: '', sort: 'newest', status: 'all' };
 
@@ -54,9 +58,10 @@ function scheduleIdleTask(task: () => void) {
 export default function Index() {
   useKeepAwake('songdee-ops-panel');
   const { language, setLanguage, t } = useLanguage();
-  const { width, height } = useWindowDimensions();
+  const { width, height, fontScale } = useWindowDimensions();
   const portrait = height > width;
-  const compactLandscape = usesCompactLandscapeLayout(width, height);
+  const largeText = fontScale >= 1.3;
+  const compactLandscape = !largeText && usesCompactLandscapeLayout(width, height);
   const [binding, setBinding] = useState<DeviceBinding | null>(null);
   const [bindingChecked, setBindingChecked] = useState(false);
   const [deviceAccessBlocked, setDeviceAccessBlocked] = useState(false);
@@ -89,9 +94,14 @@ export default function Index() {
   const [changingVehicle, setChangingVehicle] = useState(false);
   const pendingReportRef = useRef<JobReportInput | null>(null);
   const confirmationTitleRef = useRef<Text | null>(null);
+  const vehicleAdminTitleRef = useRef<Text | null>(null);
   const headerTitleRef = useRef<Text | null>(null);
+  const vehicleAdminButtonRef = useRef<View | null>(null);
+  const savedJobsButtonRef = useRef<View | null>(null);
   const actionButtonRefs = useRef<Record<string, View | null>>({});
   const confirmationTriggerNodeRef = useRef<number | null>(null);
+  const vehicleAdminTriggerNodeRef = useRef<number | null>(null);
+  const savedJobsTriggerNodeRef = useRef<number | null>(null);
   const focusRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jobHistoryQueryRef = useRef<MobileJobQuery>(initialJobHistoryQuery);
   const jobHistoryRequestRef = useRef(0);
@@ -114,14 +124,20 @@ export default function Index() {
     confirmationTriggerNodeRef.current = findNodeHandle(view);
   };
 
-  const restoreConfirmationTriggerFocus = () => {
-    const node = confirmationTriggerNodeRef.current;
+  const restoreFocusToNode = (node: number | null) => {
     if (!node) return;
     if (focusRestoreTimerRef.current) clearTimeout(focusRestoreTimerRef.current);
     focusRestoreTimerRef.current = setTimeout(() => {
       AccessibilityInfo.setAccessibilityFocus(node);
       focusRestoreTimerRef.current = null;
     }, 100);
+  };
+
+  const restoreConfirmationTriggerFocus = () => restoreFocusToNode(confirmationTriggerNodeRef.current);
+
+  const focusVehicleAdminTitle = () => {
+    const node = findNodeHandle(vehicleAdminTitleRef.current);
+    if (node) AccessibilityInfo.setAccessibilityFocus(node);
   };
 
   useEffect(() => () => {
@@ -415,6 +431,7 @@ export default function Index() {
 
   function openVehicleAdmin() {
     if (!binding) return;
+    vehicleAdminTriggerNodeRef.current = findNodeHandle(vehicleAdminButtonRef.current);
     setVehicleAdminInput(binding.vehicleNumber);
     setVehicleAdminPassword('');
     setVehicleAdminError('');
@@ -426,6 +443,7 @@ export default function Index() {
     setVehicleAdminPassword('');
     setVehicleAdminError('');
     setVehicleAdminVisible(false);
+    restoreFocusToNode(vehicleAdminTriggerNodeRef.current);
   }
 
   async function changeVehicle() {
@@ -464,6 +482,7 @@ export default function Index() {
       setSavedJobs([]);
       setJobHistory(emptyDeviceJobHistory());
       setVehicleAdminVisible(false);
+      restoreFocusToNode(vehicleAdminTriggerNodeRef.current);
       setMessage(language === 'en'
         ? `Vehicle changed to ${next.vehicleNumber}`
         : `เปลี่ยนรถเป็น ${next.vehicleNumber} แล้ว`);
@@ -661,13 +680,13 @@ export default function Index() {
     } finally {
       setSavingJob(false);
       setConfirmType(null);
-      restoreConfirmationTriggerFocus();
       if (completedDayReport) {
         const dayReport = completedDayReport;
+        savedJobsTriggerNodeRef.current = findNodeHandle(headerTitleRef.current);
         setSavedJobs(current => [dayReport, ...current.filter(job => job.id !== dayReport.id)]);
         setReportDay(mobileReportDayKey(dayReport.endTime));
         setJobsVisible(true);
-      }
+      } else restoreConfirmationTriggerFocus();
     }
   }
 
@@ -762,8 +781,14 @@ export default function Index() {
   }
 
   function openSavedJobs() {
+    savedJobsTriggerNodeRef.current = findNodeHandle(savedJobsButtonRef.current);
     setReportDay(null);
     setJobsVisible(true);
+  }
+
+  function closeSavedJobs() {
+    setJobsVisible(false);
+    restoreFocusToNode(savedJobsTriggerNodeRef.current ?? findNodeHandle(headerTitleRef.current));
   }
 
   const setupDisabled = savingSetup || !vehicleInput.trim();
@@ -776,8 +801,8 @@ export default function Index() {
         <Pressable accessibilityRole="button" accessibilityLabel={language === 'en' ? 'Switch to Thai' : 'เปลี่ยนเป็นภาษาอังกฤษ'} onPress={() => setLanguage(language === 'en' ? 'th' : 'en')} style={languageStyles.setupButton}><Text style={languageStyles.setupButtonText}>{language === 'en' ? 'ไทย' : 'EN'}</Text></Pressable>
         <RedGpsPin size={58} />
         <Text style={styles.eyebrow}>SONGDEE OPS PANEL</Text>
-        <Text accessibilityRole="header" style={styles.title}>{language === 'en' ? 'Device access needs reset' : 'ต้องรีเซ็ตสิทธิ์อุปกรณ์'}</Text>
-        <Text style={styles.body}>{language === 'en' ? 'Ask a fleet administrator to reset access for this Android device, then try again. Your saved jobs remain on this tablet.' : 'กรุณาให้ผู้ดูแลฝูงรถรีเซ็ตสิทธิ์ของอุปกรณ์ Android เครื่องนี้ แล้วลองอีกครั้ง งานที่บันทึกไว้ยังคงอยู่ในแท็บเล็ต'}</Text>
+        <Text accessibilityRole="header" style={styles.title}>{language === 'en' ? 'Tablet connection needs repair' : 'ต้องซ่อมการเชื่อมต่อแท็บเล็ต'}</Text>
+        <Text style={styles.body}>{language === 'en' ? 'Ask an administrator to open Fleet and choose Repair tablet access for this device. Then tap Try again. The vehicle binding and saved jobs will not change.' : 'ให้ผู้ดูแลเปิดหน้า Fleet และเลือก “ซ่อมการเข้าถึงแท็บเล็ต” สำหรับอุปกรณ์นี้ แล้วกดลองอีกครั้ง การเชื่อมรถและงานที่บันทึกไว้จะไม่เปลี่ยนแปลง'}</Text>
         <Pressable accessibilityRole="button" onPress={() => { setBindingChecked(false); setBindingRefreshToken(value => value + 1); }} style={styles.primary}><Text style={styles.primaryText}>{language === 'en' ? 'Try again' : 'ลองอีกครั้ง'}</Text></Pressable>
       </View>
     </View>
@@ -842,75 +867,78 @@ export default function Index() {
         ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน')
         : (language === 'en' ? 'Turn off and save job' : 'ปิดและบันทึกงาน')
       : (language === 'en' ? 'Confirm job cancellation' : 'ยืนยันการยกเลิกงาน');
-  return <SafeAreaView style={styles.page} edges={['top', 'right', 'bottom', 'left']}>
-    <View style={[styles.header, compactLandscape && compactStyles.header]}>
-      <Pressable accessibilityRole="button" accessibilityLabel={language === 'en' ? 'Open admin vehicle settings' : 'เปิดการตั้งค่ารถสำหรับผู้ดูแล'} accessibilityHint={language === 'en' ? 'Admin password required to change the vehicle number' : 'ต้องใช้รหัสผ่านผู้ดูแลเพื่อเปลี่ยนหมายเลขรถ'} onPress={openVehicleAdmin} style={languageStyles.headerButton}><RedGpsPin size={compactLandscape ? 30 : 38} /></Pressable>
-      <View style={styles.headerInfo}>
-        <Text ref={headerTitleRef} accessibilityRole="header" numberOfLines={1} style={[styles.headerTitle, portrait && layoutStyles.headerTitlePortrait, compactLandscape && compactStyles.headerTitle]}>SONGDEE OPS PANEL · {binding.vehicleNumber}</Text>
-        <Text numberOfLines={1} style={[styles.headerMeta, compactLandscape && compactStyles.headerMeta]}>{driverSummary}</Text>
-        {message ? <Text accessibilityLiveRegion="polite" numberOfLines={compactLandscape ? 1 : 2} style={[styles.headerStatus, compactLandscape && compactStyles.headerStatus]}>{message}</Text> : null}
+  // The tablet control surface is intentionally a fixed nine-dot layout in
+  // both orientations. Enlarged text changes the spacing inside each tile,
+  // never the number or position of the job buttons.
+  const actionPanel = <View style={styles.columns}>
+    <View style={[styles.panel, compactLandscape && compactStyles.panel, largeText && accessibilityStyles.panel]}>
+      <View style={[styles.grid, compactLandscape && compactStyles.grid, largeText && accessibilityStyles.grid]}>
+        {actionRows.map((row, rowIndex) => (
+          <View style={[styles.actionRow, compactLandscape && compactStyles.actionRow, largeText && accessibilityStyles.actionRow]} key={rowIndex}>
+            {row.map(([number, thai, english, thaiDescription, englishDescription]) => {
+              const unavailable = startingJob || isActionUnavailable(jobSnapshot, number);
+              return (
+                <Pressable
+                  ref={node => { actionButtonRefs.current[number] = node; }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${number}. ${language === 'en' ? `${english}. ${englishDescription}` : `${thai}. ${thaiDescription}`}`}
+                  accessibilityState={{ selected: selected === number, disabled: unavailable }}
+                  disabled={unavailable}
+                  key={number}
+                  onPress={() => { rememberConfirmationTrigger(actionButtonRefs.current[number]); selectAction(number); }}
+                  style={[
+                    styles.action,
+                    readableStyles.action,
+                    compactLandscape && compactStyles.action,
+                    largeText && accessibilityStyles.action,
+                    selected === number && styles.actionSelected,
+                    unavailable && selected !== number && disabledActionStyles.tile,
+                  ]}
+                >
+                  <View style={[styles.actionNumberSlot, compactLandscape && compactStyles.actionNumberSlot, largeText && accessibilityStyles.actionNumberSlot]}>
+                    <Text style={[styles.number, readableStyles.number, compactLandscape && compactStyles.number, unavailable && selected !== number && readableStyles.disabledNumber]}>{number}</Text>
+                  </View>
+                  <View style={[styles.actionTextSlot, compactLandscape && compactStyles.actionTextSlot, largeText && accessibilityStyles.actionTextSlot]}>
+                    <Text numberOfLines={largeText ? undefined : 2} style={[styles.actionTitle, readableStyles.actionTitle, compactLandscape && compactStyles.actionTitle, unavailable && selected !== number && readableStyles.disabledText]}>{language === 'en' ? english : thai}</Text>
+                    <Text numberOfLines={largeText ? undefined : compactLandscape ? 2 : 5} style={[styles.actionSub, readableStyles.actionSub, compactLandscape && compactStyles.actionSub, unavailable && selected !== number && readableStyles.disabledText]}>{language === 'en' ? englishDescription : thaiDescription}</Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={language === 'en' ? 'View saved jobs and daily timeline' : 'ดูงานที่บันทึกและไทม์ไลน์ประจำวัน'} onPress={openSavedJobs} style={[headerUtilityStyles.button, compactLandscape && headerUtilityStyles.buttonCompact]}><Text style={headerUtilityStyles.buttonText}>{language === 'en' ? 'Jobs' : 'งาน'}</Text></Pressable>
+    </View>
+  </View>;
+  return <SafeAreaView style={styles.page} edges={['top', 'right', 'bottom', 'left']}>
+    <View style={[styles.header, compactLandscape && compactStyles.header, largeText && accessibilityStyles.header]}>
+      <Pressable ref={vehicleAdminButtonRef} accessibilityRole="button" accessibilityLabel={language === 'en' ? 'Open admin vehicle settings' : 'เปิดการตั้งค่ารถสำหรับผู้ดูแล'} accessibilityHint={language === 'en' ? 'Admin password required to change the vehicle number' : 'ต้องใช้รหัสผ่านผู้ดูแลเพื่อเปลี่ยนหมายเลขรถ'} onPress={openVehicleAdmin} style={languageStyles.headerButton}><RedGpsPin size={compactLandscape ? 30 : 38} /></Pressable>
+      <View style={[styles.headerInfo, largeText && accessibilityStyles.headerInfo]}>
+        <Text ref={headerTitleRef} accessibilityRole="header" numberOfLines={largeText ? undefined : 1} style={[styles.headerTitle, portrait && layoutStyles.headerTitlePortrait, compactLandscape && compactStyles.headerTitle]}>SONGDEE OPS PANEL · {binding.vehicleNumber}</Text>
+        <Text numberOfLines={largeText ? undefined : 1} style={[styles.headerMeta, compactLandscape && compactStyles.headerMeta]}>{driverSummary}</Text>
+        {message ? <Text accessibilityLiveRegion="polite" numberOfLines={largeText ? undefined : compactLandscape ? 1 : 2} style={[styles.headerStatus, compactLandscape && compactStyles.headerStatus]}>{message}</Text> : null}
+      </View>
+      <Pressable ref={savedJobsButtonRef} accessibilityRole="button" accessibilityLabel={language === 'en' ? 'View saved jobs and daily timeline' : 'ดูงานที่บันทึกและไทม์ไลน์ประจำวัน'} onPress={openSavedJobs} style={[headerUtilityStyles.button, compactLandscape && headerUtilityStyles.buttonCompact]}><Text style={headerUtilityStyles.buttonText}>{language === 'en' ? 'Jobs' : 'งาน'}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={language === 'en' ? 'Switch to Thai' : 'เปลี่ยนเป็นภาษาอังกฤษ'} onPress={() => setLanguage(language === 'en' ? 'th' : 'en')} style={languageStyles.headerButton}><Text style={styles.language}>{language === 'en' ? 'ไทย' : 'EN'}</Text></Pressable>
     </View>
-    <View style={[styles.content, portrait && layoutStyles.contentPortrait, compactLandscape && compactStyles.content]}>
-      <View style={[styles.columns, portrait && layoutStyles.columnsPortrait]}>
-        <View style={[styles.panel, compactLandscape && compactStyles.panel]}>
-          <View style={[styles.grid, compactLandscape && compactStyles.grid]}>
-            {actionRows.map((row, rowIndex) => (
-              <View style={[styles.actionRow, compactLandscape && compactStyles.actionRow]} key={rowIndex}>
-                {row.map(([number, thai, english, thaiDescription, englishDescription]) => {
-                  const unavailable = startingJob || isActionUnavailable(jobSnapshot, number);
-                  return (
-                    <Pressable
-                      ref={node => { actionButtonRefs.current[number] = node; }}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${number}. ${language === 'en' ? `${english}. ${englishDescription}` : `${thai}. ${thaiDescription}`}`}
-                      accessibilityState={{ selected: selected === number, disabled: unavailable }}
-                      disabled={unavailable}
-                      key={number}
-                      onPress={() => { rememberConfirmationTrigger(actionButtonRefs.current[number]); selectAction(number); }}
-                      style={[
-                        styles.action,
-                        readableStyles.action,
-                        compactLandscape && compactStyles.action,
-                        selected === number && styles.actionSelected,
-                        unavailable && selected !== number && disabledActionStyles.tile,
-                      ]}
-                    >
-                      <View style={[styles.actionNumberSlot, compactLandscape && compactStyles.actionNumberSlot]}>
-                        <Text style={[styles.number, readableStyles.number, compactLandscape && compactStyles.number, unavailable && selected !== number && readableStyles.disabledNumber]}>{number}</Text>
-                      </View>
-                      <View style={[styles.actionTextSlot, compactLandscape && compactStyles.actionTextSlot]}>
-                        <Text numberOfLines={2} style={[styles.actionTitle, readableStyles.actionTitle, compactLandscape && compactStyles.actionTitle, unavailable && selected !== number && readableStyles.disabledText]}>{language === 'en' ? english : thai}</Text>
-                        <Text numberOfLines={compactLandscape ? 2 : 5} style={[styles.actionSub, readableStyles.actionSub, compactLandscape && compactStyles.actionSub, unavailable && selected !== number && readableStyles.disabledText]}>{language === 'en' ? englishDescription : thaiDescription}</Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ))}
-          </View>
-        </View>
-      </View>
-    </View>
+    <View style={[styles.content, portrait && layoutStyles.contentPortrait, compactLandscape && compactStyles.content, largeText && accessibilityStyles.content]}>{actionPanel}</View>
     <Modal animationType="fade" onRequestClose={dismissConfirmation} onShow={focusConfirmationTitle} statusBarTranslucent transparent visible={confirmType !== null}>
-      {confirmType ? <Pressable accessibilityRole="none" onPress={dismissConfirmation} style={modalStyles.overlay}><Pressable accessibilityViewIsModal onAccessibilityEscape={dismissConfirmation} onPress={event => event.stopPropagation()} style={modalStyles.card}><RedGpsPin size={42} /><Text ref={confirmationTitleRef} accessible accessibilityLiveRegion="assertive" accessibilityRole="header" style={modalStyles.title}>{confirmationTitle}</Text><Text style={modalStyles.body}>{confirmType === 'start' ? (language === 'en' ? `Job: ${actionLabel(selected, language)}\nThe start time will be recorded when the vehicle moves.` : `กิจกรรม: ${actionLabel(selected, language)}\nระบบจะบันทึกเวลาเริ่มเมื่อรถเคลื่อนที่`) : confirmType === 'day_end' ? (language === 'en' ? 'Finish work will be saved immediately, then today’s saved jobs and timeline will open.' : 'ระบบจะบันทึกการจบงานทันที แล้วเปิดงานที่บันทึกและไทม์ไลน์ของวันนี้') : confirmType === 'finish' ? selected === '9' ? (language === 'en' ? 'Finish work will be saved, then today’s saved jobs and timeline will open on this tablet.' : 'ระบบจะบันทึกการจบงาน แล้วเปิดงานที่บันทึกและไทม์ไลน์ของวันนี้บนแท็บเล็ต') : awaitingMovement && !startedAt ? (language === 'en' ? 'Movement has not been detected. The job selection time will be used as the start time, and the job will be saved to the dashboard.' : 'ยังไม่ตรวจพบการเคลื่อนที่ ระบบจะใช้เวลาที่เลือกกิจกรรมเป็นเวลาเริ่ม และบันทึกงานไปยังแดชบอร์ด') : (language === 'en' ? 'The completed job will be saved and sent to the web dashboard.' : 'ระบบจะบันทึกงานที่เสร็จแล้วและส่งไปยังแดชบอร์ดเว็บ') : (language === 'en' ? 'The job will be recorded as cancelled.' : 'งานนี้จะถูกบันทึกเป็นงานที่ยกเลิก')}</Text><View style={modalStyles.actions}><Pressable accessibilityLabel={confirmationDismissLabel} accessibilityRole="button" accessibilityState={{ disabled: savingJob }} disabled={savingJob} onPress={dismissConfirmation} style={[modalStyles.cancel, savingJob && layoutStyles.disabled]}><Text style={modalStyles.cancelText}>{confirmType === 'start' ? (language === 'en' ? 'Choose another' : 'เลือกกิจกรรมอื่น') : confirmType === 'day_end' ? (language === 'en' ? 'Cancel' : 'ยกเลิก') : (language === 'en' ? 'Keep job on' : 'ทำงานต่อ')}</Text></Pressable>{confirmType === 'finish' ? <Pressable accessibilityLabel={language === 'en' ? 'Cancel current job' : 'ยกเลิกงานปัจจุบัน'} accessibilityRole="button" accessibilityState={{ disabled: savingJob, busy: savingJob }} disabled={savingJob} onPress={confirmCancel} style={[modalStyles.cancelJob, savingJob && layoutStyles.disabled]}><Text style={modalStyles.cancelJobText}>{language === 'en' ? 'Cancel job' : 'ยกเลิกงาน'}</Text></Pressable> : null}<Pressable accessibilityLabel={confirmationSubmitLabel} accessibilityRole="button" accessibilityState={{ disabled: savingJob, busy: savingJob }} disabled={savingJob} onPress={confirmType === 'start' ? confirmStart : confirmType === 'finish' || confirmType === 'day_end' ? confirmFinish : confirmCancel} style={[modalStyles.confirm, savingJob && layoutStyles.disabled]}><Text style={modalStyles.confirmText}>{savingJob ? (language === 'en' ? 'Saving…' : 'กำลังบันทึก…') : confirmType === 'cancel' ? (language === 'en' ? 'Retry cancellation' : 'ลองบันทึกการยกเลิกอีกครั้ง') : confirmType === 'start' ? (language === 'en' ? 'Turn on' : 'เริ่มงาน') : confirmType === 'day_end' ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน') : selected === '9' ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน') : (language === 'en' ? 'Turn off' : 'ปิดงาน')}</Text></Pressable></View></Pressable></Pressable> : null}
+      {confirmType ? <Pressable accessible={false} onPress={dismissConfirmation} style={modalStyles.overlay}><Pressable accessibilityViewIsModal onAccessibilityEscape={dismissConfirmation} onPress={event => event.stopPropagation()} style={modalStyles.card}><ScrollView contentContainerStyle={modalStyles.cardContent} keyboardShouldPersistTaps="handled"><RedGpsPin size={42} /><Text ref={confirmationTitleRef} accessible accessibilityLiveRegion="assertive" accessibilityRole="header" style={modalStyles.title}>{confirmationTitle}</Text><Text style={modalStyles.body}>{confirmType === 'start' ? (language === 'en' ? `Job: ${actionLabel(selected, language)}\nThe start time will be recorded when the vehicle moves.` : `กิจกรรม: ${actionLabel(selected, language)}\nระบบจะบันทึกเวลาเริ่มเมื่อรถเคลื่อนที่`) : confirmType === 'day_end' ? (language === 'en' ? 'Finish work will be saved immediately, then today’s saved jobs and timeline will open.' : 'ระบบจะบันทึกการจบงานทันที แล้วเปิดงานที่บันทึกและไทม์ไลน์ของวันนี้') : confirmType === 'finish' ? selected === '9' ? (language === 'en' ? 'Finish work will be saved, then today’s saved jobs and timeline will open on this tablet.' : 'ระบบจะบันทึกการจบงาน แล้วเปิดงานที่บันทึกและไทม์ไลน์ของวันนี้บนแท็บเล็ต') : awaitingMovement && !startedAt ? (language === 'en' ? 'Movement has not been detected. The job selection time will be used as the start time, and the job will be saved to the dashboard.' : 'ยังไม่ตรวจพบการเคลื่อนที่ ระบบจะใช้เวลาที่เลือกกิจกรรมเป็นเวลาเริ่ม และบันทึกงานไปยังแดชบอร์ด') : (language === 'en' ? 'The completed job will be saved and sent to the web dashboard.' : 'ระบบจะบันทึกงานที่เสร็จแล้วและส่งไปยังแดชบอร์ดเว็บ') : (language === 'en' ? 'The job will be recorded as cancelled.' : 'งานนี้จะถูกบันทึกเป็นงานที่ยกเลิก')}</Text><View style={modalStyles.actions}><Pressable accessibilityLabel={confirmationDismissLabel} accessibilityRole="button" accessibilityState={{ disabled: savingJob }} disabled={savingJob} onPress={dismissConfirmation} style={[modalStyles.cancel, savingJob && layoutStyles.disabled]}><Text style={modalStyles.cancelText}>{confirmType === 'start' ? (language === 'en' ? 'Choose another' : 'เลือกกิจกรรมอื่น') : confirmType === 'day_end' ? (language === 'en' ? 'Cancel' : 'ยกเลิก') : (language === 'en' ? 'Keep job on' : 'ทำงานต่อ')}</Text></Pressable>{confirmType === 'finish' ? <Pressable accessibilityLabel={language === 'en' ? 'Cancel current job' : 'ยกเลิกงานปัจจุบัน'} accessibilityRole="button" accessibilityState={{ disabled: savingJob, busy: savingJob }} disabled={savingJob} onPress={confirmCancel} style={[modalStyles.cancelJob, savingJob && layoutStyles.disabled]}><Text style={modalStyles.cancelJobText}>{language === 'en' ? 'Cancel job' : 'ยกเลิกงาน'}</Text></Pressable> : null}<Pressable accessibilityLabel={confirmationSubmitLabel} accessibilityRole="button" accessibilityState={{ disabled: savingJob, busy: savingJob }} disabled={savingJob} onPress={confirmType === 'start' ? confirmStart : confirmType === 'finish' || confirmType === 'day_end' ? confirmFinish : confirmCancel} style={[modalStyles.confirm, savingJob && layoutStyles.disabled]}><Text style={modalStyles.confirmText}>{savingJob ? (language === 'en' ? 'Saving…' : 'กำลังบันทึก…') : confirmType === 'cancel' ? (language === 'en' ? 'Retry cancellation' : 'ลองบันทึกการยกเลิกอีกครั้ง') : confirmType === 'start' ? (language === 'en' ? 'Turn on' : 'เริ่มงาน') : confirmType === 'day_end' ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน') : selected === '9' ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน') : (language === 'en' ? 'Turn off' : 'ปิดงาน')}</Text></Pressable></View></ScrollView></Pressable></Pressable> : null}
     </Modal>
-    <Modal animationType="fade" onAccessibilityEscape={dismissVehicleAdmin} onRequestClose={dismissVehicleAdmin} statusBarTranslucent transparent visible={vehicleAdminVisible}>
+    <Modal animationType="fade" onAccessibilityEscape={dismissVehicleAdmin} onRequestClose={dismissVehicleAdmin} onShow={focusVehicleAdminTitle} statusBarTranslucent transparent visible={vehicleAdminVisible}>
       <ScrollView contentContainerStyle={vehicleAdminStyles.scroll} keyboardShouldPersistTaps="handled">
-        <Pressable onPress={dismissVehicleAdmin} style={vehicleAdminStyles.backdrop}>
+        <Pressable accessible={false} onPress={dismissVehicleAdmin} style={vehicleAdminStyles.backdrop}>
         <Pressable accessibilityViewIsModal onAccessibilityEscape={dismissVehicleAdmin} onPress={event => event.stopPropagation()} style={modalStyles.card}>
           <RedGpsPin size={42} />
-          <Text accessibilityRole="header" style={modalStyles.title}>{language === 'en' ? 'Change vehicle number' : 'เปลี่ยนหมายเลขรถ'}</Text>
+          <Text ref={vehicleAdminTitleRef} accessible accessibilityRole="header" style={modalStyles.title}>{language === 'en' ? 'Change vehicle number' : 'เปลี่ยนหมายเลขรถ'}</Text>
           <Text style={modalStyles.body}>{language === 'en'
             ? `Current vehicle: ${binding.vehicleNumber}\nDevice ID: ${binding.deviceId}`
             : `รถปัจจุบัน: ${binding.vehicleNumber}\nรหัสอุปกรณ์: ${binding.deviceId}`}</Text>
           {selected ? <Text accessibilityRole="alert" style={vehicleAdminStyles.warning}>{language === 'en' ? 'Turn off or cancel the current job before changing the vehicle.' : 'กรุณาปิดหรือยกเลิกงานปัจจุบันก่อนเปลี่ยนรถ'}</Text> : null}
           <Text style={vehicleAdminStyles.label}>{language === 'en' ? 'New vehicle number' : 'หมายเลขรถใหม่'}</Text>
-          <TextInput autoCapitalize="characters" autoCorrect={false} editable={!changingVehicle} maxLength={80} onChangeText={setVehicleAdminInput} placeholder={language === 'en' ? 'Vehicle number' : 'หมายเลขรถ'} placeholderTextColor={colors.grey} style={vehicleAdminStyles.input} value={vehicleAdminInput} />
+          <TextInput accessibilityLabel={language === 'en' ? 'New vehicle number' : 'หมายเลขรถใหม่'} accessibilityState={{ disabled: changingVehicle }} autoCapitalize="characters" autoCorrect={false} editable={!changingVehicle} maxLength={80} onChangeText={setVehicleAdminInput} placeholder={language === 'en' ? 'Vehicle number' : 'หมายเลขรถ'} placeholderTextColor={colors.grey} style={vehicleAdminStyles.input} value={vehicleAdminInput} />
           <Text style={vehicleAdminStyles.label}>{language === 'en' ? 'Admin password' : 'รหัสผ่านผู้ดูแล'}</Text>
-          <TextInput autoCapitalize="none" autoCorrect={false} editable={!changingVehicle && !selected} maxLength={128} onChangeText={setVehicleAdminPassword} onSubmitEditing={() => { void changeVehicle(); }} placeholder={language === 'en' ? 'Enter admin password' : 'กรอกรหัสผ่านผู้ดูแล'} placeholderTextColor={colors.grey} returnKeyType="done" secureTextEntry style={vehicleAdminStyles.input} value={vehicleAdminPassword} />
+          <TextInput accessibilityLabel={language === 'en' ? 'Admin password' : 'รหัสผ่านผู้ดูแล'} accessibilityState={{ disabled: changingVehicle || Boolean(selected) }} autoCapitalize="none" autoCorrect={false} editable={!changingVehicle && !selected} maxLength={128} onChangeText={setVehicleAdminPassword} onSubmitEditing={() => { void changeVehicle(); }} placeholder={language === 'en' ? 'Enter admin password' : 'กรอกรหัสผ่านผู้ดูแล'} placeholderTextColor={colors.grey} returnKeyType="done" secureTextEntry style={vehicleAdminStyles.input} value={vehicleAdminPassword} />
           {vehicleAdminError ? <Text accessibilityLiveRegion="assertive" accessibilityRole="alert" style={vehicleAdminStyles.error}>{vehicleAdminError}</Text> : null}
           <View style={modalStyles.actions}>
             <Pressable accessibilityRole="button" disabled={changingVehicle} onPress={dismissVehicleAdmin} style={[modalStyles.cancel, changingVehicle && layoutStyles.disabled]}><Text style={modalStyles.cancelText}>{language === 'en' ? 'Cancel' : 'ยกเลิก'}</Text></Pressable>
@@ -920,7 +948,7 @@ export default function Index() {
         </Pressable>
       </ScrollView>
     </Modal>
-    <Modal animationType="slide" onRequestClose={() => setJobsVisible(false)} statusBarTranslucent visible={jobsVisible}>
+    <Modal animationType="slide" onAccessibilityEscape={closeSavedJobs} onRequestClose={closeSavedJobs} statusBarTranslucent visible={jobsVisible}>
       <SafeAreaView style={historyStyles.page} edges={['top', 'right', 'bottom', 'left']}>
         <MobileJobReport
           binding={binding}
@@ -931,7 +959,7 @@ export default function Index() {
           loading={jobsLoading}
           loadingMore={jobsLoadingMore}
           monthKeys={jobHistory.facets.months}
-          onClose={() => setJobsVisible(false)}
+          onClose={closeSavedJobs}
           onLoadMore={() => { void refreshSavedJobs(jobHistoryQueryRef.current, jobHistory.pageInfo.page + 1, true); }}
           onQueryChange={query => { jobHistoryQueryRef.current = query; void refreshSavedJobs(query, 1, false); }}
           onRefresh={() => { void refreshSavedJobs(jobHistoryQueryRef.current, 1, false); }}
@@ -950,7 +978,7 @@ function formatDuration(ms: number) { const total = Math.max(0, Math.floor(ms / 
 function actionLabel(number: string | null, language: 'en' | 'th') { const action = actions.find(item => item[0] === number); return action ? (language === 'en' ? action[2] : action[1]) : ''; }
 function apiFailureMessage(error: unknown) { return error instanceof Error && error.message ? error.message : 'Permanent API rejection'; }
 
-const colors = { red: '#E31B23', maroon: '#7A1424', black: '#111111', grey: '#68727D', lightGrey: '#EEF0F2', white: '#FFFFFF' };
+const colors = { red: '#E31B23', maroon: '#7A1424', black: '#111111', grey: '#5E6872', lightGrey: '#EEF0F2', white: '#FFFFFF' };
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.lightGrey }, header: { minHeight: 76, backgroundColor: colors.black, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 10 }, headerInfo: { flex: 1, minWidth: 0 }, headerTitle: { color: colors.white, fontWeight: '800', letterSpacing: 1 }, headerMeta: { color: '#C8CDD2', fontSize: 12, marginTop: 4 }, headerStatus: { color: '#FFB3B6', fontSize: 11, marginTop: 3 }, language: { color: colors.white, fontWeight: '700' }, content: { padding: 8, flex: 1 }, eyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 1.5, color: colors.grey }, title: { fontSize: 30, fontWeight: '800', color: colors.black, marginTop: 7 }, body: { fontSize: 14, color: colors.grey, marginTop: 8, lineHeight: 21 }, columns: { flex: 1, flexDirection: 'row' }, panel: { flex: 1, backgroundColor: colors.white, borderColor: '#D7DBDF', borderWidth: 1, borderRadius: 8, padding: 8 }, grid: { flex: 1, gap: 8 }, actionRow: { flex: 1, flexDirection: 'row', gap: 8 }, action: { flex: 1, minHeight: 0, borderWidth: 1, borderColor: '#D7DBDF', borderRadius: 8, padding: 10 }, actionNumberSlot: { height: '45%', alignItems: 'center', justifyContent: 'flex-end' }, actionTextSlot: { flex: 1, minHeight: 0, width: '100%', alignItems: 'center', paddingTop: 16 }, actionSelected: { borderColor: colors.red, borderWidth: 2, backgroundColor: '#FFF1F1' }, number: { backgroundColor: colors.red, color: colors.white, width: 27, height: 27, borderRadius: 14, textAlign: 'center', textAlignVertical: 'center', fontWeight: '800' }, actionTitle: { fontWeight: '800', color: colors.black, fontSize: 14 }, actionSub: { color: colors.grey, fontSize: 10 }, setup: { flex: 1, justifyContent: 'center', padding: 40, backgroundColor: colors.lightGrey }, setupPage: { flex: 1, backgroundColor: colors.lightGrey }, setupScroll: { flexGrow: 1, justifyContent: 'center', padding: 40 }, loading: { alignItems: 'center', gap: 10 }, setupCard: { maxWidth: 520, width: '100%', alignSelf: 'center', backgroundColor: colors.white, padding: 30, borderRadius: 14, borderWidth: 1, borderColor: '#D7DBDF' }, inputLabel: { color: colors.black, fontSize: 13, fontWeight: '700', marginTop: 22 }, input: { backgroundColor: colors.white, borderColor: '#C8CDD2', borderWidth: 1, borderRadius: 8, padding: 14, marginTop: 6, fontSize: 16, color: colors.black }, primary: { minHeight: 48, justifyContent: 'center', backgroundColor: colors.red, padding: 14, borderRadius: 8, marginTop: 14 }, primaryText: { color: colors.white, textAlign: 'center', fontWeight: '800' }, error: { color: colors.maroon, marginTop: 12, fontSize: 12 },
 });
@@ -960,17 +988,18 @@ const disabledActionStyles = StyleSheet.create({
 });
 
 const languageStyles = StyleSheet.create({
-  setupButton: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-end', borderWidth: 1, borderColor: '#C8CDD2', borderRadius: 7, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
+  setupButton: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-end', borderWidth: 1, borderColor: '#C8CDD2', borderRadius: 7, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
   setupButtonText: { color: colors.black, fontWeight: '800' },
   headerButton: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
 });
 
-const modalStyles = StyleSheet.create({ overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 }, card: { width: '100%', maxWidth: 420, backgroundColor: colors.white, borderRadius: 14, padding: 26 }, title: { color: colors.black, fontSize: 22, fontWeight: '800', marginTop: 12 }, body: { color: colors.grey, fontSize: 14, lineHeight: 21, marginTop: 8 }, actions: { gap: 8, marginTop: 24 }, cancel: { minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#D7DBDF' }, cancelText: { color: colors.black, fontWeight: '700', textAlign: 'center' }, cancelJob: { minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.red, backgroundColor: '#FFF1F1' }, cancelJobText: { color: colors.red, fontWeight: '800', textAlign: 'center' }, confirm: { minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, backgroundColor: colors.red }, confirmText: { color: colors.white, fontWeight: '800', textAlign: 'center' } });
+const modalStyles = StyleSheet.create({ overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 }, card: { width: '100%', maxWidth: 420, maxHeight: '90%', backgroundColor: colors.white, borderRadius: 14, padding: 26 }, cardContent: { flexGrow: 1 }, title: { color: colors.black, fontSize: 22, fontWeight: '800', marginTop: 12 }, body: { color: colors.grey, fontSize: 14, lineHeight: 21, marginTop: 8 }, actions: { gap: 8, marginTop: 24 }, cancel: { minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#D7DBDF' }, cancelText: { color: colors.black, fontWeight: '700', textAlign: 'center' }, cancelJob: { minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.red, backgroundColor: '#FFF1F1' }, cancelJobText: { color: colors.red, fontWeight: '800', textAlign: 'center' }, confirm: { minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, backgroundColor: colors.red }, confirmText: { color: colors.white, fontWeight: '800', textAlign: 'center' } });
 const vehicleAdminStyles = StyleSheet.create({ scroll: { flexGrow: 1, padding: 24 }, backdrop: { flex: 1, width: '100%', minHeight: '100%', backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 0 }, label: { color: colors.black, fontSize: 13, fontWeight: '800', marginTop: 16 }, input: { minHeight: 48, borderWidth: 1, borderColor: '#C8CDD2', borderRadius: 8, paddingHorizontal: 13, marginTop: 6, color: colors.black, backgroundColor: colors.white, fontSize: 16 }, warning: { color: colors.maroon, backgroundColor: '#FFF1F1', borderRadius: 7, padding: 10, marginTop: 14, fontSize: 12, fontWeight: '700' }, error: { color: colors.maroon, marginTop: 12, fontSize: 12, fontWeight: '700' } });
 const historyStyles = StyleSheet.create({ page: { flex: 1, backgroundColor: colors.lightGrey } });
-const headerUtilityStyles = StyleSheet.create({ button: { minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: '#4D5358', borderRadius: 7, paddingHorizontal: 13 }, buttonCompact: { minHeight: 40, paddingHorizontal: 9 }, buttonText: { color: colors.white, fontWeight: '800', fontSize: 12 } });
+const headerUtilityStyles = StyleSheet.create({ button: { minHeight: 48, justifyContent: 'center', borderWidth: 1, borderColor: '#4D5358', borderRadius: 7, paddingHorizontal: 13 }, buttonCompact: { minHeight: 48, paddingHorizontal: 9 }, buttonText: { color: colors.white, fontWeight: '800', fontSize: 12 } });
 const readableStyles = StyleSheet.create({ action: { alignItems: 'center' }, number: { width: 38, height: 38, borderRadius: 19, fontSize: 17 }, disabledNumber: { backgroundColor: '#727A80', color: '#FFFFFF' }, actionTitle: { fontSize: 18, lineHeight: 24, textAlign: 'center' }, actionSub: { fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 8 }, disabledText: { color: '#596167' } });
-const layoutStyles = StyleSheet.create({ headerTitlePortrait: { fontSize: 12 }, contentPortrait: { padding: 8 }, columnsPortrait: { flexDirection: 'column' }, disabled: { opacity: 0.48 } });
+const layoutStyles = StyleSheet.create({ headerTitlePortrait: { fontSize: 12 }, contentPortrait: { padding: 8 }, disabled: { opacity: 0.48 } });
+const accessibilityStyles = StyleSheet.create({ header: { flexWrap: 'wrap', paddingVertical: 10 }, headerInfo: { minWidth: 180 }, content: { padding: 6 }, panel: { padding: 6 }, grid: { gap: 6 }, actionRow: { gap: 6 }, action: { padding: 6 }, actionNumberSlot: { height: '32%' }, actionTextSlot: { paddingTop: 4 } });
 const compactStyles = StyleSheet.create({
   header: { minHeight: 60, paddingHorizontal: 10, gap: 7 },
   headerTitle: { fontSize: 11, letterSpacing: 0.5 },

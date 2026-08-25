@@ -125,9 +125,10 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
         {loading ? <p className="gps-detail-state" role="status">{t.loading}</p> : null}
         {error ? <p className="error gps-detail-state" role="alert">{error}</p> : null}
         {!loading && !error && !samples.length ? <p className="gps-detail-state">{t.empty}</p> : null}
-        {samples.length ? <div className="gps-sample-table-wrap" tabIndex={0}>
+        {samples.length ? <div className="gps-sample-table-wrap" tabIndex={0} aria-label={t.title}>
           <table className="gps-sample-table">
-            <thead><tr><th>{t.captured}</th><th>{t.coordinates}</th><th>{t.speedLabel}</th><th>{t.heading}</th></tr></thead>
+            <caption className="sr-only">{t.title}</caption>
+            <thead><tr><th scope="col">{t.captured}</th><th scope="col">{t.coordinates}</th><th scope="col">{t.speedLabel}</th><th scope="col">{t.heading}</th></tr></thead>
             <tbody>{samples.map(sample => <tr key={sample.id}>
               <td data-label={t.captured}>{time(sample.capturedAt, lang)}</td>
               <td data-label={t.coordinates}><strong>{coordinate(sample.deviceGps)}</strong></td>

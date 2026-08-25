@@ -18,6 +18,23 @@ const text = {
   },
 };
 
+const accessRepairCopy = {
+  en: {
+    resetAccess: 'Repair tablet connection',
+    resettingAccess: 'Repairing…',
+    resetTitle: 'Repair this tablet’s connection?',
+    resetBody: 'Use this only when the tablet shows “Tablet connection needs repair.” Reopening the app creates a new secure connection. The vehicle binding, device ID, and saved jobs stay unchanged.',
+    resetDone: 'Tablet connection repaired. Reopen the tablet app and tap Try again.',
+  },
+  th: {
+    resetAccess: 'ซ่อมการเชื่อมต่อแท็บเล็ต',
+    resettingAccess: 'กำลังซ่อม…',
+    resetTitle: 'ซ่อมการเชื่อมต่อของแท็บเล็ตเครื่องนี้?',
+    resetBody: 'ใช้เฉพาะเมื่อแท็บเล็ตแสดงข้อความ “ต้องซ่อมการเชื่อมต่อแท็บเล็ต” เมื่อเปิดแอปอีกครั้ง แท็บเล็ตจะสร้างการเชื่อมต่อที่ปลอดภัยใหม่ โดยหมายเลขรถ รหัสอุปกรณ์ และงานที่บันทึกไว้จะไม่เปลี่ยน',
+    resetDone: 'ซ่อมการเชื่อมต่อแท็บเล็ตแล้ว กรุณาเปิดแอปและกด “ลองอีกครั้ง”',
+  },
+};
+
 function parseCsvLine(line) {
   const values = [];
   let value = '';
@@ -78,11 +95,11 @@ function BindingRow({ binding, lastActivity, lang, t, onSave, onAskUnbind, onAsk
       <td>
         <div className="row-actions">
           {editing ? <>
-            <button className="small-button primary" type="button" onClick={save} disabled={busy || !vehicle.trim()}>{t.save}</button>
-            <button className="small-button secondary" type="button" onClick={() => { setVehicle(binding.vehicleNumber); setEditing(false); }} disabled={busy}>{t.cancel}</button>
-          </> : <button className="small-button secondary" type="button" onClick={() => setEditing(true)}>{t.edit}</button>}
-          <button className="small-button danger-button" type="button" onClick={event => onAskUnbind(binding, event.currentTarget)} disabled={busy}>{t.unbind}</button>
-          <button className="small-button secondary" type="button" onClick={event => onAskReset(binding, event.currentTarget)} disabled={busy}>{t.resetAccess}</button>
+            <button className="small-button primary" type="button" aria-label={`${t.save}: ${binding.deviceId}`} onClick={save} disabled={busy || !vehicle.trim()}>{t.save}</button>
+            <button className="small-button secondary" type="button" aria-label={`${t.cancel}: ${binding.deviceId}`} onClick={() => { setVehicle(binding.vehicleNumber); setEditing(false); }} disabled={busy}>{t.cancel}</button>
+          </> : <button className="small-button secondary" type="button" aria-label={`${t.edit}: ${binding.deviceId}`} onClick={() => setEditing(true)}>{t.edit}</button>}
+          <button className="small-button danger-button" type="button" aria-label={`${t.unbind}: ${binding.deviceId}`} onClick={event => onAskUnbind(binding, event.currentTarget)} disabled={busy}>{t.unbind}</button>
+          <button className="small-button secondary" type="button" aria-label={`${t.resetAccess}: ${binding.deviceId}`} onClick={event => onAskReset(binding, event.currentTarget)} disabled={busy}>{t.resetAccess}</button>
         </div>
       </td>
     </tr>
@@ -107,7 +124,7 @@ function BindingCard({ binding, lastActivity, lang, t, onSave, onAskUnbind, onAs
   }
 
   return (
-    <article className="fleet-card" aria-busy={busy}>
+    <article className="fleet-card" role="listitem" aria-busy={busy}>
       <div className="fleet-card-heading">
         <div>
           {editing ? <input className="table-input" aria-label={t.vehicle} autoCapitalize="characters" maxLength={80} value={vehicle} onChange={event => setVehicle(event.target.value)} disabled={busy} /> : <h3>{binding.vehicleNumber}</h3>}
@@ -121,18 +138,18 @@ function BindingCard({ binding, lastActivity, lang, t, onSave, onAskUnbind, onAs
       </dl>
       <div className="row-actions fleet-card-actions">
         {editing ? <>
-          <button className="small-button primary" type="button" onClick={save} disabled={busy || !vehicle.trim()}>{t.save}</button>
-          <button className="small-button secondary" type="button" onClick={() => { setVehicle(binding.vehicleNumber); setEditing(false); }} disabled={busy}>{t.cancel}</button>
-        </> : <button className="small-button secondary" type="button" onClick={() => setEditing(true)}>{t.edit}</button>}
-        <button className="small-button danger-button" type="button" onClick={event => onAskUnbind(binding, event.currentTarget)} disabled={busy}>{t.unbind}</button>
-        <button className="small-button secondary" type="button" onClick={event => onAskReset(binding, event.currentTarget)} disabled={busy}>{t.resetAccess}</button>
+          <button className="small-button primary" type="button" aria-label={`${t.save}: ${binding.deviceId}`} onClick={save} disabled={busy || !vehicle.trim()}>{t.save}</button>
+          <button className="small-button secondary" type="button" aria-label={`${t.cancel}: ${binding.deviceId}`} onClick={() => { setVehicle(binding.vehicleNumber); setEditing(false); }} disabled={busy}>{t.cancel}</button>
+        </> : <button className="small-button secondary" type="button" aria-label={`${t.edit}: ${binding.deviceId}`} onClick={() => setEditing(true)}>{t.edit}</button>}
+        <button className="small-button danger-button" type="button" aria-label={`${t.unbind}: ${binding.deviceId}`} onClick={event => onAskUnbind(binding, event.currentTarget)} disabled={busy}>{t.unbind}</button>
+        <button className="small-button secondary" type="button" aria-label={`${t.resetAccess}: ${binding.deviceId}`} onClick={event => onAskReset(binding, event.currentTarget)} disabled={busy}>{t.resetAccess}</button>
       </div>
     </article>
   );
 }
 
 export default function FleetDashboard({ lang }) {
-  const t = text[lang];
+  const t = { ...text[lang], ...accessRepairCopy[lang] };
   const [bindings, setBindings] = useState([]);
   const [lastActivity, setLastActivity] = useState({});
   const [vehicle, setVehicle] = useState('');
@@ -362,11 +379,12 @@ export default function FleetDashboard({ lang }) {
 
         {visibleBindings.length ? <div className="table-wrap fleet-table-wrap" tabIndex={0} aria-label={t.bindings}>
           <table className="fleet-table">
-            <thead><tr><th>{t.vehicle}</th><th>{t.device}</th><th>{t.activity}</th><th>{t.status}</th><th>{t.actions}</th></tr></thead>
+            <caption className="sr-only">{t.bindings}</caption>
+            <thead><tr><th scope="col">{t.vehicle}</th><th scope="col">{t.device}</th><th scope="col">{t.activity}</th><th scope="col">{t.status}</th><th scope="col">{t.actions}</th></tr></thead>
             <tbody>{bindingPage.items.map(binding => <BindingRow key={binding.deviceId} binding={binding} lastActivity={lastActivity[binding.deviceId]} lang={lang} t={t} onSave={saveBinding} onAskUnbind={askUnbind} onAskReset={askResetAccess} />)}</tbody>
           </table>
         </div> : null}
-        {visibleBindings.length ? <div className="fleet-cards" aria-label={t.bindings}>
+        {visibleBindings.length ? <div className="fleet-cards" role="list" aria-label={t.bindings}>
           {bindingPage.items.map(binding => <BindingCard key={binding.deviceId} binding={binding} lastActivity={lastActivity[binding.deviceId]} lang={lang} t={t} onSave={saveBinding} onAskUnbind={askUnbind} onAskReset={askResetAccess} />)}
         </div> : null}
         {loading ? <p className="empty" role="status">{t.loading}</p> : null}
@@ -375,14 +393,14 @@ export default function FleetDashboard({ lang }) {
           <h3>{t.empty}</h3>
           <p>{t.emptyBody}</p>
         </div> : null}
-        {visibleBindings.length ? <div className="table-footer"><span>{t.showing} {bindingPage.start}–{bindingPage.end} {t.of} {visibleBindings.length}</span><div className="pager"><button className="small-button secondary" type="button" disabled={bindingPage.page <= 1} onClick={() => setPage(value => value - 1)}>{t.previous}</button><span>{t.page} {bindingPage.page} / {bindingPage.totalPages}</span><button className="small-button secondary" type="button" disabled={bindingPage.page >= bindingPage.totalPages} onClick={() => setPage(value => value + 1)}>{t.next}</button></div></div> : null}
+        {visibleBindings.length ? <div className="table-footer"><span aria-live="polite">{t.showing} {bindingPage.start}–{bindingPage.end} {t.of} {visibleBindings.length}</span><div className="pager"><button className="small-button secondary" type="button" disabled={bindingPage.page <= 1} onClick={() => setPage(value => value - 1)}>{t.previous}</button><span>{t.page} {bindingPage.page} / {bindingPage.totalPages}</span><button className="small-button secondary" type="button" disabled={bindingPage.page >= bindingPage.totalPages} onClick={() => setPage(value => value + 1)}>{t.next}</button></div></div> : null}
       </section>
 
       {confirmBinding ? <div className="modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) closeUnbindDialog(); }}>
         <section className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="unbind-title" aria-describedby="unbind-description" onKeyDown={handleDialogKeyDown}>
           <h2 id="unbind-title">{confirmKind === 'reset' ? t.resetTitle : t.confirmTitle}</h2>
           <p id="unbind-description">{confirmBinding.vehicleNumber} · {confirmBinding.deviceId}<br />{confirmKind === 'reset' ? t.resetBody : t.confirmBody}</p>
-          <div className="modal-actions"><button ref={keepBindingRef} className="secondary" type="button" onClick={closeUnbindDialog} disabled={removing}>{t.keep}</button><button className="primary" type="button" onClick={confirmKind === 'reset' ? resetAccess : unbind} disabled={removing}>{removing && confirmKind === 'reset' ? t.resettingAccess : confirmKind === 'reset' ? t.resetAccess : t.unbind}</button></div>
+          <div className="modal-actions"><button ref={keepBindingRef} className="secondary" type="button" onClick={closeUnbindDialog} disabled={removing}>{confirmKind === 'reset' ? t.cancel : t.keep}</button><button className="primary" type="button" onClick={confirmKind === 'reset' ? resetAccess : unbind} disabled={removing} aria-busy={removing}>{removing && confirmKind === 'reset' ? t.resettingAccess : confirmKind === 'reset' ? t.resetAccess : t.unbind}</button></div>
         </section>
       </div> : null}
     </main>

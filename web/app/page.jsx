@@ -125,7 +125,7 @@ function Shell({ lang, setLang, onLogout, children }) {
           ))}
         </nav>
         <div className="sidebar-actions">
-          <button className="language" type="button" onClick={() => setLang(lang === 'en' ? 'th' : 'en')}>{lang === 'en' ? 'ไทย' : 'EN'}</button>
+          <button className="language" type="button" aria-label={t.language} title={t.language} onClick={() => setLang(lang === 'en' ? 'th' : 'en')}>{lang === 'en' ? 'ไทย' : 'EN'}</button>
           <button className="logout" type="button" onClick={onLogout}>{t.signOut}</button>
         </div>
       </aside>

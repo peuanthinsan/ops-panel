@@ -15,8 +15,8 @@ test('web date picker supports Escape, outside click, focus trapping, and focus 
 
 test('mobile modals support outside-tap and accessibility escape dismissal', async () => {
   const source = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
-  assert.match(source, /<Pressable accessibilityRole="none" onPress=\{dismissConfirmation\}/);
+  assert.match(source, /<Pressable accessible=\{false\} onPress=\{dismissConfirmation\}/);
   assert.match(source, /onAccessibilityEscape=\{dismissConfirmation\}/);
-  assert.match(source, /onPress=\{dismissVehicleAdmin\} style=\{vehicleAdminStyles\.backdrop\}/);
+  assert.match(source, /<Pressable accessible=\{false\} onPress=\{dismissVehicleAdmin\} style=\{vehicleAdminStyles\.backdrop\}/);
   assert.match(source, /onAccessibilityEscape=\{dismissVehicleAdmin\}/);
 });

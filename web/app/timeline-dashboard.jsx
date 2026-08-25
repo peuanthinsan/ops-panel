@@ -203,7 +203,7 @@ export default function TimelineDashboard({ lang }) {
         <div className="timeline-toolbar">
           <div className="timeline-controls">
             <label className="timeline-search"><span className="sr-only">{t.search}</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder={t.search} /></label>
-            <details className="timeline-filter-menu">
+            <details className="timeline-filter-menu" onKeyDown={event => { if (event.key === 'Escape' && event.currentTarget.open) { event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}>
               <summary aria-controls="timeline-filter-options"><span>{t.filterJobs}</span><small>{selectedModes.size}/{timelineModes.length} · {statusSummary}</small></summary>
               <div className="timeline-filter-popover" id="timeline-filter-options">
                 <fieldset><legend>{t.status}</legend><div className="timeline-filter-status-grid">
@@ -219,13 +219,13 @@ export default function TimelineDashboard({ lang }) {
               </div>
             </details>
           </div>
-          <div className="timeline-legend" aria-label={lang === 'en' ? 'Timeline legend' : 'คำอธิบายสีไทม์ไลน์'}>
-            <span><i className="legend-load" />{t.load}</span><span><i className="legend-unload" />{t.unload}</span><span><i className="legend-stop" />{t.stop}</span><span><i className="legend-other" />{t.other}</span><small>{t.gaps}</small>
+          <div className="timeline-legend" role="group" aria-label={lang === 'en' ? 'Timeline legend' : 'คำอธิบายสีไทม์ไลน์'}>
+            <span><i className="legend-load" aria-hidden="true" />{t.load}</span><span><i className="legend-unload" aria-hidden="true" />{t.unload}</span><span><i className="legend-stop" aria-hidden="true" />{t.stop}</span><span><i className="legend-other" aria-hidden="true" />{t.other}</span><small>{t.gaps}</small>
           </div>
         </div>
-        <div className="timeline-scroll" id="timeline-results" tabIndex={0}>
+        <div className="timeline-scroll" id="timeline-results" tabIndex={0} aria-label={lang === 'en' ? 'Scrollable vehicle activity timeline' : 'ไทม์ไลน์กิจกรรมรถ เลื่อนได้'}>
           <div className="timeline-grid timeline-axis"><span>{t.vehicleDriver}</span><div>{TIMELINE_AXIS_LABELS.map(label => <span key={label}>{label}</span>)}</div></div>
-          {timelinePage.items.map(row => <div className="timeline-grid timeline-row" key={`${row.vehicle}-${row.driver}`}><div><strong>{row.vehicle}</strong><small>{row.driver}</small></div><div className="timeline-track">{row.segments.map(segment => <button
+          {timelinePage.items.map(row => <div className="timeline-grid timeline-row" key={`${row.vehicle}-${row.driver}`} role="group" aria-label={`${t.vehicle}: ${row.vehicle}. ${t.driver}: ${row.driver}`}><div><strong>{row.vehicle}</strong><small>{row.driver}</small></div><div className="timeline-track">{row.segments.map(segment => <button
             key={segment.id}
             type="button"
             className="timeline-segment"
@@ -258,7 +258,7 @@ export default function TimelineDashboard({ lang }) {
           <p>{t.emptyBody}</p>
           <Link className="primary button-link" href="/admin">{t.manageFleet}</Link>
         </div> : null}
-        {rows.length ? <div className="table-footer"><span>{t.showing} {timelinePage.start}–{timelinePage.end} {t.of} {rows.length}</span><div className="pager"><button className="small-button secondary" type="button" disabled={timelinePage.page <= 1} onClick={() => setPage(value => value - 1)}>{t.previous}</button><span>{t.page} {timelinePage.page} / {timelinePage.totalPages}</span><button className="small-button secondary" type="button" disabled={timelinePage.page >= timelinePage.totalPages} onClick={() => setPage(value => value + 1)}>{t.next}</button></div></div> : null}
+        {rows.length ? <div className="table-footer"><span aria-live="polite">{t.showing} {timelinePage.start}–{timelinePage.end} {t.of} {rows.length}</span><div className="pager"><button className="small-button secondary" type="button" disabled={timelinePage.page <= 1} onClick={() => setPage(value => value - 1)}>{t.previous}</button><span>{t.page} {timelinePage.page} / {timelinePage.totalPages}</span><button className="small-button secondary" type="button" disabled={timelinePage.page >= timelinePage.totalPages} onClick={() => setPage(value => value + 1)}>{t.next}</button></div></div> : null}
       </section>
     </main>
   );

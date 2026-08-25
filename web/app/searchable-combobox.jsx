@@ -96,6 +96,8 @@ export default function SearchableCombobox({
   function handleKeyDown(event) {
     if (event.key === 'ArrowDown') { event.preventDefault(); moveActive(1); }
     else if (event.key === 'ArrowUp') { event.preventDefault(); moveActive(-1); }
+    else if (event.key === 'Home' && open) { event.preventDefault(); setActiveIndex(0); revealActiveOption(0); }
+    else if (event.key === 'End' && open) { const last = menuOptions.length - 1; event.preventDefault(); setActiveIndex(last); revealActiveOption(last); }
     else if (event.key === 'Enter' && open) { event.preventDefault(); choose(menuOptions[activeIndex]); }
     else if (event.key === 'Escape') { event.preventDefault(); setQuery(selectedLabel); setOpen(false); }
     else if (event.key === 'Tab') setOpen(false);

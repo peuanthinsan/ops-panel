@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
-import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AccessibilityInfo, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View, findNodeHandle } from 'react-native';
 import { operationActions } from '../lib/actions';
 import type { DeviceBinding } from '../lib/device';
 import type { DeviceJobHistorySummary } from '../lib/device-job-history';
@@ -85,7 +85,11 @@ function FilterRow({ children, label }: { children: ReactNode; label: string }) 
 
 function JobCard({ job, language, landscape }: { job: SavedJob; language: 'en' | 'th'; landscape: boolean }) {
   const deliveryStatus = syncStatus(job, language);
-  return <View style={[styles.jobCard, landscape && styles.jobCardLandscape]}>
+  const deliverySummary = deliveryStatus ? ` ${language === 'en' ? 'Dashboard delivery' : 'การส่งไปแดชบอร์ด'} ${deliveryStatus}.` : '';
+  const accessibleSummary = language === 'en'
+    ? `${localizedMode(job.mode, language)}. ${reportStatus(job, language)}.${deliverySummary} Start ${formatMobileReportDateTime(job.startTime, language)}. End ${formatMobileReportDateTime(job.endTime, language)}. Duration ${formatReportDuration(durationSeconds(job.duration))}. Driver ${job.driverName || 'not identified'}. Report ${job.id}.`
+    : `${localizedMode(job.mode, language)} สถานะ ${reportStatus(job, language)}.${deliverySummary} เริ่ม ${formatMobileReportDateTime(job.startTime, language)} จบ ${formatMobileReportDateTime(job.endTime, language)} ระยะเวลา ${formatReportDuration(durationSeconds(job.duration))} พนักงานขับรถ ${job.driverName || 'ไม่พบข้อมูล'} รหัสรายงาน ${job.id}`;
+  return <View accessible accessibilityLabel={accessibleSummary} style={[styles.jobCard, landscape && styles.jobCardLandscape]}>
     <View style={styles.jobTopRow}>
       <Text style={styles.jobMode}>{localizedMode(job.mode, language)}</Text>
     </View>
@@ -107,7 +111,7 @@ function TimelineJobCard({ job, language, landscape }: { job: SavedJob; language
       <View style={[styles.timelineDot, job.status === 'Cancelled' && styles.cancelledDot]} />
     </View>
     <View style={styles.timelineJobContent}>
-      <Text style={styles.timelineTime}>{formatMobileReportTime(job.startTime)}–{formatMobileReportTime(job.endTime)}</Text>
+      <Text accessible={false} style={styles.timelineTime}>{formatMobileReportTime(job.startTime)}–{formatMobileReportTime(job.endTime)}</Text>
       <JobCard job={job} language={language} landscape={landscape} />
     </View>
   </View>;
@@ -130,6 +134,7 @@ export function MobileJobReport({ binding, error, hasMore, jobs, language, loadi
   const [rangeStart, setRangeStart] = useState<Date | null>(null);
   const [rangeEnd, setRangeEnd] = useState<Date | null>(null);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const reportTitleRef = useRef<Text | null>(null);
   const onQueryChangeRef = useRef(onQueryChange);
   onQueryChangeRef.current = onQueryChange;
   const deferredSearch = useDeferredValue(search);
@@ -146,6 +151,13 @@ export function MobileJobReport({ binding, error, hasMore, jobs, language, loadi
   }), [deferredSearch, mode, month, rangeEnd, rangeStart, reportDay, sort, status]);
   const visibleJobs = useMemo(() => filterAndSortMobileJobs(jobs, query), [jobs, query]);
   useEffect(() => { onQueryChangeRef.current(query); }, [query]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const node = findNodeHandle(reportTitleRef.current);
+      if (node) AccessibilityInfo.setAccessibilityFocus(node);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
   const latestDay = dayKeys[0] || null;
   const daily = Boolean(reportDay);
   const copy = reportCopy[language];
@@ -218,7 +230,7 @@ export function MobileJobReport({ binding, error, hasMore, jobs, language, loadi
 
   const header = <View>
     <View style={styles.viewSwitch}>
-      <Pressable accessibilityRole="button" accessibilityState={{ selected: daily }} disabled={!latestDay} onPress={() => onSelectDay(reportDay || latestDay)} style={[styles.switchButton, daily && styles.switchButtonActive, !latestDay && styles.disabled]}><Text style={[styles.switchText, daily && styles.switchTextActive]}>{copy.daily}</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityState={{ selected: daily, disabled: !latestDay }} disabled={!latestDay} onPress={() => onSelectDay(reportDay || latestDay)} style={[styles.switchButton, daily && styles.switchButtonActive, !latestDay && styles.disabled]}><Text style={[styles.switchText, daily && styles.switchTextActive]}>{copy.daily}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityState={{ selected: !daily }} onPress={() => onSelectDay(null)} style={[styles.switchButton, !daily && styles.switchButtonActive]}><Text style={[styles.switchText, !daily && styles.switchTextActive]}>{copy.all}</Text></Pressable>
     </View>
     {daily ? <ScrollView contentContainerStyle={styles.dayPicker} horizontal showsHorizontalScrollIndicator={false}>
@@ -247,7 +259,7 @@ export function MobileJobReport({ binding, error, hasMore, jobs, language, loadi
         autoCorrect={false}
         onChangeText={setSearch}
         placeholder={copy.searchPlaceholder}
-        placeholderTextColor="#7D858C"
+        placeholderTextColor="#68727D"
         returnKeyType="search"
         style={styles.searchInput}
         value={search}
@@ -286,26 +298,27 @@ export function MobileJobReport({ binding, error, hasMore, jobs, language, loadi
         [copy.completed, String(summary.completed)],
         [copy.cancelled, String(summary.cancelled)],
         [copy.recorded, formatReportDuration(summary.durationSeconds)],
-      ].map(([label, value]) => <View key={label} style={[styles.summaryCard, portrait && styles.summaryCardPortrait]}><Text style={styles.summaryLabel}>{label}</Text><Text style={styles.summaryValue}>{value}</Text></View>)}
+      ].map(([label, value]) => <View accessible accessibilityLabel={`${label}: ${value}`} key={label} style={[styles.summaryCard, portrait && styles.summaryCardPortrait]}><Text style={styles.summaryLabel}>{label}</Text><Text style={styles.summaryValue}>{value}</Text></View>)}
     </View>
-    <Text style={styles.sectionTitle}>{daily ? (language === 'en' ? 'Timeline & saved jobs' : 'ไทม์ไลน์และงานที่บันทึก') : copy.saved}</Text>
+    <Text accessibilityRole="header" style={styles.sectionTitle}>{daily ? (language === 'en' ? 'Timeline & saved jobs' : 'ไทม์ไลน์และงานที่บันทึก') : copy.saved}</Text>
   </View>;
 
-  return <View style={styles.page}>
+  return <View accessibilityViewIsModal onAccessibilityEscape={onClose} style={styles.page}>
     <View style={styles.header}>
       <RedGpsPin size={34} />
       <View style={styles.headerInfo}>
-        <Text accessibilityRole="header" style={styles.title}>{daily ? copy.daily : copy.all}</Text>
+        <Text ref={reportTitleRef} accessible accessibilityRole="header" style={styles.title}>{daily ? copy.daily : copy.all}</Text>
         <Text numberOfLines={1} style={styles.subtitle}>{binding.vehicleNumber} · {binding.deviceId}{reportDay ? ` · ${formatMobileReportDay(reportDay, language)}` : ''}</Text>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={copy.refresh} disabled={loading} onPress={onRefresh} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>{loading ? '…' : copy.refresh}</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={copy.refresh} accessibilityState={{ busy: loading, disabled: loading }} disabled={loading} onPress={onRefresh} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>{loading ? '…' : copy.refresh}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={copy.close} onPress={onClose} style={styles.closeButton}><Text style={styles.closeButtonText}>×</Text></Pressable>
     </View>
-    {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+    {error ? <Text accessibilityLiveRegion="assertive" accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     <FlatList
+      accessibilityLabel={daily ? (language === 'en' ? 'Daily job timeline' : 'ไทม์ไลน์งานประจำวัน') : copy.saved}
       ListHeaderComponent={header}
       ListFooterComponent={hasMore ? <Pressable accessibilityRole="button" accessibilityState={{ busy: loadingMore, disabled: loadingMore }} disabled={loadingMore} onPress={onLoadMore} style={[styles.loadMoreButton, loadingMore && styles.disabled]}><Text style={styles.loadMoreText}>{loadingMore ? copy.loadingMore : copy.loadMore}</Text></Pressable> : null}
-      ListEmptyComponent={<View style={styles.empty}><Text style={styles.emptyTitle}>{loading ? (language === 'en' ? 'Loading jobs…' : 'กำลังโหลดงาน…') : jobs.length ? copy.noMatches : copy.emptyTitle}</Text><Text style={styles.emptyBody}>{jobs.length ? copy.noMatchesBody : copy.emptyBody}</Text></View>}
+      ListEmptyComponent={<View accessibilityLiveRegion="polite" style={styles.empty}><Text accessibilityRole="header" style={styles.emptyTitle}>{loading ? (language === 'en' ? 'Loading jobs…' : 'กำลังโหลดงาน…') : jobs.length ? copy.noMatches : copy.emptyTitle}</Text><Text style={styles.emptyBody}>{jobs.length ? copy.noMatchesBody : copy.emptyBody}</Text></View>}
       contentContainerStyle={[styles.list, !visibleJobs.length && styles.emptyList]}
       data={visibleJobs}
       initialNumToRender={12}
@@ -327,28 +340,28 @@ export function MobileJobReport({ binding, error, hasMore, jobs, language, loadi
   </View>;
 }
 
-const colors = { red: '#E31B23', maroon: '#7A1424', black: '#111111', grey: '#68727D', lightGrey: '#EEF0F2', white: '#FFFFFF' };
+const colors = { red: '#E31B23', maroon: '#7A1424', black: '#111111', grey: '#5E6872', lightGrey: '#EEF0F2', white: '#FFFFFF' };
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.lightGrey },
   header: { minHeight: 76, backgroundColor: colors.black, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 10 },
   headerInfo: { flex: 1, minWidth: 0 },
   title: { color: colors.white, fontSize: 20, fontWeight: '800' },
   subtitle: { color: '#C8CDD2', fontSize: 11, marginTop: 3 },
-  secondaryButton: { minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: '#5C6268', borderRadius: 7, paddingHorizontal: 12 },
+  secondaryButton: { minHeight: 48, justifyContent: 'center', borderWidth: 1, borderColor: '#5C6268', borderRadius: 7, paddingHorizontal: 12 },
   secondaryButtonText: { color: colors.white, fontWeight: '700', fontSize: 12 },
-  closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  closeButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   closeButtonText: { color: colors.white, fontSize: 30, lineHeight: 32 },
   error: { color: colors.maroon, backgroundColor: '#FFE8E9', paddingHorizontal: 16, paddingVertical: 10, fontWeight: '700' },
   list: { padding: 12, gap: 10 },
   emptyList: { flexGrow: 1 },
   viewSwitch: { flexDirection: 'row', backgroundColor: '#DDE1E4', borderRadius: 9, padding: 3, marginBottom: 10 },
-  switchButton: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 7, paddingHorizontal: 12 },
+  switchButton: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 7, paddingHorizontal: 12 },
   switchButtonActive: { backgroundColor: colors.black },
   switchText: { color: colors.grey, fontSize: 13, fontWeight: '800' },
   switchTextActive: { color: colors.white },
   disabled: { opacity: 0.45 },
   dayPicker: { gap: 7, paddingBottom: 10 },
-  dayButton: { minHeight: 40, justifyContent: 'center', backgroundColor: colors.white, borderColor: '#D7DBDF', borderWidth: 1, borderRadius: 7, paddingHorizontal: 12 },
+  dayButton: { minHeight: 48, justifyContent: 'center', backgroundColor: colors.white, borderColor: '#D7DBDF', borderWidth: 1, borderRadius: 7, paddingHorizontal: 12 },
   dayButtonActive: { backgroundColor: colors.red, borderColor: colors.red },
   dayButtonText: { color: colors.black, fontSize: 12, fontWeight: '700' },
   dayButtonTextActive: { color: colors.white },
@@ -370,16 +383,16 @@ const styles = StyleSheet.create({
   dateTimeButton: { flex: 1, minWidth: 210, minHeight: 58, justifyContent: 'center', borderWidth: 1, borderColor: '#C8CDD2', borderRadius: 8, backgroundColor: colors.white, paddingHorizontal: 12, paddingVertical: 8 },
   dateTimeButtonLabel: { color: colors.grey, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
   dateTimeButtonValue: { color: colors.black, fontSize: 12, fontWeight: '800', marginTop: 4 },
-  clearRangeButton: { minHeight: 38, alignSelf: 'flex-start', justifyContent: 'center', marginTop: 3, paddingHorizontal: 2 },
+  clearRangeButton: { minHeight: 48, alignSelf: 'flex-start', justifyContent: 'center', marginTop: 3, paddingHorizontal: 8 },
   filterLabel: { color: colors.black, fontSize: 12, fontWeight: '900', marginBottom: 7 },
   filterRail: { gap: 7, paddingRight: 8 },
-  filterChip: { minHeight: 40, justifyContent: 'center', borderWidth: 1, borderColor: '#C8CDD2', borderRadius: 20, backgroundColor: colors.white, paddingHorizontal: 13 },
+  filterChip: { minHeight: 48, justifyContent: 'center', borderWidth: 1, borderColor: '#C8CDD2', borderRadius: 24, backgroundColor: colors.white, paddingHorizontal: 13 },
   filterChipActive: { backgroundColor: colors.black, borderColor: colors.black },
   filterChipText: { color: '#535C64', fontSize: 12, fontWeight: '800' },
   filterChipTextActive: { color: colors.white },
   filterFooter: { minHeight: 32, marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   resultCount: { color: colors.grey, fontSize: 12, fontWeight: '700' },
-  clearButton: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 10 },
+  clearButton: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 10 },
   clearButtonText: { color: colors.red, fontSize: 12, fontWeight: '900' },
   summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   summaryCard: { flex: 1, minWidth: 130, backgroundColor: colors.white, borderWidth: 1, borderColor: '#D7DBDF', borderRadius: 9, padding: 14 },
@@ -388,7 +401,7 @@ const styles = StyleSheet.create({
   summaryValue: { color: colors.black, fontSize: 24, fontWeight: '900', marginTop: 4 },
   sectionTitle: { color: colors.black, fontSize: 18, fontWeight: '900', marginTop: 4, marginBottom: 10 },
   timelineJobRow: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'stretch' },
-  cancelledTimeline: { opacity: 0.58 },
+  cancelledTimeline: { backgroundColor: '#FFF7F7', borderRadius: 10 },
   timelineRail: { width: 24, alignItems: 'center', alignSelf: 'stretch' },
   timelineLine: { position: 'absolute', width: 2, top: 10, bottom: -10, backgroundColor: '#C8CDD2' },
   timelineDot: { width: 11, height: 11, marginTop: 5, borderRadius: 6, backgroundColor: colors.red, borderWidth: 2, borderColor: colors.white },
@@ -407,7 +420,7 @@ const styles = StyleSheet.create({
   jobTime: { color: colors.black, fontSize: 14, fontWeight: '700', marginTop: 12 },
   jobTimeSecondary: { color: colors.black, fontSize: 14, fontWeight: '700', marginTop: 4 },
   jobMeta: { color: colors.grey, fontSize: 12, marginTop: 6 },
-  jobId: { color: '#8A9299', fontSize: 10, marginTop: 10 },
+  jobId: { color: colors.grey, fontSize: 10, marginTop: 10 },
   empty: { alignItems: 'center', padding: 30 },
   emptyTitle: { color: colors.black, fontSize: 20, fontWeight: '800', textAlign: 'center' },
   emptyBody: { color: colors.grey, fontSize: 13, textAlign: 'center', marginTop: 7 },
