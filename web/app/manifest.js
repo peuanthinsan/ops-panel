@@ -10,7 +10,7 @@ export default function manifest() {
     background_color: '#F1F3F5',
     theme_color: '#111111',
     icons: [
-      { src: '/songdee-gps-pin-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
+      { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
     ],
   };
 }

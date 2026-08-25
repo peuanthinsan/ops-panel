@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Songdee GPS">
+  <rect width="96" height="96" rx="20" fill="#06264B"/>
+  <path fill="#E31B23" d="M48 8C29.2 8 14 23.2 14 42c0 24 28.9 45 30.1 45.9a6.7 6.7 0 0 0 7.8 0C53.1 87 82 66 82 42 82 23.2 66.8 8 48 8Z"/>
+  <circle cx="48" cy="41" r="23" fill="#fff"/>
+  <path fill="#7A1424" d="M31 27h32v9H45l18 12v21H31v-9h18L31 48V27Zm9 9v8l14 9v-7L40 36Z"/>
+</svg>
