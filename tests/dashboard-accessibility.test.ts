@@ -38,18 +38,22 @@ test('reports expose labeled filters and sort direction to assistive technology'
   assert.match(source, /className="table-wrap" tabIndex=\{0\}/);
   assert.match(source, /localizedDashboardReportError/);
   assert.match(source, /print: 'Print report'/);
-  assert.match(source, /window\.location\.assign\(`\/print\/landscape\?\$\{params\}`\)/);
+  assert.match(source, /window\.location\.assign\(`\/print\/portrait\?vehicle=/);
+  assert.doesNotMatch(source, /window\.location\.assign\(`\/print\/landscape/);
 });
 
-test('print flows separate the combined report from the timeline-only action', async () => {
+test('reports combine the timeline and saved jobs before opening the one-page vehicle print', async () => {
+  const dashboard = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
+  const shell = await readFile(fileURLToPath(new NodeUrl('../web/app/page.jsx', import.meta.url)), 'utf8');
   const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
   const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
-  const landscape = await readFile(fileURLToPath(new NodeUrl('../web/app/print/landscape/page.jsx', import.meta.url)), 'utf8');
-  assert.match(timeline, /printTimeline: 'Print timeline'/);
-  assert.match(timeline, /view: 'timeline'/);
-  assert.match(print, /function JobListPrintPage/);
-  assert.match(print, /detailedJobPages\.map/);
-  assert.match(landscape, /timelineOnly=\{params\.get\('view'\) === 'timeline'\}/);
+  assert.match(dashboard, /<TimelineDashboard lang=\{lang\} embedded sourceReports=\{visibleReports\}/);
+  assert.match(timeline, /embedded = false, sourceReports = null/);
+  assert.match(timeline, /embedded \? null : <button className="primary"/);
+  assert.doesNotMatch(shell, /\{ href: '\/timeline', key: 'timeline' \}/);
+  assert.match(print, /className="report-section"/);
+  assert.match(print, /className="simple-job-table"/);
+  assert.match(print, /className="signature-footer"/);
 });
 
 test('job GPS detail is an accessible, cancellable GPS modal', async () => {

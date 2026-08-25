@@ -6,11 +6,11 @@ import { operationActions } from '../../lib/actions';
 import { formatReportCoordinate, reportDateKey } from '../../lib/report-view';
 import { filterReports, hasRestrictiveReportFilters } from '../../lib/report-filter';
 import { timelineReportMatchesFilters } from '../../lib/timeline-filter';
-import { TIMELINE_AXIS_LABELS, timelinePosition } from '../../lib/timeline-position';
+import { TIMELINE_AXIS_LABELS, bangkokMinuteOfDay, timelinePosition } from '../../lib/timeline-position';
 import { adminFetch, adminFetchAllReports } from '../dashboard-api';
 
 const MODE_META = Object.fromEntries(operationActions.map(action => [action[2], { number: action[0], th: action[1], en: action[2] }]));
-const MODE_COLORS = { Load: '#E31B23', Unload: '#7A1424', 'Stop vehicle': '#B57A00', Driving: '#06264B' };
+const MODE_COLORS = { Load: '#D5283D', Unload: '#203854', 'Stop vehicle': '#DFA036', Driving: '#68727D' };
 
 function validDate(value) { return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : reportDateKey(new Date().toISOString()); }
 function dateValue(value) { const date = value ? new Date(value) : null; return date && Number.isFinite(date.getTime()) ? date : null; }
@@ -51,6 +51,12 @@ function distance(report) {
 function hasGps(report) { return Number(report.deviceGpsSamples) > 0; }
 function isLookupPending(report) { return report.gpsLookupStatus === 'pending'; }
 function modeLabel(report, lang) { return MODE_META[report.mode]?.[lang] || report.mode || '—'; }
+function jobTypeClass(mode) {
+  if (mode === 'Load') return 'load';
+  if (mode === 'Unload') return 'unload';
+  if (mode === 'Stop vehicle') return 'stop';
+  return 'other';
+}
 function location(report, lang) {
   const latitude = formatReportCoordinate(report.lastDeviceLatitude ?? report.latitude);
   const longitude = formatReportCoordinate(report.lastDeviceLongitude ?? report.longitude);
@@ -59,6 +65,24 @@ function location(report, lang) {
 }
 function totalDuration(seconds) { return `${String(Math.floor(seconds / 3600)).padStart(2, '0')}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`; }
 function modeColor(mode) { return MODE_COLORS[mode] || '#68727D'; }
+function portraitTimelinePosition(startValue, endValue, fallbackMinutes = 5) {
+  const start = bangkokMinuteOfDay(startValue);
+  const end = bangkokMinuteOfDay(endValue);
+  const startDate = dateValue(startValue);
+  const endDate = dateValue(endValue);
+  if (start == null || !startDate) return null;
+  const windowStart = 6 * 60;
+  const windowEnd = 24 * 60;
+  const crossesMidnight = Boolean(endDate && end != null && endDate > startDate && end < start);
+  const rawEnd = crossesMidnight ? windowEnd : (end ?? start + fallbackMinutes);
+  const boundedStart = Math.max(windowStart, Math.min(windowEnd, start));
+  const boundedEnd = Math.max(boundedStart + fallbackMinutes, Math.min(windowEnd, rawEnd));
+  if (boundedStart >= windowEnd) return null;
+  return {
+    left: ((boundedStart - windowStart) / (windowEnd - windowStart)) * 100,
+    width: ((Math.min(windowEnd, boundedEnd) - boundedStart) / (windowEnd - windowStart)) * 100,
+  };
+}
 function alertFor(report) {
   const explicit = Array.isArray(report.alerts) ? report.alerts : [];
   const hasHarshBraking = Boolean(report.harshBraking || report.harshBrake || Number(report.harshBrakingCount) > 0 || explicit.some(value => /brak/i.test(String(value))));
@@ -280,7 +304,7 @@ export function PortraitPrintDashboard({ date: requestedDate, vehicle: requested
   const documentId = `SD-${date.replaceAll('-', '')}-${vehicle || 'FLEET'}`;
   const durationShort = seconds => `${Math.floor(seconds / 3600)}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}`;
   const timelineRows = summary.rows.map(report => {
-    const position = timelinePosition(report.startTime, report.endTime);
+    const position = portraitTimelinePosition(report.startTime, report.endTime);
     return position ? { report, position } : null;
   }).filter(Boolean);
   return <main className="print-preview portrait-preview">
@@ -289,8 +313,8 @@ export function PortraitPrintDashboard({ date: requestedDate, vehicle: requested
       <header className="report-masthead"><div className="report-brand"><Image src="/songdee-report-pin.svg" alt="" width={62} height={76} /><div><strong>SONGDEE GPS</strong><span>FLEET &amp; FIELD OPERATIONS</span></div></div><div className="report-heading"><small>DAILY VEHICLE REPORT</small><h1>{lang === 'th' ? 'รายงานการเดินรถประจำวัน' : 'Daily Vehicle Report'}</h1><p>{lang === 'th' ? `เลขที่เอกสาร ${documentId} · พิมพ์เมื่อ ${printedAt}` : `Document ID ${documentId} · Printed ${printedAt}`}</p></div></header>
       <div className="trip-info-row"><div><small>{lang === 'th' ? 'ทะเบียนรถ' : 'Vehicle Plate'}</small><strong>{vehicle || '—'}</strong></div><div><small>{lang === 'th' ? 'คนขับ' : 'Driver'}</small><strong>{summary.driver}</strong></div><div><small>{lang === 'th' ? 'วันที่' : 'Date'}</small><strong>{reportDate(date, lang)}</strong></div><div><small>{lang === 'th' ? 'เวลาเริ่ม–สิ้นสุด' : 'Shift Start–End'}</small><strong>{shortTime(summary.start, lang)} – {shortTime(summary.end, lang)}</strong></div><div><small>{lang === 'th' ? 'สถานะ' : 'Status'}</small><strong className="trip-status">{lang === 'th' ? (summary.cancelled ? 'มีข้อยกเว้น' : 'เสร็จสิ้น') : (summary.cancelled ? 'Attention' : 'Completed')}</strong></div></div>
       <div className="report-kpi-grid"><Kpi label={lang === 'th' ? 'ระยะทางรวม' : 'Total Distance'} value={summary.distance == null ? '—' : summary.distance.toFixed(1)} note="km" /><Kpi label={lang === 'th' ? 'งานที่เสร็จ' : 'Jobs Completed'} value={summary.rows.length} note={lang === 'th' ? 'งาน' : 'jobs'} /><Kpi label={lang === 'th' ? 'เวลาทำงานรวม' : 'Total Working Time'} value={durationShort(totalSeconds)} note={lang === 'th' ? 'ชม.' : 'hrs'} /><Kpi label={lang === 'th' ? 'เวลาพัก / รอ' : 'Break / Wait Time'} value={durationShort(breakSeconds)} note={lang === 'th' ? 'ชม.' : 'hrs'} /></div>
-      <section className="report-section"><div className="report-section-heading"><h2>{lang === 'th' ? 'ไทม์ไลน์การเดินรถ' : 'TRIP TIMELINE'}</h2><strong className={alerts.length ? 'timeline-alert-count' : 'timeline-clear'}>△ {alerts.length} {lang === 'th' ? 'การแจ้งเตือนระหว่างทาง' : alerts.length === 1 ? 'alert during this trip' : 'alerts during this trip'}</strong></div><div className="timeline-legend"><span><i className="load" />{lang === 'th' ? 'โหลดสินค้า' : 'Load'}</span><span><i className="unload" />{lang === 'th' ? 'ส่งสินค้า' : 'Unload'}</span><span><i className="stop" />{lang === 'th' ? 'จอด/รอ' : 'Stop / Wait'}</span><span><i className="other" />{lang === 'th' ? 'พัก/อื่นๆ' : 'Break / Other'}</span><span><i className="alert" />{lang === 'th' ? 'การแจ้งเตือน' : 'Alert'}</span></div><div className="trip-timeline" role="img" aria-label={lang === 'th' ? 'ไทม์ไลน์การเดินรถ' : 'Trip timeline'}>{timelineRows.map(({ report, position }) => <span key={report.id || report.startTime} className="timeline-segment" style={{ left: `${position.left}%`, width: `${Math.max(.9, position.width)}%`, background: modeColor(report.mode), opacity: report.status === 'Cancelled' ? .45 : 1 }} />)}{alerts.map(({ report, alert }) => { const position = timelinePosition(report.startTime, report.endTime); return position ? <span key={`flag-${report.id || report.startTime}`} className="timeline-flag" style={{ left: `${position.left}%` }} aria-hidden="true" /> : null; })}</div><div className="timeline-axis">{['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'].map(label => <span key={label}>{label}</span>)}</div><div className="alert-list">{alerts.map(({ report, alert }) => <span key={`alert-${report.id || report.startTime}`}>● {shortTime(report.startTime, lang)} · {lang === 'th' ? alert.th : alert.label}</span>)}</div></section>
-      <section className="report-section job-section"><div className="report-section-heading"><h2>{lang === 'th' ? 'รายการงาน' : 'JOB LIST'}</h2><span>{lang === 'th' ? 'แสดงเฉพาะงานที่มีการบันทึก' : 'Only logged jobs are shown'}</span></div><table className="simple-job-table"><caption className="sr-only">{lang === 'th' ? 'รายการงาน' : 'Job list'}</caption><thead><tr><th>{lang === 'th' ? 'เวลา' : 'TIME'}</th><th>{lang === 'th' ? 'ประเภท' : 'TYPE'}</th><th>{lang === 'th' ? 'สถานที่ / รายละเอียด' : 'LOCATION / DETAILS'}</th><th>{lang === 'th' ? 'ระยะเวลา' : 'DURATION'}</th></tr></thead><tbody>{summary.rows.map(report => { const place = location(report, lang); return <tr key={report.id || report.startTime}><td>{shortTime(report.startTime, lang)}–{shortTime(report.endTime, lang)}</td><td><span className={`job-type ${report.mode === 'Unload' ? 'unload' : 'load'}`}>{modeLabel(report, lang)}</span></td><td>{place.name}</td><td>{elapsed(report.startTime, report.endTime).slice(0, 5)}</td></tr>; })}</tbody></table>{!summary.rows.length ? <p className="print-empty">{lang === 'th' ? 'ไม่มีงานที่บันทึกสำหรับรถและวันที่นี้' : 'No saved jobs for this vehicle and date.'}</p> : null}</section>
+      <section className="report-section"><div className="report-section-heading"><h2>{lang === 'th' ? 'ไทม์ไลน์การเดินรถ' : 'TRIP TIMELINE'}</h2><strong className={alerts.length ? 'timeline-alert-count' : 'timeline-clear'}>△ {alerts.length} {lang === 'th' ? 'การแจ้งเตือนระหว่างทาง' : alerts.length === 1 ? 'alert during this trip' : 'alerts during this trip'}</strong></div><div className="timeline-legend"><span><i className="load" />{lang === 'th' ? 'โหลดสินค้า' : 'Load'}</span><span><i className="unload" />{lang === 'th' ? 'ส่งสินค้า' : 'Unload'}</span><span><i className="stop" />{lang === 'th' ? 'จอด/รอ' : 'Stop / Wait'}</span><span><i className="other" />{lang === 'th' ? 'พัก/อื่นๆ' : 'Break / Other'}</span><span><i className="alert" />{lang === 'th' ? 'การแจ้งเตือน' : 'Alert'}</span></div><div className="trip-timeline" role="img" aria-label={lang === 'th' ? 'ไทม์ไลน์การเดินรถ' : 'Trip timeline'}>{timelineRows.map(({ report, position }) => <span key={report.id || report.startTime} className="timeline-segment" style={{ left: `${position.left}%`, width: `${Math.max(.9, position.width)}%`, background: modeColor(report.mode), opacity: report.status === 'Cancelled' ? .45 : 1 }} />)}{alerts.map(({ report, alert }) => { const position = portraitTimelinePosition(report.startTime, report.endTime); return position ? <span key={`flag-${report.id || report.startTime}`} className="timeline-flag" style={{ left: `${position.left}%` }} aria-hidden="true" /> : null; })}</div><div className="timeline-axis">{['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'].map(label => <span key={label}>{label}</span>)}</div><div className="alert-list">{alerts.map(({ report, alert }) => <span key={`alert-${report.id || report.startTime}`}>● {shortTime(report.startTime, lang)} · {lang === 'th' ? alert.th : alert.label}</span>)}</div></section>
+      <section className="report-section job-section"><div className="report-section-heading"><h2>{lang === 'th' ? 'รายการงาน' : 'JOB LIST'}</h2><span>{lang === 'th' ? 'แสดงเฉพาะงานที่มีการบันทึก' : 'Only logged jobs are shown'}</span></div><table className="simple-job-table"><caption className="sr-only">{lang === 'th' ? 'รายการงาน' : 'Job list'}</caption><thead><tr><th>{lang === 'th' ? 'เวลา' : 'TIME'}</th><th>{lang === 'th' ? 'ประเภท' : 'TYPE'}</th><th>{lang === 'th' ? 'สถานที่ / รายละเอียด' : 'LOCATION / DETAILS'}</th><th>{lang === 'th' ? 'ระยะเวลา' : 'DURATION'}</th></tr></thead><tbody>{summary.rows.map(report => { const place = location(report, lang); return <tr key={report.id || report.startTime}><td>{shortTime(report.startTime, lang)}–{shortTime(report.endTime, lang)}</td><td><span className={`job-type ${jobTypeClass(report.mode)}`}>{modeLabel(report, lang)}</span></td><td>{place.name}</td><td>{elapsed(report.startTime, report.endTime).slice(0, 5)}</td></tr>; })}</tbody></table>{!summary.rows.length ? <p className="print-empty">{lang === 'th' ? 'ไม่มีงานที่บันทึกสำหรับรถและวันที่นี้' : 'No saved jobs for this vehicle and date.'}</p> : null}</section>
       <footer className="signature-footer"><div><span />{lang === 'th' ? 'ลายเซ็นคนขับ / Driver' : 'Driver Signature'}</div><div><span />{lang === 'th' ? 'ลายเซ็นหัวหน้างาน / Supervisor' : 'Supervisor Signature'}</div><div><span />{lang === 'th' ? 'วันที่ตรวจสอบ / Reviewed date' : 'Reviewed Date'}</div></footer>
     </section>
   </main>;

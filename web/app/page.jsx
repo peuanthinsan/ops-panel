@@ -7,7 +7,6 @@ import { usePathname } from 'next/navigation';
 import FullReportDashboard from './report-dashboard';
 import FleetDashboard from './fleet-dashboard';
 import SettingsDashboard from './settings-dashboard';
-import TimelineDashboard from './timeline-dashboard';
 import { adminFetch } from './dashboard-api';
 import { clearAdminSessionToken, getAdminSessionToken, setAdminSessionToken } from './dashboard-session';
 import { localizedDashboardAdminError } from '../lib/dashboard-errors';
@@ -15,16 +14,15 @@ import { clearOfflineResponses } from './offline-store';
 
 const copy = {
   en: {
-    reports: 'Reports', reportsSub: 'รายงานการปฏิบัติงาน', timeline: 'Timeline', timelineSub: 'ไทม์ไลน์รายรถ', fleet: 'Fleet', fleetSub: 'จัดการรถและแท็บเล็ต', settings: 'Settings', settingsSub: 'การตั้งค่าผู้ดูแล', title: 'Songdee GPS Ops Panel', adminLabel: 'Ops Panel · Admin', password: 'Admin password', continue: 'Continue', signingIn: 'Signing in…', signOut: 'Sign out', loginTitle: 'Admin access', loginBody: 'Enter the fleet administrator password. No username is required.', invalid: 'Incorrect password', skip: 'Skip to content', loading: 'Loading dashboard…', language: 'Switch language', navigation: 'Primary navigation',
+    reports: 'Reports', reportsSub: 'Jobs & timeline', fleet: 'Fleet', fleetSub: 'จัดการรถและแท็บเล็ต', settings: 'Settings', settingsSub: 'การตั้งค่าผู้ดูแล', title: 'Songdee GPS Ops Panel', adminLabel: 'Ops Panel · Admin', password: 'Admin password', continue: 'Continue', signingIn: 'Signing in…', signOut: 'Sign out', loginTitle: 'Admin access', loginBody: 'Enter the fleet administrator password. No username is required.', invalid: 'Incorrect password', skip: 'Skip to content', loading: 'Loading dashboard…', language: 'Switch language', navigation: 'Primary navigation',
   },
   th: {
-    reports: 'รายงาน', reportsSub: 'Reports', timeline: 'ไทม์ไลน์', timelineSub: 'Timeline', fleet: 'จัดการรถ', fleetSub: 'Fleet', settings: 'ตั้งค่า', settingsSub: 'Settings', title: 'Songdee GPS Ops Panel', adminLabel: 'Ops Panel · ผู้ดูแล', password: 'รหัสผ่านผู้ดูแล', continue: 'เข้าสู่ระบบ', signingIn: 'กำลังเข้าสู่ระบบ…', signOut: 'ออกจากระบบ', loginTitle: 'เข้าสู่ระบบผู้ดูแล', loginBody: 'กรอกรหัสผ่านผู้ดูแลฝูงรถ ไม่ต้องใช้ชื่อผู้ใช้', invalid: 'รหัสผ่านไม่ถูกต้อง', skip: 'ข้ามไปยังเนื้อหา', loading: 'กำลังโหลดแดชบอร์ด…', language: 'เปลี่ยนภาษา', navigation: 'เมนูหลัก',
+    reports: 'รายงาน', reportsSub: 'งานและไทม์ไลน์', fleet: 'จัดการรถ', fleetSub: 'Fleet', settings: 'ตั้งค่า', settingsSub: 'Settings', title: 'Songdee GPS Ops Panel', adminLabel: 'Ops Panel · ผู้ดูแล', password: 'รหัสผ่านผู้ดูแล', continue: 'เข้าสู่ระบบ', signingIn: 'กำลังเข้าสู่ระบบ…', signOut: 'ออกจากระบบ', loginTitle: 'เข้าสู่ระบบผู้ดูแล', loginBody: 'กรอกรหัสผ่านผู้ดูแลฝูงรถ ไม่ต้องใช้ชื่อผู้ใช้', invalid: 'รหัสผ่านไม่ถูกต้อง', skip: 'ข้ามไปยังเนื้อหา', loading: 'กำลังโหลดแดชบอร์ด…', language: 'เปลี่ยนภาษา', navigation: 'เมนูหลัก',
   },
 };
 
 const navigation = [
   { href: '/', key: 'reports' },
-  { href: '/timeline', key: 'timeline' },
   { href: '/admin', key: 'fleet' },
   { href: '/settings', key: 'settings' },
 ];
@@ -118,7 +116,7 @@ function Shell({ lang, setLang, onLogout, children }) {
         </Link>
         <nav aria-label={t.navigation}>
           {navigation.map(item => (
-            <Link key={item.key} href={item.href} aria-current={pathname === item.href ? 'page' : undefined}>
+            <Link key={item.key} href={item.href} aria-current={pathname === item.href || (item.key === 'reports' && pathname === '/timeline') ? 'page' : undefined}>
               <strong>{t[item.key]}</strong>
               <small>{t[`${item.key}Sub`]}</small>
             </Link>
@@ -189,8 +187,20 @@ export default function Dashboard() {
   useEffect(() => {
     if (!ready || !loggedIn) return;
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    const frame = window.requestAnimationFrame(() => document.getElementById('main-content')?.focus({ preventScroll: true }));
-    return () => window.cancelAnimationFrame(frame);
+    let mainContent = null;
+    const clearRouteFocus = () => { if (mainContent) delete mainContent.dataset.routeFocus; };
+    const frame = window.requestAnimationFrame(() => {
+      mainContent = document.getElementById('main-content');
+      if (!mainContent) return;
+      mainContent.dataset.routeFocus = 'true';
+      mainContent.addEventListener('blur', clearRouteFocus, { once: true });
+      mainContent.focus({ preventScroll: true });
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      mainContent?.removeEventListener('blur', clearRouteFocus);
+      clearRouteFocus();
+    };
   }, [pathname, ready, loggedIn]);
 
   const logout = () => {
@@ -205,7 +215,6 @@ export default function Dashboard() {
   if (!loggedIn) return <Login lang={lang} setLang={setLang} onLogin={() => setLoggedIn(true)} />;
 
   let screen = <FullReportDashboard lang={lang} />;
-  if (pathname === '/timeline') screen = <TimelineDashboard lang={lang} />;
   if (pathname === '/admin') screen = <FleetDashboard lang={lang} />;
   if (pathname === '/settings') screen = <SettingsDashboard lang={lang} />;
 

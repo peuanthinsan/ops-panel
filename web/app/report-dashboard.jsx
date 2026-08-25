@@ -11,11 +11,11 @@ import {
   reportDateKey,
 } from '../lib/report-view';
 import { reportableOperations } from '../lib/actions';
-import { appendReportFilters } from '../lib/report-filter';
 import { localizedDashboardReportError } from '../lib/dashboard-errors';
 import { adminFetch } from './dashboard-api';
 import SearchableCombobox from './searchable-combobox';
 import JobGpsDrawer from './job-gps-drawer';
+import TimelineDashboard from './timeline-dashboard';
 
 const reportPageSize = 100;
 const modes = reportableOperations.map(action => action[2]);
@@ -43,10 +43,10 @@ const gpsCopy = {
 };
 const gpsUiText = {
   en: {
-    subtitle: 'Review saved jobs and their time-matched GPS records.', gpsMatched: 'GPS found', gpsMatchedSub: 'jobs with a GPS point', needsAttention: 'Needs attention', needsAttentionSub: 'jobs with no GPS point', gpsFound: 'GPS found', noData: 'No GPS data', viewGps: 'View GPS', gpsCoverage: 'GPS', lastPosition: 'Last position', samples: 'points',
+    subtitle: 'Review saved jobs, their timeline, and time-matched GPS records.', gpsMatched: 'GPS found', gpsMatchedSub: 'jobs with a GPS point', needsAttention: 'Needs attention', needsAttentionSub: 'jobs with no GPS point', gpsFound: 'GPS found', noData: 'No GPS data', viewGps: 'View GPS', gpsCoverage: 'GPS', lastPosition: 'Last position', samples: 'points',
   },
   th: {
-    subtitle: 'ตรวจสอบงานที่บันทึกและข้อมูล GPS ที่ตรงตามเวลา', gpsMatched: 'พบข้อมูล GPS', gpsMatchedSub: 'งานที่พบพิกัด GPS', needsAttention: 'ต้องตรวจสอบ', needsAttentionSub: 'งานที่ไม่พบพิกัด GPS', gpsFound: 'พบข้อมูล GPS', noData: 'ไม่มีข้อมูล GPS', viewGps: 'ดู GPS', gpsCoverage: 'GPS', lastPosition: 'ตำแหน่งล่าสุด', samples: 'จุด',
+    subtitle: 'ตรวจสอบงานที่บันทึก ไทม์ไลน์ และข้อมูล GPS ที่ตรงตามเวลา', gpsMatched: 'พบข้อมูล GPS', gpsMatchedSub: 'งานที่พบพิกัด GPS', needsAttention: 'ต้องตรวจสอบ', needsAttentionSub: 'งานที่ไม่พบพิกัด GPS', gpsFound: 'พบข้อมูล GPS', noData: 'ไม่มีข้อมูล GPS', viewGps: 'ดู GPS', gpsCoverage: 'GPS', lastPosition: 'ตำแหน่งล่าสุด', samples: 'จุด',
   },
 };
 const text = {
@@ -356,27 +356,13 @@ export default function FullReportDashboard({ lang }) {
     setSearch(''); setStartDate(''); setEndDate(''); setVehicle(''); setDevice(''); setDriver(''); setMode(''); setStatus(''); setGps(''); setSorts([{ key: 'startTime', direction: 'desc' }]);
   }
   function printReports() {
-    const filteredVehicles = [...new Set(visibleReports.map(report => report.vehicleNumber).filter(Boolean))];
-    const portraitVehicle = vehicle || (filteredVehicles.length === 1 ? filteredVehicles[0] : '');
+    const selected = visibleReports.find(report => !vehicle || report.vehicleNumber === vehicle) || visibleReports[0];
+    const portraitVehicle = vehicle || selected?.vehicleNumber || '';
     const portraitDate = startDate && startDate === endDate
       ? startDate
-      : (portraitVehicle && visibleReports.length ? reportDateKey(visibleReports[0].startTime) : '');
-    if (portraitVehicle && portraitDate) {
-      window.location.assign(`/print/portrait?vehicle=${encodeURIComponent(portraitVehicle)}&date=${encodeURIComponent(portraitDate)}&lang=${lang}`);
-      return;
-    }
-    const params = appendReportFilters(new URLSearchParams({ lang }), {
-      search: deferredSearch,
-      startDate,
-      endDate,
-      vehicle,
-      device,
-      driver,
-      mode,
-      status,
-      gps,
-    });
-    window.location.assign(`/print/landscape?${params}`);
+      : reportDateKey(selected?.startTime);
+    if (!portraitVehicle || !portraitDate) return;
+    window.location.assign(`/print/portrait?vehicle=${encodeURIComponent(portraitVehicle)}&date=${encodeURIComponent(portraitDate)}&lang=${lang}`);
   }
   function printVehicle(report) {
     const params = new URLSearchParams({ vehicle: report.vehicleNumber || '', date: reportDateKey(report.startTime), lang });
@@ -414,6 +400,8 @@ export default function FullReportDashboard({ lang }) {
         <div><span>{g.gpsMatched}</span><strong className="positive-text">{gpsMatchedJobs}</strong><small className="positive">{g.gpsMatchedSub}</small></div>
         <div><span>{g.needsAttention}</span><strong className="danger-text">{gpsNeedsAttention}</strong><small>{g.needsAttentionSub}</small></div>
       </div>
+
+      <TimelineDashboard lang={lang} embedded sourceReports={visibleReports} sourceLoading={loading} sourceError={error} />
 
       <section className="panel report-panel" aria-busy={loading || search !== deferredSearch}>
         <div className="section-heading report-section-heading"><div><h2>{t.activity}</h2><p className="sort-hint">{t.sortHint}</p></div><span className="result-count" aria-live="polite">{t.showing} {pageInfo.start}–{pageInfo.end} {t.of} {pageInfo.total}</span></div>

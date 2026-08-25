@@ -1,63 +1,91 @@
-# Design QA — Timeline job filters and status pill
+# Design QA — Merged Reports, Timeline, and A4 Print Report
 
-**Source visual truth**
+## Findings
 
-- User screenshot: `/var/folders/rg/9whqf0b16kjgfg7xwrp1bn3c0000gn/T/TemporaryItems/NSIRD_screencaptureui_sN88MB/Screenshot 2026-08-25 at 10.15.10 AM.png`
-- Source pixels: 546 × 369.
-- Target state: English timeline detail tooltip for a completed job. The source showed the status as uncontained green text; the requested change was a compact chip or pill.
+- No actionable P0, P1, or P2 visual, responsive, accessibility, or core-interaction findings remain.
 
-**Rendered implementation**
+## Source visual truth
 
-- Focused tooltip capture: `/private/tmp/songdee-timeline-status-pill-crop.jpg`
-- Tooltip capture pixels: 356 × 250, cropped from a 1280 × 900 browser viewport at device scale factor 1.
-- Desktop filter capture: `/private/tmp/songdee-timeline-filters-final.png` at 1280 × 900.
-- Mobile filter capture: `/private/tmp/songdee-timeline-filters-mobile.png` at 390 × 844.
-- Normalization: the screenshot and implementation were compared as equivalent tooltip content regions. Absolute pixels differ because the supplied screenshot was captured at a larger browser/display scale; typography, two-column structure, spacing, color, radius, and status treatment were judged at their rendered proportions.
+- Operations Reports reference: `/Users/peuan/Downloads/1787646421080.jpg` (2850 × 1244).
+- English A4 report reference: `/Users/peuan/Downloads/messageImage_1787646317635_0.jpg` (1572 × 1348).
+- Thai A4 report reference: `/Users/peuan/Downloads/messageImage_1787646302844_0.jpg` (1558 × 1428).
+- The GPS JSON screenshot was treated as example data, not as a design instruction.
 
-**State and interactions tested**
+## Rendered implementation
 
-- Default timeline: all nine job types selected, Completed selected, Cancelled unselected.
-- Combined status view: selecting Cancelled while keeping Completed shows both statuses.
-- Cancelled-only view: unchecking Completed while keeping Cancelled displayed the single cancelled Refuel record.
-- Job-type filtering: clearing all modes and selecting Refuel displayed only that mode.
-- Reset restored all nine modes and Completed-only status.
-- Print Timeline preserved the selected Refuel + Cancelled-only filters and generated a one-job print summary.
-- Desktop and 390 px mobile layouts were rendered; the mobile document width remained equal to the viewport and the filter panel did not create page-level overflow.
+- Desktop merged page: `/private/tmp/songdee-merged-reports-desktop-2048x894.png` at a 2048 × 894 viewport.
+- Mobile merged page: `/private/tmp/songdee-merged-reports-mobile-final.png` at a 390 × 844 viewport; full-page capture is 390 × 4755 with no page-level horizontal overflow.
+- A4 report: `/private/tmp/songdee-merged-print-report-final.png` at a 1440 × 1000 viewport; the rendered sheet is 793.69 × 1122.52 CSS pixels, equivalent to 210 × 297 mm.
+- Combined desktop comparison: `/private/tmp/songdee-dashboard-comparison-final.png` (reference left, implementation right).
+- Combined print comparison: `/private/tmp/songdee-print-comparison-final.png` (reference left, implementation right).
+- Browser captures used device pixel ratio 1. The dashboard source was proportionally normalized from 2850 × 1244 to 2048 × 894 to match the implementation viewport. For the print comparison, the 1572 × 1348 source stayed native while the 1440 × 1263 full-page implementation capture was proportionally fitted and white-padded inside an equal 1572 × 1348 frame.
 
-**Findings**
+## Comparison evidence
 
-- No remaining P0, P1, or P2 visual or interaction findings.
-- Fonts and typography: the existing Sarabun hierarchy, optical weights, line heights, and compact tooltip labels remain intact. The status pill uses a smaller 10 px bold label so it reads as metadata rather than competing with the activity title.
-- Spacing and layout rhythm: the title and pill share an aligned flex row with an 8 px gap. Tooltip definition-list spacing and the original two-column information structure are preserved. The filter popover uses a three-column desktop grid and two-column mobile grid.
-- Colors and visual tokens: Completed uses an accessible dark-green-on-light-green semantic treatment; Cancelled uses dark red on light red. The filter trigger uses existing black, red, grey, and white Songdee tokens.
-- Image quality and asset fidelity: this component introduces no new raster, logo, illustration, or icon assets. Existing Songdee brand assets are unchanged.
-- Copy and content: all filter, status, job-mode, empty-state, and print behavior is available in English and Thai. The nine job titles come directly from the canonical action list.
-- Accessibility: status and mode options use native checkboxes with visible focus treatment; fieldsets and legends group the controls; the filter trigger is a native `details`/`summary`; the timeline buttons retain complete accessible labels and tooltip relationships.
+- Full view: the normalized dashboard comparison verifies the retained sidebar/header/KPI structure and the intentional insertion of the per-vehicle timeline directly above Job list. The normalized print comparison verifies the shared masthead, trip-info row, four-card KPI band, timeline, simplified table, and signature footer hierarchy.
+- Focused view: no extra crop was needed because the A4 sheet is already the focused workflow target. The source and final A4 implementation were also opened directly at native resolution after the combined comparison, where logo sharpness, condensed typography, legend colors, job pills, table rules, and signature lines were legible.
 
-**Comparison evidence**
+## State and interactions tested
 
-- The supplied tooltip screenshot and final focused tooltip capture were opened together in one comparison pass.
-- The uncontained source status is replaced by a clearly bounded rounded pill while the surrounding activity title, metadata hierarchy, and two-column details remain stable.
-- The filter menu had no visual reference image; it was evaluated against the user's requested checkbox behavior, the existing dashboard design system, desktop/mobile captures, and interaction results.
+- English dashboard using the locally cached five-job audit set: two vehicles, four jobs with GPS, one job needing attention.
+- Reports contains KPI cards, the per-vehicle timeline, and the saved-job list in that order.
+- Sidebar contains Reports, Fleet, and Settings only; the Reports label includes “Jobs & timeline”.
+- The legacy `/timeline` URL resolves to the merged Operations reports page with both timeline and Job list present.
+- Timeline filter interaction was exercised: enabling Cancelled increased rendered segments from four to five, and disabling it restored the default completed-only state.
+- The header Print report action opened `/print/portrait` for a visible vehicle and date. Per-vehicle print actions use the same portrait route.
+- The portrait report rendered five trip-info cells, four KPI cards, four timeline segments, four job rows, and three signature fields. Alert flags remain data-driven.
+- Fresh browser tabs produced no console warnings or errors on either the dashboard or portrait print route.
 
-**Comparison history**
+## Fidelity review
 
-1. P2 source issue: Completed appeared as loose text adjacent to the activity title and did not read as a status component.
-2. Fix: added a bordered, fully rounded semantic status pill and an aligned tooltip heading row.
-3. Requirement expansion: replaced two mutually exclusive cancelled-job buttons with a compact Filter jobs menu containing native status and job-type checkbox chips.
-4. Post-fix evidence: completed-only, combined, cancelled-only, single-mode, reset, mobile, and filtered-print states all behaved as intended.
+- Typography: preserves the existing Sarabun/Arial Songdee hierarchy and the condensed navy masthead typography from the mockup.
+- Layout and spacing: the timeline now sits between KPIs and Job list on the main page. The print page uses the mockup sequence—masthead, condensed trip row, KPIs, timeline, simplified jobs, signatures—and remains one fixed A4 portrait sheet.
+- Colors: load red, unload navy, stop/wait gold, break/other grey, green completion state, and red alert treatment match the reference semantics. Timeline bars, legends, and print job pills use the same mapping.
+- Assets: the existing Songdee logo and report-pin assets are reused at their native aspect ratios; no placeholder imagery or approximate logo was introduced.
+- Copy: English and Thai report labels remain available. Live record values intentionally replace the sample names, dates, locations, alerts, and KPIs shown in the mockups.
+- Responsive behavior: the merged page becomes a single-column flow at 390 px, saved-job cards render fully, and the timeline remains horizontally scrollable inside its own container.
+- Accessibility: route changes still move focus to main content without showing a misleading programmatic focus border; keyboard-triggered focus styles remain available after blur. Native timeline checkboxes and existing labeled report filters are preserved.
 
-**Implementation checklist**
+## Comparison history
 
-- [x] Render Completed and Cancelled as semantic pills in timeline tooltips.
-- [x] Hide cancelled jobs by default.
-- [x] Allow any combination of Completed, Cancelled, and the nine job types.
-- [x] Preserve selected filters when printing the timeline.
-- [x] Provide English and Thai copy.
-- [x] Verify desktop, mobile, keyboard-accessible controls, filtered data, and production build.
+1. P1: Reports and Timeline were separate destinations, so the requested combined workflow was not visible from Reports.
+2. Fix: embedded the real timeline into Reports, removed the duplicate Timeline navigation item, and kept `/timeline` as a compatible alias to the merged page.
+3. P1: the main Print report action could fall back to the older landscape summary.
+4. Fix: the header and per-vehicle print actions now consistently open the screenshot-matched portrait vehicle report.
+5. P2: mobile full-page rendering skipped off-screen saved-job card contents because of `content-visibility`.
+6. Fix: removed that optimization and confirmed all five cards render at 390 px without overflow.
+7. P2: timeline segment and non-load job-pill colors did not match the reference legend.
+8. Fix: unified dashboard and print colors to red, navy, gold, and grey; preserved one-page A4 sizing.
+9. P3: the report logo emitted an aspect-ratio warning and route focus displayed a persistent red page outline.
+10. Fix: preserved the logo ratio and suppressed only the programmatic route-focus outline. Fresh browser-console checks are clean.
 
-**Follow-up polish**
+## Intentional differences
 
-- No P3 follow-up is required for this scoped change.
+- The reference dashboard shows a separate Timeline sidebar item; it is intentionally removed because the requested final information architecture combines Timeline with Reports.
+- The browser preview shows an Offline mode banner because it is using the app’s cached audit data. This is an environmental state, not part of the print layout.
+- The cached vehicle records contain no report-level distance or alert events, so the verified print preview shows an em dash for distance and zero alert flags. The report still renders distance, speeding, and harsh-braking data when supplied.
+
+## Open questions
+
+- None blocking. Live data will determine whether distance and alert values are populated on a given vehicle-day report.
+
+## Implementation checklist
+
+- [x] Merge saved jobs and the per-vehicle timeline under Reports.
+- [x] Remove duplicate Timeline navigation while preserving the legacy URL.
+- [x] Route header and vehicle print actions to the one-page portrait report.
+- [x] Match the mockup hierarchy, semantic colors, bilingual copy, and signature footer.
+- [x] Verify desktop, mobile, filter interaction, A4 sizing, console output, focused tests, and production build.
+
+## Follow-up polish
+
+- No P3 visual follow-up is required for this scope.
+
+## Verification
+
+- `node --test tests/dashboard-accessibility.test.ts` — 9 passed.
+- `node --test tests/timeline-cancelled-filter.test.ts tests/timeline-position.test.ts` — 6 passed.
+- `npm --prefix web run build` — passed.
+- Browser checks: desktop, mobile, legacy route, timeline filters, portrait print, A4 dimensions, and clean console — passed.
 
 final result: passed

@@ -20,9 +20,9 @@ const text = {
 };
 
 function modeColor(mode) {
-  if (mode === 'Load') return '#E31B23';
-  if (mode === 'Unload') return '#7A1424';
-  if (mode === 'Stop vehicle') return '#B57A00';
+  if (mode === 'Load') return '#D5283D';
+  if (mode === 'Unload') return '#203854';
+  if (mode === 'Stop vehicle') return '#DFA036';
   return '#68727D';
 }
 
@@ -67,7 +67,7 @@ function timelineSegment(report, lang, labels) {
   };
 }
 
-export default function TimelineDashboard({ lang }) {
+export default function TimelineDashboard({ lang, embedded = false, sourceReports = null, sourceLoading = false, sourceError = '' }) {
   const t = text[lang];
   const [reports, setReports] = useState([]);
   const [date, setDate] = useState('');
@@ -81,8 +81,13 @@ export default function TimelineDashboard({ lang }) {
   const [tooltip, setTooltip] = useState(null);
   const requestInFlight = useRef(false);
   const initializedDate = useRef(false);
+  const usesSourceReports = Array.isArray(sourceReports);
+  const timelineReports = usesSourceReports ? sourceReports : reports;
+  const timelineLoading = usesSourceReports ? sourceLoading : loading;
+  const timelineError = usesSourceReports ? sourceError : error;
 
   const loadReports = useCallback(async ({ silent = false } = {}) => {
+    if (usesSourceReports) return;
     if (requestInFlight.current) return;
     requestInFlight.current = true;
     if (!silent) setLoading(true);
@@ -105,21 +110,30 @@ export default function TimelineDashboard({ lang }) {
       requestInFlight.current = false;
       if (!silent) setLoading(false);
     }
-  }, [date, lang, t.failed]);
+  }, [date, lang, t.failed, usesSourceReports]);
 
   useEffect(() => {
+    if (usesSourceReports) return undefined;
     void loadReports();
     const refreshVisible = () => { if (document.visibilityState === 'visible') void loadReports({ silent: true }); };
     const timer = window.setInterval(refreshVisible, 30_000);
     document.addEventListener('visibilitychange', refreshVisible);
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refreshVisible); };
-  }, [loadReports]);
+  }, [loadReports, usesSourceReports]);
+
+  useEffect(() => {
+    if (!usesSourceReports) return;
+    const availableDates = [...new Set(sourceReports.map(report => reportDateKey(report.startTime)).filter(Boolean))].sort().reverse();
+    if (!availableDates.length || availableDates.includes(date)) return;
+    initializedDate.current = true;
+    setDate(availableDates[0]);
+  }, [date, sourceReports, usesSourceReports]);
 
   const rows = useMemo(() => {
     const query = search.trim().toLowerCase();
     const grouped = new Map();
     const activeFilters = { showCompleted, showCancelled, selectedModes };
-    for (const report of reports) {
+    for (const report of timelineReports) {
       if (date && reportDateKey(report.startTime) !== date) continue;
       if (!timelineReportMatchesFilters(report, activeFilters)) continue;
       const searchable = `${report.vehicleNumber || ''} ${report.driverName || ''} ${report.driverId || ''}`.toLowerCase();
@@ -132,7 +146,7 @@ export default function TimelineDashboard({ lang }) {
       ...row,
       segments: row.reports.map(report => timelineSegment(report, lang, t)).filter(Boolean),
     })).filter(row => row.segments.length).sort((left, right) => left.vehicle.localeCompare(right.vehicle, undefined, { numeric: true }));
-  }, [reports, date, search, showCompleted, showCancelled, selectedModes, lang, t]);
+  }, [timelineReports, date, search, showCompleted, showCancelled, selectedModes, lang, t]);
   const timelinePage = useMemo(() => paginateReports(rows, page, pageSize), [rows, page]);
   const statusSummary = [showCompleted ? t.completed : '', showCancelled ? t.cancelled : ''].filter(Boolean).join(' + ') || t.noneSelected;
   const emptyFilterMessage = !showCompleted && !showCancelled
@@ -193,13 +207,16 @@ export default function TimelineDashboard({ lang }) {
     setSelectedModes(new Set(timelineModes));
   }
 
+  const TimelineWorkspace = embedded ? 'section' : 'main';
+  const TimelineHeading = embedded ? 'h2' : 'h1';
+
   return (
-    <main className="main timeline-workspace" id="main-content" tabIndex={-1}>
-      <div className="page-header">
-        <div><div className="eyebrow">{t.eyebrow}</div><h1>{t.title}</h1><p>{t.subtitle}</p></div>
-        <div className="timeline-header-actions"><label className="date-input"><span>{t.date}</span><input type="date" value={date} onChange={event => { initializedDate.current = true; setDate(event.target.value); }} /></label><button className="primary" type="button" disabled={!date || loading} onClick={printTimeline}>{t.printTimeline}</button></div>
+    <TimelineWorkspace className={embedded ? 'timeline-embedded-workspace' : 'main timeline-workspace'} id={embedded ? undefined : 'main-content'} tabIndex={embedded ? undefined : -1} aria-label={embedded ? t.title : undefined}>
+      <div className={embedded ? 'section-heading timeline-embedded-heading' : 'page-header'}>
+        <div>{embedded ? null : <div className="eyebrow">{t.eyebrow}</div>}<TimelineHeading>{t.title}</TimelineHeading><p>{t.subtitle}</p></div>
+        <div className="timeline-header-actions"><label className="date-input"><span>{t.date}</span><input type="date" value={date} onChange={event => { initializedDate.current = true; setDate(event.target.value); }} /></label>{embedded ? null : <button className="primary" type="button" disabled={!date || timelineLoading} onClick={printTimeline}>{t.printTimeline}</button>}</div>
       </div>
-      <section className="panel timeline-panel" aria-busy={loading}>
+      <section className="panel timeline-panel" aria-busy={timelineLoading}>
         <div className="timeline-toolbar">
           <div className="timeline-controls">
             <label className="timeline-search"><span className="sr-only">{t.search}</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder={t.search} /></label>
@@ -250,9 +267,9 @@ export default function TimelineDashboard({ lang }) {
             <div className="tooltip-report-id"><dt>{t.reportId}</dt><dd>{tooltip.segment.detail.reportId}</dd></div>
           </dl>
         </aside> : null}
-        {loading ? <p className="empty" role="status">{t.loading}</p> : null}
-        {error ? <p className="error" role="alert">{error}</p> : null}
-        {!loading && !error && !rows.length ? reports.length ? <div className="empty-state compact-empty-state"><h3>{emptyFilterMessage}</h3></div> : <div className="empty-state compact-empty-state">
+        {timelineLoading ? <p className="empty" role="status">{t.loading}</p> : null}
+        {timelineError ? <p className="error" role="alert">{timelineError}</p> : null}
+        {!timelineLoading && !timelineError && !rows.length ? timelineReports.length ? <div className="empty-state compact-empty-state"><h3>{emptyFilterMessage}</h3></div> : <div className="empty-state compact-empty-state">
           <Image src="/songdee-gps-pin.svg" alt="" width={180} height={220} />
           <h3>{t.emptyTitle}</h3>
           <p>{t.emptyBody}</p>
@@ -260,6 +277,6 @@ export default function TimelineDashboard({ lang }) {
         </div> : null}
         {rows.length ? <div className="table-footer"><span aria-live="polite">{t.showing} {timelinePage.start}–{timelinePage.end} {t.of} {rows.length}</span><div className="pager"><button className="small-button secondary" type="button" disabled={timelinePage.page <= 1} onClick={() => setPage(value => value - 1)}>{t.previous}</button><span>{t.page} {timelinePage.page} / {timelinePage.totalPages}</span><button className="small-button secondary" type="button" disabled={timelinePage.page >= timelinePage.totalPages} onClick={() => setPage(value => value + 1)}>{t.next}</button></div></div> : null}
       </section>
-    </main>
+    </TimelineWorkspace>
   );
 }
