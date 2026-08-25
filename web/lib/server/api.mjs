@@ -859,13 +859,17 @@ function gpsLookupState(reconciliation) {
 async function updateReportGpsLookupState(reportId, reconciliation) {
   const sql = getDatabase();
   const state = gpsLookupState(reconciliation);
+  const driverName = String(reconciliation?.driverIdentity?.driverName || '').trim().slice(0, 180) || null;
+  const driverId = String(reconciliation?.driverIdentity?.driverId || '').trim().slice(0, 180) || null;
   const rows = await sql.query(
     `UPDATE ops_reports
      SET gps = $2, status = 'Completed', gps_lookup_status = $3, gps_lookup_message = $4,
-         gps_sync_status = NULL, gps_sync_message = NULL
+         gps_sync_status = NULL, gps_sync_message = NULL,
+         driver_name = COALESCE(NULLIF(driver_name, ''), $5),
+         driver_id = COALESCE(NULLIF(driver_id, ''), $6)
      WHERE id = $1
      RETURNING ${reportColumns()}`,
-    [reportId, state.gps, state.status, state.message],
+    [reportId, state.gps, state.status, state.message, driverName, driverId],
   );
   return rows[0];
 }
@@ -896,16 +900,17 @@ function configuredGpsPairToleranceMs() {
 
 function dataFmOptions() {
   return {
-    baseUrl: process.env.SONGDEE_DATA_FM_BASE_URL,
-    username: process.env.SONGDEE_DATA_FM_USERNAME,
-    password: process.env.SONGDEE_DATA_FM_PASSWORD,
-    timeZone: process.env.SONGDEE_DATA_FM_TIME_ZONE,
+    baseUrl: process.env.SONGDEE_DATA_FM_BASE_URL || process.env.FLEET_DATA_FM_BASE_URL,
+    username: process.env.SONGDEE_DATA_FM_USERNAME || process.env.FLEET_DATA_FM_USERNAME,
+    password: process.env.SONGDEE_DATA_FM_PASSWORD || process.env.FLEET_DATA_FM_PASSWORD,
+    timeZone: process.env.SONGDEE_DATA_FM_TIME_ZONE || process.env.FLEET_DATA_FM_TIME_ZONE,
     allowHttp: process.env.NODE_ENV !== 'production',
   };
 }
 
 function dataFmEnvironmentSelected() {
-  return Boolean(process.env.SONGDEE_DATA_FM_USERNAME || process.env.SONGDEE_DATA_FM_PASSWORD);
+  const options = dataFmOptions();
+  return Boolean(options.username || options.password);
 }
 
 async function fetchExternalGpsSource({ endpoint, token, sourceName, vehicleNumber, targetAt, toleranceMs }) {
@@ -961,6 +966,7 @@ async function reconcileExternalGpsForJob(job, targetAt) {
     const deviceStatus = deviceSource.status === 'received' ? 'no_time_match' : deviceSource.status;
     return {
       gpsSync: null,
+      driverIdentity: deviceSource.driverIdentity || null,
       deviceSource: { status: deviceStatus, message: deviceStatus === 'no_time_match' ? deviceSource.message || 'No GPS fix was found inside the time window.' : deviceSource.message },
       fmsSource: { status: fmsSource.status, message: fmsSource.message },
       pairStatus: pairing.pairStatus,
@@ -1006,6 +1012,7 @@ async function reconcileExternalGpsForJob(job, targetAt) {
   await refreshJobGpsSummary(job.id);
   return {
     gpsSync: await getGpsSample(sampleId),
+    driverIdentity: deviceSource.driverIdentity || null,
     deviceSource: { status: deviceSource.status, message: deviceSource.message },
     fmsSource: { status: fmsSource.status, message: fmsSource.message },
     pairStatus,

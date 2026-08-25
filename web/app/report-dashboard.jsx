@@ -64,7 +64,7 @@ function displayMode(mode, lang) { return translated(mode, modeCopy, lang); }
 function displayStatus(status, lang) { return translated(status, statusCopy, lang); }
 function displayGps(value, lang) { return translated(String(value || '').toLowerCase().includes('matched') ? 'GPS matched' : value, gpsCopy, lang); }
 function gpsValue(report) { return report.gpsLookupStatus || report.gps || ''; }
-function canRetry(report) { return report.status !== 'Cancelled' && (!Number(report.deviceGpsSamples) || ['pending', 'no_data', 'lookup_failed', 'lookup_unavailable'].includes(report.gpsLookupStatus)); }
+function canRetry(report) { return report.status !== 'Cancelled' && (!report.driverName || !Number(report.deviceGpsSamples) || ['pending', 'no_data', 'lookup_failed', 'lookup_unavailable'].includes(report.gpsLookupStatus)); }
 function isLookupPending(report) { return report.gpsLookupStatus === 'pending'; }
 function statusSlug(value) { return String(value || '').toLowerCase().replaceAll(' ', '-').replaceAll('_', '-'); }
 function reportSpeed(report) {

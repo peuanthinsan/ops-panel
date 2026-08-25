@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeSpeedSamples, speedChartPoints, speedDomainMaximum, speedLinePath } from '../web/lib/speed-timeline.ts';
+import { mergeReportSpeedSeries, normalizeSpeedSamples, speedChartPoints, speedDomainMaximum, speedLinePath } from '../web/lib/speed-timeline.ts';
 
 function closeTo(actual: number, expected: number) {
   assert.ok(Math.abs(actual - expected) < 0.001, `${actual} should be close to ${expected}`);
@@ -29,4 +29,18 @@ test('speed geometry shares the report timeline window and produces a crisp path
   closeTo(chart[0].x, 0);
   closeTo(chart[1].x, 50);
   assert.match(speedLinePath(chart), /^M0\.00,.* L50\.00,/);
+});
+
+test('single-point jobs merge into one chronological vehicle speed line', () => {
+  const earlier = normalizeSpeedSamples([{ id: 'a', capturedAt: '2026-08-25T00:30:00.000Z', deviceGps: { speedMps: 10 } }]);
+  const later = normalizeSpeedSamples([{ id: 'b', capturedAt: '2026-08-25T01:00:00.000Z', deviceGps: { speedMps: 20 } }]);
+  const merged = mergeReportSpeedSeries([
+    { reportId: 'later-job', points: later },
+    { reportId: 'earlier-job', points: earlier },
+  ]);
+  assert.deepEqual(merged.map(point => [point.reportId, point.id]), [
+    ['earlier-job', 'a'],
+    ['later-job', 'b'],
+  ]);
+  assert.match(speedLinePath(speedChartPoints(merged)), /^M.* L/);
 });

@@ -78,7 +78,11 @@ test('production reconciles two external GPS sources by time and exposes an auth
   assert.match(source, /route === 'job-gps-sync'/);
   assert.match(source, /SONGDEE_DEVICE_GPS_API_URL/);
   assert.match(source, /SONGDEE_DATA_FM_USERNAME/);
+  assert.match(source, /FLEET_DATA_FM_USERNAME/);
   assert.match(source, /fetchDataFmGpsHistory\(\{ \.\.\.dataFmOptions\(\), vehicleNumber, targetAt, toleranceMs \}\)/);
+  assert.match(source, /driverIdentity: deviceSource\.driverIdentity \|\| null/);
+  assert.match(source, /driver_name = COALESCE\(NULLIF\(driver_name, ''\), \$5\)/);
+  assert.match(source, /driver_id = COALESCE\(NULLIF\(driver_id, ''\), \$6\)/);
   assert.match(source, /SONGDEE_FMS_GPS_API_URL/);
   assert.match(source, /pairExternalGpsSources\(deviceSource\.payload, fmsSource\.payload, targetAt/);
   assert.match(source, /Tablet GPS ingestion has been removed/);

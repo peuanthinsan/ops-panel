@@ -43,6 +43,10 @@ test('normalizes Data-FM history coordinates, speed, bearing, and driver identit
     driverId: '1360400168966',
     driverName: 'RUEANGSRI THANYARAT',
   });
+  assert.deepEqual(dataFmDriverIdentity({ positions: [{ ...point, driverName: null }] }), {
+    driverId: '1360400168966',
+    driverName: null,
+  });
 });
 
 test('requests a token once, encodes the documented history window, and tolerates string empty data', async () => {
@@ -57,6 +61,7 @@ test('requests a token once, encodes the documented history window, and tolerate
   const result = await fetchDataFmGpsHistory({ ...config, fetchImpl });
   assert.equal(result.status, 'received');
   assert.deepEqual(result.payload.positions, []);
+  assert.equal(result.driverIdentity, null);
   assert.equal(requests.length, 2);
   assert.equal(requests[0].pathname, '/Api/VTService.svc/GetToken');
   assert.equal(requests[0].searchParams.get('Password'), 'test-password');
@@ -79,14 +84,36 @@ test('refreshes an expired token exactly once and normalizes live history record
     return jsonResponse({ vResponseCode: 0, vTotalRecords: 1, vData: [{
       vehicleno: '700-4172', latitude: 14.3289833, longitude: 100.84631,
       tracktime: '2026.08.20 10:40:46', speed: 18, bearing: 45,
+      driverrfid: '1360400168966', drivername: 'RUEANGSRI THANYARAT',
     }] });
   };
   const result = await fetchDataFmGpsHistory({ ...config, fetchImpl });
   assert.equal(result.status, 'received');
   assert.equal(result.payload.positions.length, 1);
   assert.equal(result.payload.positions[0].capturedAt, '2026-08-20T03:40:46.000Z');
+  assert.deepEqual(result.driverIdentity, {
+    driverId: '1360400168966',
+    driverName: 'RUEANGSRI THANYARAT',
+  });
   assert.equal(requests.filter(item => item.pathname.endsWith('/GetToken')).length, 2);
   assert.equal(requests.filter(item => item.pathname.endsWith('/GetVehicleHistory')).length, 2);
+});
+
+test('uses the latest named history point as the report driver identity', () => {
+  const positions = [
+    normalizeDataFmHistoryRecord({
+      vehicleno: '700-4172', latitude: 14.32, longitude: 100.84,
+      tracktime: '2026.08.20 10:39:00', driverrfid: 'OLD-1', drivername: 'Earlier Driver',
+    }, 'Asia/Bangkok'),
+    normalizeDataFmHistoryRecord({
+      vehicleno: '700-4172', latitude: 14.33, longitude: 100.85,
+      tracktime: '2026.08.20 10:40:00', driverrfid: 'NEW-2', drivername: 'Latest Driver',
+    }, 'Asia/Bangkok'),
+  ];
+  assert.deepEqual(dataFmDriverIdentity({ positions }), {
+    driverId: 'NEW-2',
+    driverName: 'Latest Driver',
+  });
 });
 
 test('resolves a case-insensitive fleet name through the vehicle master before retrying history', async () => {

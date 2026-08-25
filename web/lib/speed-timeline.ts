@@ -15,6 +15,13 @@ export type SpeedPoint = {
 
 export type SpeedChartPoint = SpeedPoint & { x: number; y: number };
 
+export type ReportSpeedSeries = {
+  reportId: string;
+  points: SpeedPoint[];
+};
+
+export type TimelineSpeedPoint = SpeedPoint & { reportId: string };
+
 export function normalizeSpeedSamples(samples: RawGpsSpeedSample[] = []): SpeedPoint[] {
   const points = samples.flatMap((sample, index) => {
     const capturedAt = String(sample?.capturedAt || '');
@@ -37,6 +44,12 @@ export function normalizeSpeedSamples(samples: RawGpsSpeedSample[] = []): SpeedP
 export function speedDomainMaximum(series: SpeedPoint[][], minimum = 100, step = 20) {
   const peak = series.flat().reduce((maximum, point) => Math.max(maximum, point.speedKph), 0);
   return Math.max(minimum, Math.ceil(peak / step) * step);
+}
+
+export function mergeReportSpeedSeries(series: ReportSpeedSeries[]): TimelineSpeedPoint[] {
+  return series
+    .flatMap(item => item.points.map(point => ({ ...point, reportId: item.reportId })))
+    .sort((left, right) => Date.parse(left.capturedAt) - Date.parse(right.capturedAt));
 }
 
 export function speedChartPoints(

@@ -38,8 +38,10 @@
 - Print start/end values, shift times, alert times, KPI durations, print timestamps, and timeline tick labels use `HH:MM:SS`.
 - When GPS exists without a place name, print rows show the available device or FMS coordinates instead of “Location unavailable.”
 - The Timeline and Job List remain on the same Reports page.
-- The Timeline speed graph is drawn over the same time scale as the colored job segments, with a separate path for each saved job so unrecorded gaps are not falsely connected.
+- The Timeline speed graph is drawn over the same time scale as the colored job segments, with one chronological vehicle/day path connecting every available GPS sample across saved jobs.
 - Every GPS sample is drawn as a visible point on the speed line; dashboard points expose the exact time and speed in a pointer, keyboard, or touch popup.
+- Data-FM history now carries its latest `drivername` and `driverrfid` into blank saved-report driver fields without overwriting tablet-captured identity.
+- Reports missing a driver expose the existing retry action even when GPS was already matched, so historical rows can be backfilled through the same reconciliation path.
 - Activity tooltips include the job's top speed.
 - Dashboard and print legends enumerate all operation modes 1–9 with distinct colors.
 - The daily report paginates every job across as many landscape A4 sheets as needed: eight jobs on page one, fourteen per continuation sheet, and signatures only on the final sheet.
@@ -90,6 +92,10 @@
 30. Fix: print uses the shared duration formatter without truncation and falls back from place name to device coordinates, FMS coordinates, then the unavailable label.
 31. P1: Print daily report could open without a selected vehicle, causing the print view to choose the first available fleet vehicle.
 32. Fix: the toolbar requires exactly one selected vehicle, row actions carry their row vehicle and date, and the print route refuses a missing vehicle instead of falling back.
+33. P1: each saved job owned a separate speed path, so jobs with one GPS sample rendered only a dot and visually appeared to have no line graph.
+34. Fix: all samples for one vehicle/day are merged chronologically into one SVG path while retaining every dot and exact time/speed tooltip.
+35. P1: Data-FM returned `drivername` and `driverrfid`, but GPS reconciliation discarded them before updating a completed report.
+36. Fix: the adapter exposes driver identity with history, and both local and production reconciliation fill only previously blank report driver fields.
 
 ## Verification
 
@@ -98,8 +104,11 @@
 - `node --test tests/dashboard-accessibility.test.ts tests/accessibility-compliance.test.ts tests/report-print-pages.test.ts tests/report-print-view.test.ts tests/report-view.test.ts` — 28 passed.
 - `npm --prefix web run build` — passed.
 - `git diff --check` — passed.
+- `node --test tests/speed-timeline.test.ts tests/data-fm-gps.test.mjs tests/dashboard-accessibility.test.ts tests/production-api-boundary.test.ts` — 34 passed.
+- Live Data-FM contract check: the documented 20 Aug 2026 history window returned two GPS records with both driver-name and RFID fields; credentials, token, and driver PII were not logged.
 - Browser checks: 2048 × 1100 and 390 × 844 dashboard layouts; one shared search; all six listboxes marked multi-select; simultaneous Vehicle and Activity selections; synchronized KPI, Timeline, and Job List results; table-column ascending/descending order propagated to Timeline groups; no Sort by dropdown; no duplicate embedded Timeline search; no page-level mobile overflow; no console warnings or errors — passed.
 - Browser print check: 24 Aug Ford T rows retained seconds in start, end, and duration; shift, KPI, alert, print, and axis times rendered with seconds; no framework overlay or console warnings/errors — passed.
+- Browser speed check: Ford T rendered one 12-point path with 11 connected line segments on dashboard and print; the 92 km/h point exposed its `07:45:00` tooltip; both legends retained operation modes 1–9 — passed.
 - Browser vehicle-scope check: zero or multiple vehicle selections disabled Print daily report; one Ford T selection opened a Ford-only 19-job report; the 700-4172 row action opened only its one-job report; date changes preserved the vehicle query; a vehicle-less URL showed Vehicle required; mobile controls did not clip — passed.
 
 final result: passed

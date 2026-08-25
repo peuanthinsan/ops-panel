@@ -40,6 +40,7 @@ test('reports expose labeled filters and sort direction to assistive technology'
   assert.match(source, /className="table-wrap" tabIndex=\{0\}/);
   assert.match(source, /localizedDashboardReportError/);
   assert.match(source, /print: 'Print daily report'/);
+  assert.match(source, /!report\.driverName \|\| !Number\(report\.deviceGpsSamples\)/);
   assert.match(source, /new URLSearchParams\(\{ date: selectedPrintDate, lang \}\)/);
   assert.match(source, /if \(!selectedPrintDate \|\| vehicles\.length !== 1\) return/);
   assert.match(source, /params\.set\('vehicle', vehicles\[0\]\)/);
@@ -94,7 +95,10 @@ test('daily report is landscape, date-selectable, speed-enabled, and uses the of
   assert.match(timeline, /if \(effectiveEndDate && day > effectiveEndDate\) continue/);
   assert.match(timeline, /<SpeedTimelineOverlay/);
   assert.match(timeline, /reportableOperations\.map\(\(\[number, thai, english\]\)/);
-  assert.match(speedTimeline, /item\.points\.map\(point =>/);
+  assert.match(speedTimeline, /mergeReportSpeedSeries\(series\)/);
+  assert.match(speedTimeline, /chartPoints\.length > 1/);
+  assert.match(speedTimeline, /className="speed-line"/);
+  assert.match(speedTimeline, /chartPoints\.map\(point =>/);
   assert.match(speedTimeline, /className=\{`speed-point/);
   assert.match(speedTimeline, /className="speed-point-hit"/);
   assert.match(speedTimeline, /className="speed-point-tooltip" role="tooltip"/);

@@ -275,12 +275,12 @@ export async function fetchDataFmGpsHistory({
   timeoutMs = 8_000,
 } = {}) {
   const config = configuration({ baseUrl, username, password, timeZone, allowHttp });
-  if (!config.configured) return { status: 'not_configured', payload: null, message: 'Data-FM GPS adapter is not configured.' };
-  if (config.error) return { status: 'unavailable', payload: null, message: config.error };
+  if (!config.configured) return { status: 'not_configured', payload: null, driverIdentity: null, message: 'Data-FM GPS adapter is not configured.' };
+  if (config.error) return { status: 'unavailable', payload: null, driverIdentity: null, message: config.error };
   const targetMs = Date.parse(String(targetAt || ''));
   const windowMs = Number(toleranceMs);
   if (!vehicleNumber || !Number.isFinite(targetMs) || !Number.isFinite(windowMs) || windowMs < 0 || windowMs * 2 > MAX_HISTORY_WINDOW_MS) {
-    return { status: 'unavailable', payload: null, message: 'Data-FM history request parameters are invalid.' };
+    return { status: 'unavailable', payload: null, driverIdentity: null, message: 'Data-FM history request parameters are invalid.' };
   }
   const fromAt = new Date(targetMs - windowMs);
   const toAt = new Date(targetMs + windowMs);
@@ -298,21 +298,24 @@ export async function fetchDataFmGpsHistory({
         result = await historyRequest({ config, fetchImpl, token, vehicleNumber: canonicalVehicleNumber, fromAt, toAt, timeoutMs });
       }
     }
-    if (result.error) return { status: 'unavailable', payload: null, message: result.error };
-    if (result.code === 6) return { status: 'received', payload: { positions: [] }, message: dataFmStatusMessage(6) };
-    if (result.code !== 0) return { status: 'unavailable', payload: null, message: dataFmStatusMessage(result.code) };
+    if (result.error) return { status: 'unavailable', payload: null, driverIdentity: null, message: result.error };
+    if (result.code === 6) return { status: 'received', payload: { positions: [] }, driverIdentity: null, message: dataFmStatusMessage(6) };
+    if (result.code !== 0) return { status: 'unavailable', payload: null, driverIdentity: null, message: dataFmStatusMessage(result.code) };
     const positions = responseRows(result.payload)
       .map(row => normalizeDataFmHistoryRecord(row, config.timeZone))
       .filter(Boolean);
+    const payload = { positions };
     return {
       status: 'received',
-      payload: { positions },
+      payload,
+      driverIdentity: dataFmDriverIdentity(payload),
       message: `${positions.length} GPS record${positions.length === 1 ? '' : 's'} found.`,
     };
   } catch (error) {
     return {
       status: 'unavailable',
       payload: null,
+      driverIdentity: null,
       message: error instanceof Error ? error.message : 'Data-FM GPS API unavailable.',
     };
   }
@@ -326,7 +329,7 @@ export function dataFmDriverIdentity(payload) {
   if (!matched) return null;
   return {
     driverId: matched.driverId || null,
-    driverName: matched.driverName || matched.driverId || null,
+    driverName: matched.driverName || null,
   };
 }
 
@@ -344,7 +347,7 @@ export async function fetchDataFmDriverIdentity(options = {}) {
   });
   const result = {
     status: history.status,
-    driverIdentity: history.status === 'received' ? dataFmDriverIdentity(history.payload) : null,
+    driverIdentity: history.status === 'received' ? history.driverIdentity : null,
     message: history.message,
   };
   driverIdentityCache.set(key, { result, expiresAt: nowMs + 30_000 });

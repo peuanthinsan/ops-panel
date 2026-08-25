@@ -65,13 +65,13 @@ const deviceGpsApiToken = process.env.SONGDEE_DEVICE_GPS_API_TOKEN || '';
 const fmsGpsApiUrl = process.env.SONGDEE_FMS_GPS_API_URL || gpsMotionApiUrl;
 const fmsGpsApiToken = process.env.SONGDEE_FMS_GPS_API_TOKEN || '';
 const dataFmOptions = {
-  baseUrl: process.env.SONGDEE_DATA_FM_BASE_URL,
-  username: process.env.SONGDEE_DATA_FM_USERNAME,
-  password: process.env.SONGDEE_DATA_FM_PASSWORD,
-  timeZone: process.env.SONGDEE_DATA_FM_TIME_ZONE,
+  baseUrl: process.env.SONGDEE_DATA_FM_BASE_URL || process.env.FLEET_DATA_FM_BASE_URL,
+  username: process.env.SONGDEE_DATA_FM_USERNAME || process.env.FLEET_DATA_FM_USERNAME,
+  password: process.env.SONGDEE_DATA_FM_PASSWORD || process.env.FLEET_DATA_FM_PASSWORD,
+  timeZone: process.env.SONGDEE_DATA_FM_TIME_ZONE || process.env.FLEET_DATA_FM_TIME_ZONE,
   allowHttp: true,
 };
-const dataFmEnvironmentSelected = Boolean(process.env.SONGDEE_DATA_FM_USERNAME || process.env.SONGDEE_DATA_FM_PASSWORD);
+const dataFmEnvironmentSelected = Boolean(dataFmOptions.username || dataFmOptions.password);
 const saveState = () => {
   fs.mkdirSync(path.dirname(dataFile), { recursive: true });
   const temporaryFile = `${dataFile}.tmp`;
@@ -125,10 +125,14 @@ function gpsLookupState(reconciliation) {
 }
 function applyGpsLookupResult(report, reconciliation) {
   const state = gpsLookupState(reconciliation);
+  const providerDriverName = String(reconciliation?.driverIdentity?.driverName || '').trim().slice(0, 180) || null;
+  const providerDriverId = String(reconciliation?.driverIdentity?.driverId || '').trim().slice(0, 180) || null;
   report.status = 'Completed';
   report.gps = state.gps;
   report.gpsLookupStatus = state.status;
   report.gpsLookupMessage = state.message;
+  if (!report.driverName && providerDriverName) report.driverName = providerDriverName;
+  if (!report.driverId && providerDriverId) report.driverId = providerDriverId;
   delete report.gpsSyncStatus;
   delete report.gpsSyncMessage;
 }
@@ -254,6 +258,7 @@ async function reconcileExternalGpsForJob(job, targetAt) {
     const deviceStatus = deviceSource.status === 'received' ? 'no_time_match' : deviceSource.status;
     return {
       gpsSync: null,
+      driverIdentity: deviceSource.driverIdentity || null,
       deviceSource: { status: deviceStatus, message: deviceStatus === 'no_time_match' ? deviceSource.message || 'No GPS fix was found inside the time window.' : deviceSource.message },
       fmsSource: { status: fmsSource.status, message: fmsSource.message },
       pairStatus: pairing.pairStatus,
@@ -296,6 +301,7 @@ async function reconcileExternalGpsForJob(job, targetAt) {
   saveState();
   return {
     gpsSync: sample,
+    driverIdentity: deviceSource.driverIdentity || null,
     deviceSource: { status: deviceSource.status, message: deviceSource.message },
     fmsSource: { status: fmsSource.status, message: fmsSource.message },
     pairStatus,

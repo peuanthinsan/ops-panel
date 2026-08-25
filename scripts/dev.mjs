@@ -1,9 +1,15 @@
 import { spawn } from 'node:child_process';
 import net from 'node:net';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadProjectEnv } from '@expo/env';
 import {
   isCompatibleSongdeeApiHealth,
   SONGDEE_API_CONTRACT_VERSION,
 } from '../lib/api-contract.mjs';
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+loadProjectEnv(projectRoot, { silent: true });
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const apiPort = process.env.PORT || '4000';
