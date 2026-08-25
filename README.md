@@ -1,4 +1,4 @@
-# Songdee Ops Panel
+# Ops Panel
 
 This workspace contains the Android/Expo tablet app and the responsive fleet web dashboard.
 
@@ -10,15 +10,15 @@ Install dependencies in the repository root and in `web/`, then start the local 
 bun run dev
 ```
 
-The primary Next.js dashboard opens at `http://localhost:5173` and the local API runs at `http://localhost:4000`. The command starts the API when needed or reuses a compatible Songdee API already running on port 4000, so dashboard login works without a second terminal. Use the local default admin password `songdee-setup`.
+The primary Next.js dashboard opens at `http://localhost:5173` and the local API runs at `http://localhost:4000`. The command starts the API when needed or reuses a compatible Fleet API already running on port 4000, so dashboard login works without a second terminal. Use the local default admin password `fleet-setup`.
 
 The command exits with a clear message if port 5173 is already occupied, which prevents accidentally opening the legacy dashboard. Either stop that process or choose an explicit alternate dashboard port:
 
 ```sh
-SONGDEE_DASHBOARD_PORT=5174 bun run dev
+FLEET_DASHBOARD_PORT=5174 bun run dev
 ```
 
-If `NEXT_PUBLIC_API_BASE_URL` is set, the launcher verifies that its `/api/health` endpoint is a compatible Songdee Ops API and exits with the failing address instead of opening a dashboard that can only report “Network request failed.” It also identifies an incompatible process already occupying local API port 4000.
+If `NEXT_PUBLIC_API_BASE_URL` is set, the launcher verifies that its `/api/health` endpoint is a compatible Fleet Ops API and exits with the failing address instead of opening a dashboard that can only report “Network request failed.” It also identifies an incompatible process already occupying local API port 4000.
 
 Run only one side when needed with `npm run server` or `npm run dev:web:5173`. The existing `dev:dashboard` script names remain aliases for compatibility.
 
@@ -46,38 +46,38 @@ The dashboard supports `/` for reports and `/admin` for fleet administration.
 
 ## Deploy to Vercel with Neon
 
-The production dashboard and API are deployed at [https://songdee-ops-panel.vercel.app](https://songdee-ops-panel.vercel.app) in the `uthens-projects/songdee-ops-panel` Vercel project. Its dedicated `songdee-ops-panel-db-sg` Neon Postgres resource runs in Singapore and has the complete [`db/schema.sql`](db/schema.sql) schema applied.
+The production dashboard and API are deployed at [https://ops-panel.vercel.app](https://ops-panel.vercel.app) in the `uthens-projects/ops-panel` Vercel project. Its dedicated `ops-panel-db-sg` Neon Postgres resource runs in Singapore and has the complete [`db/schema.sql`](db/schema.sql) schema applied.
 
 For a new environment, create a dedicated Neon database, apply the schema, and create a Vercel project whose Root Directory is `web`. The Next.js dashboard and all `/api/*` Vercel Functions then deploy together under one origin. Set these Vercel environment variables:
 
 The schema runs in one transaction and records its required version only after every table, constraint, validation, and index succeeds. `/api/health` returns an error for a missing, partial, or outdated schema, so apply the complete file again after pulling a schema change. Existing invalid active jobs, report times, or GPS coordinates intentionally stop the migration instead of being silently accepted.
 
 - `DATABASE_URL`: the pooled Neon connection string.
-- `SONGDEE_ADMIN_PASSWORD`: a 12–128 character initial fleet-admin password. It is hashed into the database only when no admin password exists yet.
-- `SONGDEE_ADMIN_TOKEN_SECRET`: a random secret of at least 32 characters used to sign 12-hour admin sessions.
-- `SONGDEE_CORS_ORIGIN`: the deployed dashboard origin, such as `https://ops.songdee.com`.
+- `FLEET_ADMIN_PASSWORD`: a 12–128 character initial fleet-admin password. It is hashed into the database only when no admin password exists yet.
+- `FLEET_ADMIN_TOKEN_SECRET`: a random secret of at least 32 characters used to sign 12-hour admin sessions.
+- `FLEET_CORS_ORIGIN`: the deployed dashboard origin, such as `https://ops.example.com`.
 
-Changing `SONGDEE_ADMIN_PASSWORD` later does not overwrite the password saved by an administrator. Use Fleet admin to change it; that operation also invalidates every existing admin session. Do not set `NEXT_PUBLIC_API_BASE_URL` for the normal same-origin Vercel deployment.
+Changing `FLEET_ADMIN_PASSWORD` later does not overwrite the password saved by an administrator. Use Fleet admin to change it; that operation also invalidates every existing admin session. Do not set `NEXT_PUBLIC_API_BASE_URL` for the normal same-origin Vercel deployment.
 
 Point production tablets at the same deployment:
 
 ```sh
-EXPO_PUBLIC_API_URL=https://songdee-ops-panel.vercel.app npm run start
+EXPO_PUBLIC_API_URL=https://ops-panel.vercel.app npm run start
 ```
 
-Set `SONGDEE_DRIVER_IDENTITY_API_URL` when a dedicated driver service is available. The tablet requests identity with both its current `vehicleNumber` and `deviceId`, and the server forwards both as query parameters to the adapter every 15 seconds. Responses are correlated back to the same vehicle/device pair before the app may display or snapshot that driver, so an in-flight lookup from a fleet reassignment cannot attach the previous vehicle's driver to the next job. When no dedicated driver adapter is configured, the native Data-FM integration uses the newest non-empty `driverrfid` and `drivername` in the recent vehicle-history window and caches that result for 30 seconds.
+Set `FLEET_DRIVER_IDENTITY_API_URL` when a dedicated driver service is available. The tablet requests identity with both its current `vehicleNumber` and `deviceId`, and the server forwards both as query parameters to the adapter every 15 seconds. Responses are correlated back to the same vehicle/device pair before the app may display or snapshot that driver, so an in-flight lookup from a fleet reassignment cannot attach the previous vehicle's driver to the next job. When no dedicated driver adapter is configured, the native Data-FM integration uses the newest non-empty `driverrfid` and `drivername` in the recent vehicle-history window and caches that result for 30 seconds.
 
 Completed and cancelled jobs are saved directly in this application's database. There is no second report-delivery POST. After a completed job is saved, the tablet asks the backend to look up Data-FM GPS around the job time; the dashboard stores and displays that coverage result independently of the job's completed status.
 
-Set `SONGDEE_GPS_MOTION_API_URL` when Data-FM can report vehicle movement. It receives the bound vehicle context and should return `{ "moving": true|false, "speed": number }`. After confirmation, the tablet waits for that server-side movement result before recording the job start. The tablet is not a GPS source and never uses its own location to start a job.
+Set `FLEET_GPS_MOTION_API_URL` when Data-FM can report vehicle movement. It receives the bound vehicle context and should return `{ "moving": true|false, "speed": number }`. After confirmation, the tablet waits for that server-side movement result before recording the job start. The tablet is not a GPS source and never uses its own location to start a job.
 
 Every configured adapter address must be an absolute `http://` or `https://` URL. A malformed driver or motion URL degrades to a correlated `misconfigured` response instead of crashing the local API; a malformed GPS address retains completed jobs and allows the Data-FM lookup to be retried.
 
-Data-FM is the application's only GPS/FMS data source. Configure it only on the backend with `SONGDEE_DATA_FM_BASE_URL=https://www.data-fm.com`, `SONGDEE_DATA_FM_USERNAME`, `SONGDEE_DATA_FM_PASSWORD`, and an explicit `SONGDEE_DATA_FM_TIME_ZONE`. The current deployment uses `Asia/Bangkok`; this is an explicit integration assumption until the provider confirms the timezone semantics of `tracktime`. `SONGDEE_DEVICE_GPS_API_URL` remains available only as a contract-neutral fallback when Data-FM credentials are absent.
+Data-FM is the application's only GPS/FMS data source. Configure it only on the backend with `FLEET_DATA_FM_BASE_URL=https://www.data-fm.com`, `FLEET_DATA_FM_USERNAME`, `FLEET_DATA_FM_PASSWORD`, and an explicit `FLEET_DATA_FM_TIME_ZONE`. The current deployment uses `Asia/Bangkok`; this is an explicit integration assumption until the provider confirms the timezone semantics of `tracktime`. `FLEET_DEVICE_GPS_API_URL` remains available only as a contract-neutral fallback when Data-FM credentials are absent.
 
 The Data-FM adapter obtains and caches the documented 24-hour token with a five-minute refresh margin, refreshes and replays once after response code 1, uses HTTPS even though the supplied examples show HTTP, and calls `GetVehicleHistory` with the exact `YYYY.MM.DD HH:MM:SS` format. If an exact history request returns no records, it resolves the vehicle case-insensitively against `GetMasterVehicleList` and retries with Data-FM's canonical identifier; for example, the fleet label `FORD T` resolves to provider vehicle `Ford T`. The master is cached for one hour. The adapter normalizes response codes safely, tolerates `vData` as either an array or the string `"[]"`, preserves RFID values as strings, and converts `speed` from km/h only at the common GPS boundary. Credentials and tokens are never sent to the tablet or written to application logs.
 
-While a job is active, the tablet sends only the job ID, vehicle binding, and a lookup time every 60 seconds; it never sends coordinates or requests Android location permission. The backend requests Data-FM history around that time and stores the nearest valid GPS fix within `SONGDEE_GPS_PAIR_TOLERANCE_SECONDS` (60 seconds by default).
+While a job is active, the tablet sends only the job ID, vehicle binding, and a lookup time every 60 seconds; it never sends coordinates or requests Android location permission. The backend requests Data-FM history around that time and stores the nearest valid GPS fix within `FLEET_GPS_PAIR_TOLERANCE_SECONDS` (60 seconds by default).
 
 GPS samples carry the active canonical job ID. The production schema stores normalized Data-FM coordinates, GPS-fix time, speed, heading, source status, and the raw provider payload. `GET /api/admin/reports/:reportId/gps` returns that job's paginated Data-FM points and aggregate summary; the normal reports query includes per-job GPS counts for filtering and review. Legacy pairing columns remain in the schema for migration compatibility but are not shown or required by the product. Migration [`db/migrations/20260820_002_job_gps_pairing.sql`](db/migrations/20260820_002_job_gps_pairing.sql) upgrades an existing production database to GPS schema version `2026-08-20.1`.
 
@@ -93,9 +93,9 @@ EXPO_PUBLIC_API_URL=http://YOUR_COMPUTER_LAN_IP:4000 npm run start
 
 ## Build installable Android releases
 
-Ops Panel is a separate Android application from SVIS. Its package is `com.songdeedev.opspanel`, its deep-link scheme is `songdeeops`, and it is linked to the dedicated [`@peuanthinsan/songdee-ops-panel`](https://expo.dev/accounts/peuanthinsan/projects/songdee-ops-panel) EAS project (`0825171f-7773-4a62-a7f7-899e6f4d75cf`). Do not replace that ID with the SVIS EAS project ID.
+Ops Panel is a separate Android application from SVIS. Its package is `com.fleetdev.opspanel`, its deep-link scheme is `fleetops`, and it is linked to the dedicated [`@peuanthinsan/ops-panel`](https://expo.dev/accounts/peuanthinsan/projects/ops-panel) EAS project (`0825171f-7773-4a62-a7f7-899e6f4d75cf`). Do not replace that ID with the SVIS EAS project ID.
 
-If this workspace is ever intentionally moved to another Songdee Expo account, relink it explicitly and update the release-identity test:
+If this workspace is ever intentionally moved to another Fleet Expo account, relink it explicitly and update the release-identity test:
 
 ```sh
 npx eas-cli@latest init
@@ -115,7 +115,7 @@ Build a production-connected, release-signed APK for direct installation:
 npx eas-cli@latest build --platform android --profile production-apk
 ```
 
-The current production-connected APK is Android version code 10. Its SHA-256 digest is `42997e05db25d4ab71a667d33019285b5881a65f60a197d262f74cc7dfb4a85b`, and it is available from EAS build [`6dbc0c6c-145d-4527-a876-e8ad7a0bd30d`](https://expo.dev/accounts/peuanthinsan/projects/songdee-ops-panel/builds/6dbc0c6c-145d-4527-a876-e8ad7a0bd30d). The downloaded file is `releases/songdee-ops-panel-v0.1.0-build10-production.apk`. APK binaries stay outside Git and are ignored under `releases/`.
+The current production-connected APK is Android version code 10. Its SHA-256 digest is `42997e05db25d4ab71a667d33019285b5881a65f60a197d262f74cc7dfb4a85b`, and it is available from EAS build [`6dbc0c6c-145d-4527-a876-e8ad7a0bd30d`](https://expo.dev/accounts/peuanthinsan/projects/ops-panel/builds/6dbc0c6c-145d-4527-a876-e8ad7a0bd30d). The downloaded file is `releases/ops-panel-v0.1.0-build10-production.apk`. APK binaries stay outside Git and are ignored under `releases/`.
 
 Build the Play Store Android App Bundle after preview verification:
 
@@ -125,7 +125,7 @@ npx eas-cli@latest build --platform android --profile production
 
 All release profiles use EAS-managed Android version codes with automatic incrementing. The committed `extra.eas.projectId` belongs only to Ops Panel and is guarded by the release-identity test.
 
-The local `server.js` development password defaults to `songdee-setup`. Production has no default password and requires the initial `SONGDEE_ADMIN_PASSWORD` environment variable.
+The local `server.js` development password defaults to `fleet-setup`. Production has no default password and requires the initial `FLEET_ADMIN_PASSWORD` environment variable.
 
 ## Product behavior
 
@@ -165,10 +165,10 @@ The local `server.js` development password defaults to `songdee-setup`. Producti
 - Fleet reassignments retain binding history, allowing delayed GPS samples and queued reports to validate against the vehicle/device assignment that existed when they were captured.
 - Binding-history windows use an exclusive unbind boundary, so the old and new vehicle can never both validate at the exact fleet-reassignment timestamp.
 - The production schema constrains active jobs to the current vehicle/device binding, so a concurrent reassignment or unbind cannot race a new job start into an inconsistent state.
-- The web wordmark reads `SONGDEE` over `OPS PANEL` with no slash and reuses the exact GPS pin artwork from the SVIS source asset.
+- The web wordmark reads `FLEET` over `OPS PANEL` with no slash and reuses the exact GPS pin artwork from the SVIS source asset.
 
 ## Backend boundary
 
-`server.js` is the local-development API and persists to the ignored `data/songdee-data.json` file. Set `SONGDEE_DATA_FILE` for an isolated local fixture. The production API is implemented as Next.js Vercel Functions in `web/app/api/[[...segments]]/route.js` and persists to Neon using [`db/schema.sql`](db/schema.sql). Both expose the same tablet/dashboard endpoint contract and reject JSON request bodies larger than 64 KiB.
+`server.js` is the local-development API and persists to the ignored `data/fleet-data.json` file. Set `FLEET_DATA_FILE` for an isolated local fixture. The production API is implemented as Next.js Vercel Functions in `web/app/api/[[...segments]]/route.js` and persists to Neon using [`db/schema.sql`](db/schema.sql). Both expose the same tablet/dashboard endpoint contract and reject JSON request bodies larger than 64 KiB.
 
-The Data-FM GPS and fallback driver mappings implement the supplied Songdee GPS API Integration Protocol v1.0. Data-FM movement and any dedicated driver service remain adapter boundaries until their exact API contracts are supplied. Completed and cancelled jobs are saved directly in this application's database; there is no separate report-delivery POST.
+The Data-FM GPS and fallback driver mappings implement the supplied Fleet GPS API Integration Protocol v1.0. Data-FM movement and any dedicated driver service remain adapter boundaries until their exact API contracts are supplied. Completed and cancelled jobs are saved directly in this application's database; there is no separate report-delivery POST.
