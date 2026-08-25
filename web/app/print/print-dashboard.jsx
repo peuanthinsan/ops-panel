@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { operationActions } from '../../lib/actions';
 import { formatReportCoordinate, reportDateKey } from '../../lib/report-view';
 import { filterReports, hasRestrictiveReportFilters } from '../../lib/report-filter';
+import { timelineReportMatchesFilters } from '../../lib/timeline-filter';
 import { TIMELINE_AXIS_LABELS, timelinePosition } from '../../lib/timeline-position';
 import { adminFetch, adminFetchAllReports } from '../dashboard-api';
 
@@ -67,7 +68,7 @@ function PrintToolbar({ lang, onPrint, backPath = '/' }) {
 
 function PrintHeader({ subtitle, compact = false }) {
   return <header className={`print-header ${compact ? 'compact' : ''}`}>
-    <Image src="/songdee-gps-pin.svg" alt="" width={180} height={220} />
+    <Image src="/songdee-gps-pin.svg" alt="" width={180} height={220} loading="eager" />
     <div><strong><span>Songdee GPS</span> Ops Panel</strong><small>{subtitle}</small></div>
   </header>;
 }
@@ -94,7 +95,7 @@ function usePrintData(filters, lang) {
 }
 
 function PrintState({ lang, loading, error, onRetry }) {
-  if (loading) return <main className="print-state"><Image src="/songdee-gps-pin.svg" alt="" width={180} height={220} /><p>{lang === 'th' ? 'กำลังจัดทำรายงาน…' : 'Preparing report…'}</p></main>;
+  if (loading) return <main className="print-state"><Image src="/songdee-gps-pin.svg" alt="" width={180} height={220} loading="eager" /><p>{lang === 'th' ? 'กำลังจัดทำรายงาน…' : 'Preparing report…'}</p></main>;
   if (error) return <main className="print-state"><h1>{lang === 'th' ? 'เปิดรายงานไม่ได้' : 'Could not open report'}</h1><p>{error}</p><button className="primary" type="button" onClick={onRetry}>{lang === 'th' ? 'ลองใหม่' : 'Try again'}</button></main>;
   return null;
 }
@@ -163,19 +164,22 @@ function JobListPrintPage({ rows, lang, page, totalPages }) {
   </section>;
 }
 
-export function LandscapePrintDashboard({ filters = {}, lang: requestedLang, timelineOnly = false }) {
+export function LandscapePrintDashboard({ filters = {}, lang: requestedLang, timelineOnly = false, timelineFilters = null }) {
   const lang = requestedLang === 'en' ? 'en' : 'th';
   const stableFilters = useMemo(() => filters, [JSON.stringify(filters)]);
   const { reports, bindings, loading, error, load } = usePrintData(stableFilters, lang);
+  const timelineReports = useMemo(() => timelineOnly && timelineFilters
+    ? reports.filter(report => timelineReportMatchesFilters(report, timelineFilters))
+    : reports, [reports, timelineOnly, timelineFilters]);
   const timelinePages = useMemo(() => {
-    const reportDates = [...new Set(reports.map(report => reportDateKey(report.startTime)).filter(Boolean))].sort();
+    const reportDates = [...new Set(timelineReports.map(report => reportDateKey(report.startTime)).filter(Boolean))].sort();
     const dates = reportDates.length
       ? reportDates
       : [validDate(stableFilters.endDate || stableFilters.startDate)];
-    const restricted = hasRestrictiveReportFilters(stableFilters);
+    const restricted = hasRestrictiveReportFilters(stableFilters) || Boolean(timelineOnly && timelineFilters);
     const result = [];
     for (const date of dates) {
-      const dayReports = reports.filter(report => reportDateKey(report.startTime) === date);
+      const dayReports = timelineReports.filter(report => reportDateKey(report.startTime) === date);
       const vehicles = new Set([
         ...(restricted ? [] : bindings.map(binding => binding.vehicleNumber)),
         ...dayReports.map(report => report.vehicleNumber),
@@ -189,7 +193,7 @@ export function LandscapePrintDashboard({ filters = {}, lang: requestedLang, tim
       }
     }
     return result;
-  }, [bindings, reports, stableFilters]);
+  }, [bindings, stableFilters, timelineFilters, timelineOnly, timelineReports]);
   const detailedJobPages = useMemo(() => timelineOnly ? [] : paginateJobs(reports), [reports, timelineOnly]);
   if (loading || error) return <PrintState lang={lang} loading={loading} error={error} onRetry={load} />;
   const totalPages = timelinePages.length + detailedJobPages.length;

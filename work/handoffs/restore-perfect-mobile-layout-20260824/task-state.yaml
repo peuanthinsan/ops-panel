@@ -1,0 +1,34 @@
+task_id: restore-perfect-mobile-layout-20260824
+objective: Restore the exact user-accepted mobile action-card spacing.
+active_root: codex-desktop
+active_root_model: UNKNOWN
+active_root_effort: UNKNOWN
+delegated_provider: claude
+delegated_agent: hybrid-sonnet-reviewer
+delegated_model: sonnet
+delegated_effort: high
+permission_mode: plan
+base_ref: 25344d7f4157bbd93bc17c5963c1fe70e11f25ce
+writer_lease: codex-root
+allowed_paths:
+  - app/index.tsx
+  - tests/mobile-ui.test.ts
+evidence:
+  - /private/tmp/songdee-ops-final-spacing-thai.png
+fable_review_status: INCOMPLETE
+fable_failure_receipt: work/handoffs/restore-perfect-mobile-layout-20260824/fable-failure.md
+opus_review_status: INCOMPLETE
+opus_surface_model: claude-opus-5
+opus_failure_receipt: work/handoffs/restore-perfect-mobile-layout-20260824/opus-failure.md
+fallback_trigger: fable_empty_output_and_opus_permission_denials
+frozen_review_packet: work/handoffs/restore-perfect-mobile-layout-20260824/review-packet.md
+sonnet_surface_model: claude-sonnet-5
+sonnet_review_session: 6704d145-30a8-4f68-ab69-ea42b83895ee
+sonnet_review_status: PASS
+sonnet_review_receipt: work/handoffs/restore-perfect-mobile-layout-20260824/sonnet-review-2.md
+final_review_receipt: work/handoffs/restore-perfect-mobile-layout-20260824/receipt.md
+acceptance_status: REVIEWED_COMPLETE
+source_unchanged_after_review: true
+release_impact: none
+git_operations_authorized: false
+deployment_authorized: false

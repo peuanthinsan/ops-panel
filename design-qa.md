@@ -1,52 +1,63 @@
-# Design QA — Accepted mobile action-grid layout
+# Design QA — Timeline job filters and status pill
 
 **Source visual truth**
 
-- User-accepted emulator capture: `/private/tmp/songdee-ops-final-spacing-thai.png`
-- Source pixels: 1344 × 2992 at Android density 480 dpi, approximately 448 × 997 dp including system bars.
+- User screenshot: `/var/folders/rg/9whqf0b16kjgfg7xwrp1bn3c0000gn/T/TemporaryItems/NSIRD_screencaptureui_sN88MB/Screenshot 2026-08-25 at 10.15.10 AM.png`
+- Source pixels: 546 × 369.
+- Target state: English timeline detail tooltip for a completed job. The source showed the status as uncontained green text; the requested change was a compact chip or pill.
 
 **Rendered implementation**
 
-- Restored emulator capture: `/private/tmp/songdee-ops-restored-perfect.png`
-- Implementation pixels: 1344 × 2992 at Android density 480 dpi, approximately 448 × 997 dp including system bars.
-- Side-by-side comparison: `/private/tmp/songdee-ops-accepted-restored-comparison.png`
-- Normalization: neither source nor implementation was rescaled before comparison; the equal-size captures were placed side by side.
+- Focused tooltip capture: `/private/tmp/songdee-timeline-status-pill-crop.jpg`
+- Tooltip capture pixels: 356 × 250, cropped from a 1280 × 900 browser viewport at device scale factor 1.
+- Desktop filter capture: `/private/tmp/songdee-timeline-filters-final.png` at 1280 × 900.
+- Mobile filter capture: `/private/tmp/songdee-timeline-filters-mobile.png` at 390 × 844.
+- Normalization: the screenshot and implementation were compared as equivalent tooltip content regions. Absolute pixels differ because the supplied screenshot was captured at a larger browser/display scale; typography, two-column structure, spacing, color, radius, and status treatment were judged at their rendered proportions.
 
-**State**
+**State and interactions tested**
 
-- Thai control panel, vehicle `Ford T`, no active or selected job, portrait orientation.
-- Primary interaction checked: open the password-protected vehicle dialog, submit the existing `Ford T` binding, return to the action grid, and dismiss the unconfirmed action dialog used during keyboard verification.
-- React Native and Android runtime error logs checked after the interaction; no errors were present.
+- Default timeline: all nine job types selected, Completed selected, Cancelled unselected.
+- Combined status view: selecting Cancelled while keeping Completed shows both statuses.
+- Cancelled-only view: unchecking Completed while keeping Cancelled displayed the single cancelled Refuel record.
+- Job-type filtering: clearing all modes and selecting Refuel displayed only that mode.
+- Reset restored all nine modes and Completed-only status.
+- Print Timeline preserved the selected Refuel + Cancelled-only filters and generated a one-job print summary.
+- Desktop and 390 px mobile layouts were rendered; the mobile document width remained equal to the viewport and the filter panel did not create page-level overflow.
 
 **Findings**
 
-- No remaining P0, P1, or P2 visual findings.
-- Fonts and typography: existing product fonts, weights, line heights, wrapping, and hierarchy match the accepted capture.
-- Spacing and layout rhythm: number circles use the accepted 45% portrait slot, with the compact title-and-description group directly beneath it. Every circle is horizontally aligned within its row.
-- Colors and visual tokens: red, black, grey, and white product tokens are unchanged.
-- Image quality and asset fidelity: the Songdee GPS pin remains sharp and unchanged.
-- Copy and content: all nine Thai titles and descriptions match the accepted capture.
-- The only visible difference in the full comparison is the device status-bar clock.
+- No remaining P0, P1, or P2 visual or interaction findings.
+- Fonts and typography: the existing Sarabun hierarchy, optical weights, line heights, and compact tooltip labels remain intact. The status pill uses a smaller 10 px bold label so it reads as metadata rather than competing with the activity title.
+- Spacing and layout rhythm: the title and pill share an aligned flex row with an 8 px gap. Tooltip definition-list spacing and the original two-column information structure are preserved. The filter popover uses a three-column desktop grid and two-column mobile grid.
+- Colors and visual tokens: Completed uses an accessible dark-green-on-light-green semantic treatment; Cancelled uses dark red on light red. The filter trigger uses existing black, red, grey, and white Songdee tokens.
+- Image quality and asset fidelity: this component introduces no new raster, logo, illustration, or icon assets. Existing Songdee brand assets are unchanged.
+- Copy and content: all filter, status, job-mode, empty-state, and print behavior is available in English and Thai. The nine job titles come directly from the canonical action list.
+- Accessibility: status and mode options use native checkboxes with visible focus treatment; fieldsets and legends group the controls; the filter trigger is a native `details`/`summary`; the timeline buttons retain complete accessible labels and tooltip relationships.
 
 **Comparison evidence**
 
-- The equal-size full-view comparison includes the complete 3 × 3 action grid, so a separate crop would not reveal additional detail.
-- Card boundaries, circle positions, title baselines, description wrapping, and bottom whitespace match between the accepted and restored captures.
+- The supplied tooltip screenshot and final focused tooltip capture were opened together in one comparison pass.
+- The uncontained source status is replaced by a clearly bounded rounded pill while the surrounding activity title, metadata hierarchy, and two-column details remain stable.
+- The filter menu had no visual reference image; it was evaluated against the user's requested checkbox behavior, the existing dashboard design system, desktop/mobile captures, and interaction results.
 
 **Comparison history**
 
-1. P2: variable text stacks caused circle misalignment between cards in the same row.
-2. P2: the first fixed-slot correction aligned the circles but introduced excessive whitespace.
-3. The layout was adjusted to a 45% portrait number slot followed by a compact title/description group; the user explicitly accepted this capture as perfect.
-4. A later spacing experiment was rejected and reverted exactly.
-5. Final side-by-side review found only the status-bar clock difference and no P0, P1, or P2 issue.
+1. P2 source issue: Completed appeared as loose text adjacent to the activity title and did not read as a status component.
+2. Fix: added a bordered, fully rounded semantic status pill and an aligned tooltip heading row.
+3. Requirement expansion: replaced two mutually exclusive cancelled-job buttons with a compact Filter jobs menu containing native status and job-type checkbox chips.
+4. Post-fix evidence: completed-only, combined, cancelled-only, single-mode, reset, mobile, and filtered-print states all behaved as intended.
 
 **Implementation checklist**
 
-- [x] Restore the exact accepted portrait spacing.
-- [x] Keep circles aligned across every row.
-- [x] Preserve Thai and English title/description copy.
-- [x] Preserve the compact landscape variant.
-- [x] Verify no selected or active job remains after QA.
+- [x] Render Completed and Cancelled as semantic pills in timeline tooltips.
+- [x] Hide cancelled jobs by default.
+- [x] Allow any combination of Completed, Cancelled, and the nine job types.
+- [x] Preserve selected filters when printing the timeline.
+- [x] Provide English and Thai copy.
+- [x] Verify desktop, mobile, keyboard-accessible controls, filtered data, and production build.
+
+**Follow-up polish**
+
+- No P3 follow-up is required for this scoped change.
 
 final result: passed
