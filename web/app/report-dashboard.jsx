@@ -368,11 +368,11 @@ export default function FullReportDashboard({ lang }) {
       <div className="page-header report-header">
         <div><div className="eyebrow">{t.eyebrowToday} · {formatReportDate(reportDateKey(new Date().toISOString()), lang)}</div><h1>{t.title}</h1><p>{g.subtitle}</p></div>
         <div className="header-actions">
+          <button className="secondary" type="button" onClick={() => void loadReports()} disabled={loading}>{loading ? t.refreshing : t.refresh}</button>
+          <DateRangePicker lang={lang} t={t} startDate={startDate} endDate={endDate} onChange={(start, end) => { setStartDate(start); setEndDate(end); }} />
           <div className="header-vehicle-selector">
             <SearchableCombobox multiple label={t.vehicle} value={vehicles} onChange={setVehicles} options={options.vehicles} allLabel={t.allVehicles} lang={lang} />
           </div>
-          <DateRangePicker lang={lang} t={t} startDate={startDate} endDate={endDate} onChange={(start, end) => { setStartDate(start); setEndDate(end); }} />
-          <button className="secondary" type="button" onClick={() => void loadReports()} disabled={loading}>{loading ? t.refreshing : t.refresh}</button>
           <div className="daily-print-action"><button className="primary" type="button" onClick={printReports} disabled={!canPrintDailyReport} aria-describedby="daily-print-vehicle-message">{t.print}</button><small id="daily-print-vehicle-message" className={`daily-print-selection ${vehicles.length === 1 ? 'selected' : 'required'}`} aria-live="polite">{dailyPrintVehicleMessage}</small></div>
         </div>
       </div>
