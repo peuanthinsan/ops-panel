@@ -160,7 +160,7 @@ button:focus-visible{outline:3px solid #111;outline-offset:2px;box-shadow:0 0 0 
 @media(min-width:1181px){
   .report-header{flex-wrap:nowrap}
   .report-header>div:first-child{flex:0 1 260px;min-width:220px;max-width:300px}
-  .header-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 180px 230px;flex:1 1 620px;width:auto;max-width:1000px;min-width:620px;margin-left:auto}
+  .header-actions{display:grid;grid-template-columns:150px minmax(240px,1fr) minmax(240px,1fr) 200px;flex:1 1 620px;width:auto;max-width:900px;min-width:860px;margin-left:auto}
   .header-vehicle-selector,.date-range-control{width:100%;min-width:0}
   .header-vehicle-selector .multi-combobox-chips{max-width:100%}
   .header-actions>.secondary,.header-actions>.daily-print-action{width:100%}
