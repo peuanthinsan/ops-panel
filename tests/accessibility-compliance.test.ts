@@ -12,7 +12,7 @@ test('web controls have visible focus, sufficient targets, reduced motion, and s
   assert.match(styles, /\.main:focus\{outline:none\}\.main:focus-visible\{outline:3px solid #E31B23;outline-offset:-3px\}/);
   assert.match(styles, /button:focus-visible\{outline:3px solid #111;outline-offset:2px;box-shadow:0 0 0 5px #fff\}/);
   assert.match(styles, /\.coverage-state\{min-height:24px\}/);
-  assert.match(styles, /\.timeline-track\{height:32px;overflow:visible\}\.timeline-segment\{top:4px;bottom:4px;min-width:24px;min-height:24px\}/);
+  assert.match(styles, /\.timeline-track\{height:calc\(8px \+ \(var\(--timeline-lane-count, 1\) \* 24px\)\);overflow:visible\}\.timeline-segment\{top:calc\(4px \+ \(var\(--timeline-lane, 0\) \* 24px\)\);bottom:auto;min-width:1px;min-height:0;height:24px\}/);
   assert.match(styles, /@media\(prefers-reduced-motion:reduce\)\{\*,\*::before,\*::after\{[^}]*animation-duration:\.01ms!important[^}]*transition-duration:\.01ms!important/);
   assert.match(styles, /\.eyebrow,p\{color:#5E6872\}/);
   assert.match(styles, /\.warning-text,\.print-warning\{color:#8A5D00!important\}/);
