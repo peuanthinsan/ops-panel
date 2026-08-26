@@ -27,6 +27,7 @@ import type { JobStartInput } from '../lib/job-start';
 import type { JobReportInput } from '../lib/report';
 import { serverNowMs } from '../lib/server-clock';
 import { mergeSavedJobs, type SavedJob } from '../lib/saved-jobs';
+import { GPS_SYNC_INTERVAL_MS } from '../lib/gps-sample';
 
 const actions = operationActions;
 const ACTION_COLUMN_COUNT = 3;
@@ -34,7 +35,6 @@ const actionRows = Array.from(
   { length: Math.ceil(actions.length / ACTION_COLUMN_COUNT) },
   (_, index) => actions.slice(index * ACTION_COLUMN_COUNT, (index + 1) * ACTION_COLUMN_COUNT),
 );
-const JOB_GPS_SYNC_INTERVAL_MS = 60_000;
 const initialJobHistoryQuery: MobileJobQuery = { dayKey: null, endAt: null, startAt: null, monthKey: null, mode: null, search: '', sort: 'newest', status: 'all' };
 
 function combinedJobSummary(left: DeviceJobHistorySummary, right: DeviceJobHistorySummary): DeviceJobHistorySummary {
@@ -105,6 +105,7 @@ export default function Index() {
   const focusRestoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jobHistoryQueryRef = useRef<MobileJobQuery>(initialJobHistoryQuery);
   const jobHistoryRequestRef = useRef(0);
+  const recordedGpsSyncJobsRef = useRef(new Map<string, { jobId: string; vehicleNumber: string; deviceId: string; targetAt: string }>());
 
   const updatePendingReport = (report: JobReportInput | null) => {
     pendingReportRef.current = report;
@@ -365,9 +366,32 @@ export default function Index() {
       finally { syncing = false; }
     };
     const cancelIdleTask = scheduleIdleTask(() => { void sync(); });
-    const timer = setInterval(() => { void sync(); }, JOB_GPS_SYNC_INTERVAL_MS);
+    const timer = setInterval(() => { void sync(); }, GPS_SYNC_INTERVAL_MS);
     return () => { active = false; cancelIdleTask(); clearInterval(timer); };
   }, [activeJobId, binding?.deviceId, binding?.vehicleNumber, pendingReport, startedAt]);
+
+  useEffect(() => {
+    let active = true;
+    let syncing = false;
+    const syncRecordedJobs = async () => {
+      if (!active || syncing || !recordedGpsSyncJobsRef.current.size) return;
+      syncing = true;
+      try {
+        for (const [jobId, job] of recordedGpsSyncJobsRef.current) {
+          if (!active) break;
+          try {
+            const result = await requestJobGpsSync(job);
+            const status = result?.report?.gpsLookupStatus || result?.deviceSource?.status;
+            if (status && !['pending', 'no_data', 'lookup_failed', 'lookup_unavailable'].includes(status)) {
+              recordedGpsSyncJobsRef.current.delete(jobId);
+            }
+          } catch { /* Keep the job queued; the next 60-second sync can recover transient failures. */ }
+        }
+      } finally { syncing = false; }
+    };
+    const timer = setInterval(() => { void syncRecordedJobs(); }, GPS_SYNC_INTERVAL_MS);
+    return () => { active = false; clearInterval(timer); };
+  }, []);
 
   useEffect(() => {
     if (!awaitingMovement || !binding || pendingReport) return;
@@ -632,6 +656,18 @@ export default function Index() {
     }
   }
 
+  function queueRecordedGpsSync(report: JobReportInput) {
+    if (report.status === 'Cancelled') return;
+    const job = { jobId: report.id, vehicleNumber: report.vehicleNumber, deviceId: report.deviceId, targetAt: report.endTime };
+    recordedGpsSyncJobsRef.current.set(report.id, job);
+    void requestJobGpsSync(job).then(result => {
+      const status = result?.report?.gpsLookupStatus || result?.deviceSource?.status;
+      if (status && !['pending', 'no_data', 'lookup_failed', 'lookup_unavailable'].includes(status)) {
+        recordedGpsSyncJobsRef.current.delete(report.id);
+      }
+    }).catch(() => { /* The 60-second sync keeps retrying after a transient failure. */ });
+  }
+
   async function confirmFinish() {
     const immediateDayEnd = confirmType === 'day_end' && selected === '9';
     if (savingJob || !binding || !selected || (!immediateDayEnd && !startedAt && !awaitingMovement)) return;
@@ -652,9 +688,7 @@ export default function Index() {
       }
       if (!pendingReport && !await persistPendingFinalReport(report)) return;
       const syncState = await saveOrQueueJob(report);
-      if (syncState === 'synced') {
-        void requestJobGpsSync({ jobId: report.id, vehicleNumber: report.vehicleNumber, deviceId: report.deviceId, targetAt: report.endTime }).catch(() => { /* The next reconciliation can backfill this point. */ });
-      }
+      if (syncState === 'synced' || syncState === 'queued') queueRecordedGpsSync(report);
       await removePendingJobStart(reportId).catch(() => { /* Server-side report creation also closes the active start. */ });
       const localStateFinalized = await finalizeActiveJob();
       const deliveryMessage = syncState === 'synced'

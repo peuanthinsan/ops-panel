@@ -87,7 +87,9 @@ test('production movement detection relies only on the server-side FMS adapter',
 test('active jobs trigger server-side GPS reconciliation without sending coordinates', async () => {
   const source = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
   assert.match(source, /requestJobGpsSync\(\{[\s\S]*jobId: activeJobId[\s\S]*targetAt: new Date\(serverNowMs\(\)\)\.toISOString\(\)/);
-  assert.match(source, /JOB_GPS_SYNC_INTERVAL_MS = 60_000/);
+  assert.match(source, /GPS_SYNC_INTERVAL_MS/);
+  assert.match(source, /recordedGpsSyncJobsRef/);
+  assert.match(source, /queueRecordedGpsSync\(report\)/);
   assert.doesNotMatch(source, /latitude: position\.coords|longitude: position\.coords/);
 });
 
