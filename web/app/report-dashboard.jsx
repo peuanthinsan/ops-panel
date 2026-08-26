@@ -242,6 +242,9 @@ export default function FullReportDashboard({ lang }) {
   const [selectedReport, setSelectedReport] = useState(null);
   const reportRequestSequence = useRef(0);
   const facetsLoaded = useRef(false);
+  const automaticGpsSyncRef = useRef(false);
+  const reportsRef = useRef(reports);
+  reportsRef.current = reports;
   const deferredSearch = useDeferredValue(search);
   const sortKey = sorts[0]?.key || 'startTime';
   const sortDirection = sorts[0]?.direction || 'desc';
@@ -310,6 +313,24 @@ export default function FullReportDashboard({ lang }) {
     const timer = window.setInterval(refreshVisibleReports, 30_000);
     document.addEventListener('visibilitychange', refreshVisibleReports);
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refreshVisibleReports); };
+  }, [loadReports]);
+  useEffect(() => {
+    const syncPendingGps = async () => {
+      if (document.visibilityState !== 'visible' || automaticGpsSyncRef.current) return;
+      const pendingReports = reportsRef.current.filter(report => report.status !== 'Cancelled'
+        && ['pending', 'no_data', 'lookup_failed', 'lookup_unavailable'].includes(report.gpsLookupStatus));
+      if (!pendingReports.length) return;
+      automaticGpsSyncRef.current = true;
+      try {
+        for (const report of pendingReports) {
+          await adminFetch('/api/admin/reports/retry', { method: 'POST', body: JSON.stringify({ reportId: report.id }) }).catch(() => { /* Keep the job pending for the next 60-second sync. */ });
+        }
+        await loadReports({ silent: true });
+      } finally { automaticGpsSyncRef.current = false; }
+    };
+    void syncPendingGps();
+    const timer = window.setInterval(syncPendingGps, 60_000);
+    return () => window.clearInterval(timer);
   }, [loadReports]);
   useEffect(() => { setPage(1); }, [sharedFilters]);
   const visibleReports = reports;
@@ -421,10 +442,10 @@ export default function FullReportDashboard({ lang }) {
               <td className="report-time-cell">{formatTime(report.endTime, lang)}</td>
               <td className="report-duration-cell">{formatReportDuration(report.startTime, report.endTime, report.duration)}</td>
               <td className={reportSpeed(report) > 90 ? 'speed-alert' : undefined}>{reportSpeed(report) == null ? '—' : reportSpeed(report) === 0 ? t.stationary : `${reportSpeed(report)} ${t.speedUnit}`}</td>
-              <td className="gps-coverage-cell"><button type="button" className={`coverage-state coverage-${reportCoverage(report).state}`} aria-label={`${coverageLabel(report, g)}: ${report.id}`} onClick={() => setSelectedReport(report)}>{coverageLabel(report, g)}</button><small>{Number(report.deviceGpsSamples) || 0} {g.samples}</small></td>
+              <td className="gps-coverage-cell"><div className="gps-coverage-actions"><button type="button" className={`coverage-state coverage-${reportCoverage(report).state}`} aria-label={`${coverageLabel(report, g)}: ${report.id}`} onClick={() => setSelectedReport(report)}>{coverageLabel(report, g)}</button><button type="button" className="view-gps-button" aria-label={`${g.viewGps}: ${report.id}`} onClick={() => setSelectedReport(report)}>{g.viewGps}</button>{canRetry(report) ? <button className="retry-button" type="button" aria-label={`${t.retry}: ${report.id}`} disabled={Boolean(retryingId)} onClick={() => retryReport(report.id)}>{retryingId === report.id ? t.retrying : t.retry}</button> : null}</div><small>{Number(report.deviceGpsSamples) || 0} {g.samples}</small></td>
               <td className="location-cell"><span>{reportLocation(report, t.unknownLocation)}</span><small>{reportCoordinates(report) || displayGps(gpsValue(report), lang)}</small></td>
               <td><span className={`status status-${statusSlug(report.status)}`}>{displayStatus(report.status, lang)}</span></td>
-              <td><div className="report-actions">{canRetry(report) ? <button className="retry-button" type="button" aria-label={`${t.retry}: ${report.id}`} disabled={Boolean(retryingId)} onClick={() => retryReport(report.id)}>{retryingId === report.id ? t.retrying : t.retry}</button> : null}<button className="view-gps-button" type="button" aria-label={`${g.viewGps}: ${report.id}`} onClick={() => setSelectedReport(report)}>{g.viewGps}</button><button className="print-row-button" type="button" aria-label={`${t.printVehicle}: ${report.vehicleNumber}`} disabled={!report.vehicleNumber || !report.workPeriodId} onClick={() => printVehicle(report)}>{t.printVehicle}</button></div></td>
+              <td><div className="report-actions"><button className="print-row-button" type="button" aria-label={`${t.printVehicle}: ${report.vehicleNumber}`} disabled={!report.vehicleNumber || !report.workPeriodId} onClick={() => printVehicle(report)}>{t.printVehicle}</button></div></td>
             </tr>)}</tbody>
           </table>
         </div> : null}
