@@ -26,7 +26,7 @@ export function bangkokMinuteOfDay(value?: string | null) {
     : null;
 }
 
-export function timelinePosition(startValue?: string | null, endValue?: string | null, fallbackMinutes = 5) {
+export function timelinePosition(startValue?: string | null, endValue?: string | null, fallbackMinutes = 0.25) {
   const startDate = dateValue(startValue);
   const endDate = dateValue(endValue);
   const start = bangkokMinuteOfDay(startValue);
@@ -34,10 +34,11 @@ export function timelinePosition(startValue?: string | null, endValue?: string |
 
   const endMinute = bangkokMinuteOfDay(endValue);
   const crossesMidnight = Boolean(endDate && endDate > startDate && endMinute != null && endMinute < start);
+  const hasEnd = Boolean(endDate && endMinute != null);
   const rawEnd = crossesMidnight ? TIMELINE_END_MINUTE : (endMinute ?? start + fallbackMinutes);
   const boundedStart = Math.max(TIMELINE_START_MINUTE, Math.min(TIMELINE_END_MINUTE, start));
   const boundedEnd = Math.max(
-    boundedStart + fallbackMinutes,
+    hasEnd ? boundedStart : boundedStart + fallbackMinutes,
     Math.min(TIMELINE_END_MINUTE, rawEnd),
   );
   if (boundedStart >= TIMELINE_END_MINUTE) return null;

@@ -87,7 +87,7 @@ function timelineSegment(report, lang, labels) {
     finishWork,
     detail,
     accessibleLabel: `${labels.activity}: ${detail.activity}. ${labels.status}: ${detail.status}. ${labels.start}: ${detail.start}. ${labels.end}: ${detail.end}. ${labels.duration}: ${detail.duration}. ${labels.topSpeed}: ${detail.speed}. ${labels.vehicle}: ${detail.vehicle}. ${labels.driver}: ${detail.driver}. ${labels.device}: ${detail.device}. ${labels.gps}: ${detail.gps}. ${labels.location}: ${detail.location}. ${labels.reportId}: ${detail.reportId}.`,
-    style: { left: `${position.left}%`, width: `${Math.max(0.5, position.width)}%`, backgroundColor: reportModeColor(report.mode), opacity: cancelled ? 0.42 : 1 },
+    style: { left: `${position.left}%`, width: `${Math.max(0.01, position.width)}%`, backgroundColor: reportModeColor(report.mode), opacity: cancelled ? 0.42 : 1 },
   };
 }
 

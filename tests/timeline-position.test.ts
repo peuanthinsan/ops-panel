@@ -28,3 +28,9 @@ test('same-minute events retain second-level separation', () => {
   assert.ok(refuel);
   assert.ok(refuel.left > vehicleCheck.left);
 });
+
+test('short events use their real duration instead of a five-minute block', () => {
+  const position = timelinePosition('2026-08-26T03:53:09.000Z', '2026-08-26T03:53:15.000Z');
+  assert.ok(position);
+  assert.ok(position.width < 0.01, `expected a sub-minute width, got ${position.width}%`);
+});
