@@ -332,7 +332,7 @@ export default function FullReportDashboard({ lang }) {
     void syncPendingGps();
     const timer = window.setInterval(syncPendingGps, 60_000);
     return () => window.clearInterval(timer);
-  }, [loadReports]);
+  }, [loadReports, reports.length]);
   useEffect(() => { setPage(1); }, [sharedFilters]);
   const visibleReports = reports;
   const renderedReports = reports;
