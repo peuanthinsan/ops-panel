@@ -28,6 +28,7 @@ const text = {
 };
 const workPeriodStartedCopy = { en: 'Work period · started', th: 'รอบงาน · เริ่ม' };
 const printWorkReportCopy = { en: 'Print work report', th: 'พิมพ์รายงานรอบงาน' };
+const printPeriodGuidanceCopy = { en: 'Each timeline row is one work period. Print the row you need.', th: 'แต่ละแถวในไทม์ไลน์คือหนึ่งรอบงาน ให้พิมพ์แถวที่ต้องการ' };
 
 function calendarDayOffset(startDay, actualDay) {
   const start = Date.parse(`${startDay}T00:00:00Z`);
@@ -91,7 +92,7 @@ function timelineSegment(report, lang, labels) {
   };
 }
 
-export default function TimelineDashboard({ lang, embedded = false, sourceReports = null, sourceLoading = false, sourceError = '', sharedFilters = null, onPrintWorkPeriod = null }) {
+export default function TimelineDashboard({ lang, embedded = false, sourceReports = null, sourceLoading = false, sourceError = '', sharedFilters = null, onPrintWorkPeriod = null, printPeriodGuidance = false }) {
   const t = text[lang];
   const [reports, setReports] = useState([]);
   const [date, setDate] = useState('');
@@ -289,7 +290,8 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
             {reportableOperations.map(([number, thai, english]) => <span key={number}><i style={{ backgroundColor: reportModeColor(english) }} aria-hidden="true" /><b className="timeline-mode-number">{number}</b>{lang === 'th' ? thai : english}</span>)}<span><i className="legend-speed" aria-hidden="true" />{t.speed}</span><span><CaretDownIcon className="legend-alert-icon" weight="fill" aria-hidden="true" />{t.alert}</span><small>{t.gaps}</small>
           </div>
         </div>
-        <div className="timeline-scroll" id="timeline-results" tabIndex={0} aria-label={lang === 'en' ? 'Scrollable vehicle activity timeline' : 'ไทม์ไลน์กิจกรรมรถ เลื่อนได้'}>
+        {printPeriodGuidance ? <div className="timeline-period-guidance" role="note"><strong>{lang === 'en' ? 'Choose a timeline row below' : 'เลือกแถวไทม์ไลน์ด้านล่าง'}</strong><span>{printPeriodGuidanceCopy[lang]}</span></div> : null}
+        <div className={`timeline-scroll ${printPeriodGuidance ? 'print-period-guidance-active' : ''}`} id="timeline-results" tabIndex={0} aria-label={lang === 'en' ? 'Scrollable vehicle activity timeline' : 'ไทม์ไลน์กิจกรรมรถ เลื่อนได้'}>
           <div className="timeline-grid timeline-axis"><span>{showRowDate ? t.vehicleDriverDate : t.vehicleDriver}</span><div>{TIMELINE_AXIS_LABELS.map(label => <span key={label}>{label}</span>)}</div></div>
           {timelinePage.items.map(row => { const rowAlerts = alertsByRow.get(row) || []; return <div className={`timeline-grid timeline-row ${rowAlerts.length ? 'timeline-row-has-alerts' : ''}`} key={`${row.date}-${row.actualDate}-${row.vehicle}`} role="group" aria-label={`${t.vehicle}: ${row.vehicle}. ${t.driver}: ${row.driver}. ${t.date}: ${formatReportDate(row.date, lang)}${row.dayOffset ? `, ${t.nextDay}` : ''}. ${rowAlerts.length} ${t.alert}.`}><div><strong>{row.vehicle}</strong><small>{row.driver}</small><small className="timeline-row-period">{workPeriodStartedCopy[lang]} {formatTimelineTime(row.periodStart, lang)}</small>{showRowDate || row.dayOffset ? <small className="timeline-row-date">{formatReportDate(row.actualDate, lang)}{row.dayOffset ? ` · +${row.dayOffset} ${lang === 'th' ? 'วัน' : row.dayOffset === 1 ? 'day' : 'days'}` : ''}</small> : null}{onPrintWorkPeriod ? <button className="timeline-print-button" type="button" onClick={() => onPrintWorkPeriod(row.reports[0])} disabled={!row.reports[0]?.vehicleNumber || !row.reports[0]?.workPeriodId}>{printWorkReportCopy[lang]}</button> : null}</div><div className="timeline-row-chart"><div className="timeline-track timeline-speed-track" style={{ '--timeline-lane-count': row.laneCount }}>{row.segments.map(segment => <button
             key={segment.id}

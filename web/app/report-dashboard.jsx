@@ -419,11 +419,10 @@ export default function FullReportDashboard({ lang }) {
         </div>
       </section>
 
-      <TimelineDashboard lang={lang} embedded sharedFilters={sharedFilters} onPrintWorkPeriod={printVehicle} />
+      <TimelineDashboard lang={lang} embedded sharedFilters={sharedFilters} onPrintWorkPeriod={printVehicle} printPeriodGuidance={needsRowPrintSelection} />
 
       <section className="panel report-panel" aria-busy={loading || search !== deferredSearch}>
         <div className="section-heading report-section-heading"><div><h2>{t.activity}</h2><p className="sort-hint">{t.sortHint}</p></div><span className="result-count" aria-live="polite">{t.showing} {pageInfo.start}–{pageInfo.end} {t.of} {pageInfo.total}</span></div>
-        {needsRowPrintSelection ? <div className="print-period-guidance" role="note"><strong>{lang === 'en' ? 'Choose a job row below' : 'เลือกแถวงานด้านล่าง'}</strong><span>{lang === 'en' ? 'Each row is one work period. Use Print work report in the row you need.' : 'แต่ละแถวคือหนึ่งรอบงาน ให้กดปุ่มพิมพ์รายงานรอบงานในแถวที่ต้องการ'}</span></div> : null}
         {error ? <p className="error" role="alert">{error}</p> : null}
         {retryNotice ? <div className="inline-message success" role="status">{retryNotice}</div> : null}
         {loading && !reports.length ? <p className="loading-message" role="status">{t.loading}</p> : null}
