@@ -15,11 +15,15 @@ export function bangkokMinuteOfDay(value?: string | null) {
     timeZone: 'Asia/Bangkok',
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
     hourCycle: 'h23',
   }).formatToParts(date);
   const hour = Number(parts.find(part => part.type === 'hour')?.value);
   const minute = Number(parts.find(part => part.type === 'minute')?.value);
-  return Number.isFinite(hour) && Number.isFinite(minute) ? (hour * 60) + minute : null;
+  const second = Number(parts.find(part => part.type === 'second')?.value);
+  return Number.isFinite(hour) && Number.isFinite(minute) && Number.isFinite(second)
+    ? (hour * 60) + minute + (second / 60)
+    : null;
 }
 
 export function timelinePosition(startValue?: string | null, endValue?: string | null, fallbackMinutes = 5) {

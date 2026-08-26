@@ -20,3 +20,11 @@ test('an overnight job remains visible through the end of its start day', () => 
   closeTo(position.left, 97.9166666667);
   closeTo(position.width, 2.0833333333);
 });
+
+test('same-minute events retain second-level separation', () => {
+  const vehicleCheck = timelinePosition('2026-08-26T03:53:09.000Z', '2026-08-26T03:53:15.000Z');
+  const refuel = timelinePosition('2026-08-26T03:53:44.000Z', '2026-08-26T03:53:56.000Z');
+  assert.ok(vehicleCheck);
+  assert.ok(refuel);
+  assert.ok(refuel.left > vehicleCheck.left);
+});

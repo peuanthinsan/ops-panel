@@ -16,7 +16,7 @@ test('speeding uses the exact peak GPS timestamp and collapses one speeding epis
   assert.equal(alerts[0].type, 'speeding');
   assert.equal(alerts[0].capturedAt, '2026-08-25T00:45:10.000Z');
   assert.ok(Math.abs((alerts[0].speedKph || 0) - 96.012) < 0.001);
-  assert.equal(timelineAlertPosition(alerts[0]), ((7 * 60 + 45) / (24 * 60)) * 100);
+  assert.equal(timelineAlertPosition(alerts[0]), ((7 * 60 + 45 + (10 / 60)) / (24 * 60)) * 100);
   assert.equal(timelineAlertLabel(alerts[0], 'en'), 'Speeding (96 km/h)');
 });
 
@@ -39,7 +39,7 @@ test('stored alerts keep their event time and legacy flags fall back to the job 
     { id: 'fallback', startTime: '2026-08-25T02:30:00.000Z', harshBraking: true },
   ]);
   assert.deepEqual(alerts.map(alert => [alert.reportId, alert.type, alert.minute]), [
-    ['exact', 'harsh-braking', 8 * 60 + 55],
+    ['exact', 'harsh-braking', 8 * 60 + 55 + (12 / 60)],
     ['fallback', 'harsh-braking', 9 * 60 + 30],
   ]);
 });
