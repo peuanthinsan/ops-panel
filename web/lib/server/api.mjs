@@ -751,7 +751,7 @@ async function getReportsPage(request) {
       WITH ${workPeriodReportsCte()}
       SELECT
         count(*)::int AS total,
-        count(DISTINCT report.vehicle_number) FILTER (WHERE report.status <> 'Cancelled')::int AS "activeVehicles",
+        count(DISTINCT lower(trim(report.vehicle_number))) FILTER (WHERE report.status <> 'Cancelled')::int AS "activeVehicles",
         count(*) FILTER (WHERE report.gps_lookup_status = 'pending')::int AS queued,
         count(*) FILTER (WHERE report.status = 'Cancelled')::int AS cancelled,
         count(*) FILTER (
@@ -771,7 +771,9 @@ async function getReportsPage(request) {
       LEFT JOIN job_gps_summaries gps_summary ON gps_summary.job_id = report.id
       ${query.whereSql}
     `, query.values),
-    transaction.query('SELECT count(*)::int AS "fleetSize" FROM device_bindings'),
+    // A vehicle can have multiple tablets. Fleet size is a physical-vehicle
+    // count, not a device-binding count.
+    transaction.query('SELECT count(DISTINCT lower(trim(vehicle_number)))::int AS "fleetSize" FROM device_bindings WHERE trim(vehicle_number) <> \'\''),
   ]);
   const summary = summaryRows[0] || { total: 0, activeVehicles: 0, queued: 0, cancelled: 0 };
   const totalPages = Math.max(1, Math.ceil(Number(summary.total || 0) / query.pageSize));

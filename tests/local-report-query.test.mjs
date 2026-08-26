@@ -14,8 +14,17 @@ const fordReports = [
   { id: 'F2', vehicleNumber: 'Ford T', status: 'Completed', startTime: '2026-08-19T04:00:00Z', endTime: '2026-08-19T04:01:00Z' },
 ];
 
+const multiDeviceBindings = [
+  { vehicleNumber: 'FORD T', deviceId: 'D1' },
+  { vehicleNumber: 'ford t', deviceId: 'D2' },
+  { vehicleNumber: ' 74-1286 ', deviceId: 'D3' },
+];
+
 test('local dashboard query filters, sorts, summarizes, and paginates like production', () => {
-  const result = queryLocalReports(reports, [{}, {}], new URLSearchParams({
+  const result = queryLocalReports(reports, [
+    { vehicleNumber: '10', deviceId: 'D1' },
+    { vehicleNumber: '2', deviceId: 'D2' },
+  ], new URLSearchParams({
     startDate: '2026-08-19', vehicle: '10', sort: 'duration:desc', pageSize: '1',
   }));
   assert.deepEqual(result.reports.map(report => report.id), ['R3']);
@@ -41,6 +50,16 @@ test('vehicle filters and facets treat casing variants as one fleet vehicle', ()
   const result = queryLocalReports(fordReports, [], new URLSearchParams({ vehicle: 'FORD T' }));
   assert.equal(result.summary.total, 2);
   assert.equal(result.summary.activeVehicles, 1);
+});
+
+test('fleet size counts physical vehicles once when several devices share one vehicle', () => {
+  const result = queryLocalReports(
+    [{ id: 'R1', vehicleNumber: 'FORD T', status: 'Completed', startTime: '2026-08-19T03:00:00Z', endTime: '2026-08-19T03:01:00Z' }],
+    multiDeviceBindings,
+    new URLSearchParams(),
+  );
+  assert.equal(result.summary.activeVehicles, 1);
+  assert.equal(result.summary.fleetSize, 2);
 });
 
 test('local dashboard query accepts repeated multi-select filters', () => {
