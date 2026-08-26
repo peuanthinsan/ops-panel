@@ -176,10 +176,19 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
       if (!grouped.has(key)) grouped.set(key, { date: day, actualDate: actualDay, dayOffset: calendarDayOffset(day, actualDay), periodStart: Date.parse(report.workPeriodStartTime || report.startTime) || 0, vehicle: report.vehicleNumber || '—', driver: report.driverName || '—', order: reportIndex, reports: [] });
       grouped.get(key).reports.push(report);
     }
-    return [...grouped.values()].map(row => ({
-      ...row,
-      segments: row.reports.map(report => timelineSegment(report, lang, t)).filter(Boolean),
-    })).filter(row => row.segments.length).sort((left, right) => right.periodStart - left.periodStart || left.actualDate.localeCompare(right.actualDate) || left.order - right.order);
+    return [...grouped.values()].map(row => {
+      const segments = row.reports.map(report => timelineSegment(report, lang, t)).filter(Boolean);
+      const laneEnds = [];
+      segments.forEach(segment => {
+        const start = Number.parseFloat(segment.style.left) || 0;
+        const width = Math.max(0.5, Number.parseFloat(segment.style.width) || 0);
+        let lane = laneEnds.findIndex(end => start >= end);
+        if (lane < 0) lane = laneEnds.length;
+        laneEnds[lane] = start + width;
+        segment.lane = Math.min(lane, 1);
+      });
+      return { ...row, segments };
+    }).filter(row => row.segments.length).sort((left, right) => right.periodStart - left.periodStart || left.actualDate.localeCompare(right.actualDate) || left.order - right.order);
   }, [timelineReports, effectiveStartDate, effectiveEndDate, embedded, search, sharedQuery, showCompleted, showCancelled, selectedModes, lang, t]);
   const timelinePage = useMemo(() => paginateReports(rows, page, pageSize), [rows, page]);
   const speedReports = useMemo(() => timelinePage.items.flatMap(row => row.reports), [timelinePage.items]);
@@ -284,7 +293,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
           {timelinePage.items.map(row => { const rowAlerts = alertsByRow.get(row) || []; return <div className={`timeline-grid timeline-row ${rowAlerts.length ? 'timeline-row-has-alerts' : ''}`} key={`${row.date}-${row.actualDate}-${row.vehicle}`} role="group" aria-label={`${t.vehicle}: ${row.vehicle}. ${t.driver}: ${row.driver}. ${t.date}: ${formatReportDate(row.date, lang)}${row.dayOffset ? `, ${t.nextDay}` : ''}. ${rowAlerts.length} ${t.alert}.`}><div><strong>{row.vehicle}</strong><small>{row.driver}</small><small className="timeline-row-period">{workPeriodStartedCopy[lang]} {formatTimelineTime(row.periodStart, lang)}</small>{showRowDate || row.dayOffset ? <small className="timeline-row-date">{formatReportDate(row.actualDate, lang)}{row.dayOffset ? ` · +${row.dayOffset} ${lang === 'th' ? 'วัน' : row.dayOffset === 1 ? 'day' : 'days'}` : ''}</small> : null}</div><div className="timeline-row-chart"><div className="timeline-track timeline-speed-track">{row.segments.map(segment => <button
             key={segment.id}
             type="button"
-            className={`timeline-segment ${segment.finishWork ? 'finish-work-marker' : ''}`}
+            className={`timeline-segment timeline-lane-${segment.lane || 0} ${segment.finishWork ? 'finish-work-marker' : ''}`}
             style={segment.style}
             aria-label={segment.accessibleLabel}
             aria-describedby={tooltip?.segment.id === segment.id ? segment.tooltipId : undefined}
