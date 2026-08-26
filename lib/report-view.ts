@@ -97,11 +97,21 @@ export function formatReportCoordinate(value: number | string | null | undefined
   return Number.isFinite(coordinate) ? coordinate.toFixed(5) : null;
 }
 
-export function displayGpsLookupMessage(value: string | null | undefined, language: 'en' | 'th' = 'en') {
+export function displayGpsLookupMessage(
+  value: string | null | undefined,
+  language: 'en' | 'th' = 'en',
+  matchedPointCount?: number,
+) {
   const message = String(value || '').trim();
   if (!message) return '';
   if (/returned no gps records/i.test(message)) {
     return language === 'th' ? 'ไม่พบข้อมูล GPS' : 'No GPS records were found.';
+  }
+  const recordsMatch = message.match(/^(\d+) GPS records? found\.?$/i);
+  if (recordsMatch && Number.isFinite(matchedPointCount)) {
+    const matched = Math.max(0, Math.trunc(Number(matchedPointCount)));
+    if (language === 'th') return `พบข้อมูล GPS ${matched} จุด จากข้อมูลที่ค้นพบ ${recordsMatch[1]} รายการ`;
+    return `${matched} GPS point${matched === 1 ? '' : 's'} matched from ${recordsMatch[1]} source record${recordsMatch[1] === '1' ? '' : 's'}.`;
   }
   return message
     .replace(/Data-FM\s+GPS/gi, 'GPS')

@@ -301,7 +301,7 @@ export default function FullReportDashboard({ lang }) {
       const data = await adminFetch('/api/admin/reports/retry', { method: 'POST', body: JSON.stringify({ reportId }) });
       setReports(items => items.map(item => item.id === reportId ? { ...item, ...data.report } : item));
       const source = data.gpsReconciliation?.deviceSource;
-      setRetryNotice(displayGpsLookupMessage(source?.message, lang) || (lang === 'en' ? 'GPS lookup completed.' : 'ค้นหาข้อมูล GPS แล้ว'));
+      setRetryNotice(displayGpsLookupMessage(source?.message, lang, data.gpsReconciliation?.gpsSync ? 1 : 0) || (lang === 'en' ? 'GPS lookup completed.' : 'ค้นหาข้อมูล GPS แล้ว'));
       await loadReports({ silent: true });
     } catch (errorValue) {
       setError(localizedDashboardReportError(errorValue instanceof Error ? errorValue.message : '', lang, t.failed));

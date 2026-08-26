@@ -6,6 +6,7 @@ test('GPS lookup messages do not expose the provider name in the frontend', () =
   assert.equal(displayGpsLookupMessage('Data-FM returned no GPS records.', 'en'), 'No GPS records were found.');
   assert.equal(displayGpsLookupMessage('Data-FM GPS point matched.', 'en'), 'GPS point matched.');
   assert.equal(displayGpsLookupMessage('Data-FM returned no GPS records.', 'th'), 'ไม่พบข้อมูล GPS');
+  assert.equal(displayGpsLookupMessage('2 GPS records found.', 'en', 1), '1 GPS point matched from 2 source records.');
 });
 
 test('report dates are grouped by the Thailand operating day, not UTC', () => {
