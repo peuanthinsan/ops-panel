@@ -7,6 +7,7 @@ import { localizedDashboardAdminError } from '../lib/dashboard-errors';
 import { fleetSnapshotAfterRequest, normalizeFleetBindings } from '../lib/fleet-admin-state';
 import { paginateReports } from '../lib/report-pagination';
 import { adminFetch } from './dashboard-api';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 
 const pageSize = 10;
 const text = {
@@ -355,7 +356,7 @@ export default function FleetDashboard({ lang }) {
     <main className="main fleet-workspace" id="main-content" tabIndex={-1}>
       <div className="page-header">
         <div><div className="eyebrow">{t.eyebrow}</div><h1>{t.title}</h1><p>{t.subtitle}</p></div>
-        <button className="secondary" type="button" onClick={() => void loadBindings()} disabled={refreshing}>{refreshing ? t.refreshing : t.refresh}</button>
+        <button className="secondary refresh-button" type="button" aria-label={refreshing ? t.refreshing : t.refresh} title={refreshing ? t.refreshing : t.refresh} aria-busy={refreshing} onClick={() => void loadBindings()} disabled={refreshing}><ArrowsClockwiseIcon size={17} weight="bold" aria-hidden="true" /></button>
       </div>
 
       <section className="panel fleet-panel" aria-busy={loading || refreshing || importing}>

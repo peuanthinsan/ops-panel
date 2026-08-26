@@ -17,6 +17,7 @@ import { adminFetch } from './dashboard-api';
 import SearchableCombobox from './searchable-combobox';
 import JobGpsDrawer from './job-gps-drawer';
 import TimelineDashboard from './timeline-dashboard';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 
 const reportPageSize = 100;
 const modes = reportableOperations.map(action => action[2]);
@@ -381,7 +382,7 @@ export default function FullReportDashboard({ lang }) {
       ? t.printPeriodRequired
       : `${t.printVehicleSelected}: ${vehicles[0]}`;
   const columns = [
-    ['vehicleNumber', t.vehicle], ['driverName', t.driver], ['mode', t.mode], ['startTime', t.date], ['startClock', t.start], ['endTime', t.end], ['duration', t.duration], ['topSpeed', t.topSpeed], ['gpsCoverage', g.gpsCoverage], ['gpsState', g.lastPosition], ['status', t.status],
+    ['vehicleNumber', t.vehicle], ['mode', t.mode], ['startTime', t.date], ['startClock', t.start], ['endTime', t.end], ['duration', t.duration], ['topSpeed', t.topSpeed], ['gpsCoverage', g.gpsCoverage], ['gpsState', g.lastPosition], ['status', t.status],
   ];
 
   return (
@@ -389,7 +390,7 @@ export default function FullReportDashboard({ lang }) {
       <div className="page-header report-header">
         <div><div className="eyebrow">{t.eyebrowToday} · {formatReportDate(reportDateKey(new Date().toISOString()), lang)}</div><h1>{t.title}</h1><p>{g.subtitle}</p></div>
         <div className="header-actions">
-          <button className="secondary" type="button" onClick={() => void loadReports()} disabled={loading}>{loading ? t.refreshing : t.refresh}</button>
+          <button className="secondary refresh-button" type="button" aria-label={loading ? t.refreshing : t.refresh} title={loading ? t.refreshing : t.refresh} aria-busy={loading} onClick={() => void loadReports()} disabled={loading}><ArrowsClockwiseIcon size={17} weight="bold" aria-hidden="true" /></button>
           <DateRangePicker lang={lang} t={t} startDate={startDate} endDate={endDate} onChange={(start, end) => { setStartDate(start); setEndDate(end); }} />
           <div className="header-vehicle-selector">
             <SearchableCombobox multiple label={t.vehicle} value={vehicles} onChange={setVehicles} options={options.vehicles} allLabel={t.allVehicles} lang={lang} />
@@ -427,15 +428,14 @@ export default function FullReportDashboard({ lang }) {
         {visibleReports.length ? <div className="table-wrap" tabIndex={0} aria-label={lang === 'en' ? 'Scrollable saved jobs table' : 'ตารางงานที่บันทึก เลื่อนได้'}>
           <table className="reports-table">
             <caption className="sr-only">{t.activity}</caption>
-            <colgroup><col className="col-vehicle" /><col className="col-driver" /><col className="col-mode" /><col className="col-date" /><col className="col-time" /><col className="col-time" /><col className="col-duration" /><col className="col-speed" /><col className="col-coverage" /><col className="col-location" /><col className="col-status" /><col className="col-actions" /></colgroup>
+            <colgroup><col className="col-vehicle" /><col className="col-mode" /><col className="col-date" /><col className="col-time" /><col className="col-time" /><col className="col-duration" /><col className="col-speed" /><col className="col-coverage" /><col className="col-location" /><col className="col-status" /><col className="col-actions" /></colgroup>
             <thead><tr>{columns.map(([key, label]) => {
               const sortIndex = sorts.findIndex(sort => sort.key === key);
               const columnSort = sortIndex >= 0 ? sorts[sortIndex] : null;
               return <th key={key} scope="col" aria-sort={sortKey === key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}><button className={`table-sort ${key === 'duration' ? 'table-sort-duration' : ''}`} type="button" title={t.sortHint} onClick={event => changeSort(key, event)}><span>{label}{columnSort ? ` ${columnSort.direction === 'asc' ? '↑' : '↓'}${sorts.length > 1 ? sortIndex + 1 : ''}` : ''}</span>{key === 'duration' ? <small>{t.durationFormat}</small> : null}</button></th>;
             })}<th scope="col">{t.actions}</th></tr></thead>
             <tbody>{renderedReports.map(report => <tr key={report.id} className={`${report.status === 'Cancelled' ? 'row-cancelled' : isLookupPending(report) ? 'row-queued' : ''} ${selectedReport?.id === report.id ? 'row-selected' : ''}`}>
-              <td><strong>{report.vehicleNumber || '—'}</strong><small className="secondary-line">{report.deviceId || report.id || '—'}</small></td>
-              <td>{report.driverName || '—'}{report.driverId ? <small className="secondary-line">{report.driverId}</small> : null}</td>
+              <td className="vehicle-cell"><strong>{report.vehicleNumber || '—'}</strong><small className="secondary-line">{report.driverName || '—'}</small><small className="tertiary-line">{report.deviceId || report.id || '—'}</small></td>
               <td>{displayMode(report.mode, lang)}</td>
               <td>{report.startTime ? formatReportDate(reportDateKey(report.startTime), lang) : '—'}{report.workPeriodDate && report.workPeriodDate !== reportDateKey(report.startTime) ? <small className="secondary-line">{t.workStarted}: {formatReportDate(report.workPeriodDate, lang)}</small> : null}</td>
               <td className="report-time-cell">{formatTime(report.startTime, lang)}</td>
@@ -444,8 +444,8 @@ export default function FullReportDashboard({ lang }) {
               <td className={reportSpeed(report) > 90 ? 'speed-alert' : undefined}>{reportSpeed(report) == null ? '—' : reportSpeed(report) === 0 ? t.stationary : `${reportSpeed(report)} ${t.speedUnit}`}</td>
               <td className="gps-coverage-cell"><div className="gps-coverage-actions"><button type="button" className={`coverage-state coverage-${reportCoverage(report).state}`} aria-label={`${coverageLabel(report, g)}: ${report.id}`} onClick={() => setSelectedReport(report)}>{coverageLabel(report, g)}</button>{canRetry(report) ? <button className="view-gps-button gps-retry-link" type="button" aria-label={`${t.retry}: ${report.id}`} disabled={Boolean(retryingId)} onClick={() => retryReport(report.id)}>{retryingId === report.id ? t.retrying : t.retry}</button> : null}</div><small>{Number(report.deviceGpsSamples) || 0} {g.samples}</small></td>
               <td className="location-cell"><span>{reportLocation(report, t.unknownLocation)}</span><small>{reportCoordinates(report) || displayGps(gpsValue(report), lang)}</small></td>
-              <td><span className={`status status-${statusSlug(report.status)}`}>{displayStatus(report.status, lang)}</span></td>
-              <td><div className="report-actions"><button className="print-row-button" type="button" aria-label={`${t.printVehicle}: ${report.vehicleNumber}`} disabled={!report.vehicleNumber || !report.workPeriodId} onClick={() => printVehicle(report)}>{t.printVehicle}</button></div></td>
+              <td className="status-cell"><span className={`status status-${statusSlug(report.status)}`}>{displayStatus(report.status, lang)}</span></td>
+              <td className="actions-cell"><div className="report-actions"><button className="print-row-button" type="button" aria-label={`${t.printVehicle}: ${report.vehicleNumber}`} disabled={!report.vehicleNumber || !report.workPeriodId} onClick={() => printVehicle(report)}>{t.printVehicle}</button></div></td>
             </tr>)}</tbody>
           </table>
         </div> : null}
