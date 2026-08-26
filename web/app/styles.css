@@ -109,6 +109,97 @@ button:disabled{opacity:.48;cursor:default}
 .timeline-print-button{justify-self:start;min-height:24px;margin-top:2px;border:1px solid #C8CDD2;border-radius:6px;padding:4px 7px;background:#fff;color:#405068;font-size:9px;font-weight:800;white-space:nowrap;cursor:pointer}.timeline-print-button:hover{border-color:#AAB1B8;background:#F8F9FA}.timeline-print-button:focus-visible{outline:3px solid #E31B23;outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.gps-drawer{animation:none}}
 
+/* Responsive shell refinements: laptop, tablet, and touch-safe phone layouts */
+@media (min-width: 1281px) {
+  .main { padding-inline: clamp(30px, 3vw, 48px); }
+}
+
+@media (min-width: 821px) and (max-width: 1280px) {
+  .sidebar { width: 208px; flex-basis: 208px; padding-inline: 12px; }
+  .main { padding-inline: clamp(22px, 2.6vw, 32px); }
+  .header-actions { max-width: 100%; }
+  .header-vehicle-selector { width: clamp(200px, 25vw, 320px); }
+  .date-range-control { width: clamp(200px, 24vw, 320px); }
+  .report-stats { gap: 10px; }
+  .report-stats > div { padding: 14px; }
+  .gps-coverage-heading { align-items: flex-start; }
+}
+
+@media (max-width: 1024px) {
+  .shell { display: block; }
+  .sidebar {
+    position: relative;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left));
+    gap: 10px;
+    overflow: visible;
+  }
+  .side-brand { padding: 0; }
+  .side-pin { width: 32px; height: 36px; }
+  .sidebar nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .sidebar nav a { min-width: 0; padding: 8px 6px; text-align: center; }
+  .sidebar nav small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sidebar-actions { margin: 0; display: flex; gap: 6px; }
+  .language, .logout { width: auto; min-width: 44px; }
+  .main { max-width: none; padding: 24px clamp(18px, 3vw, 32px) 52px; }
+  .timeline-grid { grid-template-columns: 136px minmax(620px, 1fr); }
+  .gps-drawer { width: min(760px, 100%); }
+}
+
+@media (max-width: 720px) {
+  .sidebar { padding-top: max(10px, env(safe-area-inset-top)); }
+  .sidebar nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .main { padding: 20px max(14px, env(safe-area-inset-left)) calc(42px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-right)); }
+  h1 { font-size: clamp(24px, 7vw, 30px); }
+  .page-header { gap: 14px; }
+  .header-actions { gap: 8px; }
+  .header-actions > * { min-width: 0; }
+  .header-actions > .refresh-button { min-width: 44px; }
+  .header-actions > .daily-print-action { min-width: 0; }
+  .daily-print-action .primary { width: 100%; }
+  .daily-print-selection { display: block; max-width: 100%; overflow-wrap: anywhere; }
+  .report-stats > div { min-width: 0; padding: 12px; }
+  .report-stats strong { font-size: 24px; }
+  .gps-coverage-heading h2 { font-size: 15px; }
+  .gps-coverage-legend { gap: 10px; flex-wrap: wrap; }
+  .gps-source-row { min-width: 0; }
+  .timeline-grid { grid-template-columns: 118px minmax(580px, 1fr); }
+  .timeline-detail-tooltip { max-width: calc(100vw - 28px); }
+  .modal-backdrop { padding: 14px; }
+  .confirm-modal { width: min(100%, 440px); }
+}
+
+@media (max-width: 420px) {
+  .side-brand strong { font-size: 12px; }
+  .side-brand small { font-size: 10px; }
+  .sidebar { padding-inline: 10px; }
+  .language, .logout { padding-inline: 8px; }
+  .main { padding-inline: 12px; }
+  .report-stats { gap: 7px; }
+  .report-stats > div { padding: 11px 10px; }
+  .report-stats span { font-size: 11px; }
+  .report-stats small { font-size: 10px; }
+  .panel { padding: 13px; }
+  .gps-source-row { grid-template-columns: 92px minmax(0, 1fr) 38px; gap: 8px; font-size: 10px; }
+  .gps-source-row strong { font-size: 10px; }
+  .gps-detail-summary dd { font-size: 16px; }
+}
+
+@media (pointer: coarse) {
+  button, .sidebar nav a, input, select, .date-range-button, .timeline-filter-menu > summary { min-height: 44px; }
+  .refresh-button { min-width: 44px; }
+}
+
 /* Installable dashboard / offline state */
 .offline-banner{display:flex;align-items:center;gap:10px;margin:0 24px 16px;padding:11px 14px;border:1px solid #E8B3B6;border-radius:8px;background:#FFF5F5;color:#7A1424;font-size:12px}.offline-banner strong{font-weight:850;white-space:nowrap}.offline-banner span{color:#405068}
 @media(max-width:600px){.offline-banner{align-items:flex-start;flex-direction:column;gap:2px;margin-inline:14px;font-size:11px}}
