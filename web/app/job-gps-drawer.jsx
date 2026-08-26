@@ -139,7 +139,7 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
         </div> : null}
         {pageInfo.totalPages > 1 ? <nav className="gps-detail-pager" aria-label={`${t.page} ${pageInfo.page} ${t.of} ${pageInfo.totalPages}`}><button type="button" className="secondary small-button" disabled={pageInfo.page <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}>{t.previous}</button><span>{t.page} {pageInfo.page} {t.of} {pageInfo.totalPages}</span><button type="button" className="secondary small-button" disabled={pageInfo.page >= pageInfo.totalPages} onClick={() => setPage(value => value + 1)}>{t.next}</button></nav> : null}
       </div>
-      <footer className="gps-drawer-footer"><button className="primary" type="button" onClick={() => window.location.assign(`/print/portrait?vehicle=${encodeURIComponent(displayedReport.vehicleNumber || '')}&date=${encodeURIComponent(reportDateKey(displayedReport.startTime))}&lang=${lang}`)}>{t.print}</button><small>{summary.lastCapturedAt ? formatReportDateTime(summary.lastCapturedAt, lang) : ''}</small></footer>
+      <footer className="gps-drawer-footer"><button className="primary" type="button" disabled={!displayedReport.workPeriodId} onClick={() => window.location.assign(`/print/portrait?vehicle=${encodeURIComponent(displayedReport.vehicleNumber || '')}&workPeriodId=${encodeURIComponent(displayedReport.workPeriodId || '')}&lang=${lang}`)}>{t.print}</button><small>{summary.lastCapturedAt ? formatReportDateTime(summary.lastCapturedAt, lang) : ''}</small></footer>
     </aside>
   </div>;
 }

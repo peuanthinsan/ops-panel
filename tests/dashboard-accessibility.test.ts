@@ -39,13 +39,13 @@ test('reports expose labeled filters and sort direction to assistive technology'
   assert.doesNotMatch(source, /label=\{t\.sort\}|sortOptions/);
   assert.match(source, /className="table-wrap" tabIndex=\{0\}/);
   assert.match(source, /localizedDashboardReportError/);
-  assert.match(source, /print: 'Print daily report'/);
+  assert.match(source, /print: 'Print work report'/);
   assert.match(source, /!report\.driverName \|\| !Number\(report\.deviceGpsSamples\)/);
-  assert.match(source, /new URLSearchParams\(\{ date: selectedPrintDate, lang \}\)/);
-  assert.match(source, /if \(!selectedPrintDate \|\| vehicles\.length !== 1\) return/);
+  assert.match(source, /new URLSearchParams\(\{ workPeriodId: selectedPrintPeriodId, lang \}\)/);
+  assert.match(source, /if \(!selectedPrintPeriodId \|\| vehicles\.length !== 1\) return/);
   assert.match(source, /params\.set\('vehicle', vehicles\[0\]\)/);
   assert.match(source, /aria-describedby="daily-print-vehicle-message"/);
-  assert.match(source, /dateRange: 'Date range'/);
+  assert.match(source, /dateRange: 'Work started'/);
   assert.match(source, /function DateRangePicker/);
   assert.equal(source.match(/<DateRangePicker\b/g)?.length ?? 0, 1);
   assert.equal(source.match(/<input type="date"/g)?.length ?? 0, 0);
@@ -66,7 +66,7 @@ test('reports combine the timeline and saved jobs before opening the daily vehic
   assert.match(timeline, /embedded \? !reportMatchesFilters\(report, sharedQuery, lang\)/);
   assert.match(timeline, /const requestFilters = embedded \? sharedQuery/);
   assert.match(timeline, /embedded \? null : <div className="timeline-controls">/);
-  assert.match(timeline, /const key = `\$\{day\}\\u0000\$\{report\.vehicleNumber/);
+  assert.match(timeline, /const key = `\$\{report\.workPeriodId \|\| day\}\\u0000\$\{actualDay\}/);
   assert.match(timeline, /className="timeline-row-date"/);
   assert.match(timeline, /\{embedded \? null : <div className="timeline-header-actions">/);
   assert.doesNotMatch(shell, /\{ href: '\/timeline', key: 'timeline' \}/);
@@ -79,17 +79,18 @@ test('reports combine the timeline and saved jobs before opening the daily vehic
   assert.doesNotMatch(print, /Up to 8 jobs shown/);
 });
 
-test('daily report is landscape, date-selectable, speed-enabled, and uses the official logo pin', async () => {
+test('work-period report is anchor-selected, speed-enabled, and uses the official logo pin', async () => {
   const dashboard = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
   const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
   const speedTimeline = await readFile(fileURLToPath(new NodeUrl('../web/app/speed-timeline.jsx', import.meta.url)), 'utf8');
   const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
   const printStyles = await readFile(fileURLToPath(new NodeUrl('../web/app/print/portrait/portrait-print.css', import.meta.url)), 'utf8');
-  assert.match(dashboard, /print: 'Print daily report'/);
+  assert.match(dashboard, /print: 'Print work report'/);
   assert.match(dashboard, /const sharedFilters = useMemo\(\(\) => \(\{/);
   assert.match(dashboard, /vehicle: vehicles/);
   assert.match(dashboard, /sort: sorts\.map/);
-  assert.match(dashboard, /const selectedPrintDate = endDate \|\| startDate/);
+  assert.match(dashboard, /const matchingPrintPeriodIds = \[\.\.\.new Set\(reports\.map/);
+  assert.match(dashboard, /matchingPrintPeriodIds\.length === 1/);
   assert.match(timeline, /adminFetchAllReports\(requestFilters\)/);
   assert.match(timeline, /if \(effectiveStartDate && day < effectiveStartDate\) continue/);
   assert.match(timeline, /if \(effectiveEndDate && day > effectiveEndDate\) continue/);
@@ -102,16 +103,15 @@ test('daily report is landscape, date-selectable, speed-enabled, and uses the of
   assert.match(speedTimeline, /className=\{`speed-point/);
   assert.match(speedTimeline, /className="speed-point-hit"/);
   assert.match(speedTimeline, /className="speed-point-tooltip" role="tooltip"/);
-  assert.match(print, /onDateChange=\{changeReportDate\}/);
-  assert.match(print, /'View date'/);
-  assert.match(print, /params\.set\('vehicle', vehicle\)/);
+  assert.doesNotMatch(print, /onDateChange=\{changeReportDate\}|View date|print-date-control/);
+  assert.match(print, /workPeriodId: requestedWorkPeriodId/);
   assert.match(print, /src="\/songdee-gps-pin\.svg"/);
-  assert.match(print, /startMinute=\{6 \* 60\} endMinute=\{24 \* 60\}/);
+  assert.match(print, /startMinute=\{0\} endMinute=\{timelineSpanMinutes\} originTime=\{timelineOrigin\}/);
   assert.match(print, /formatReportDuration\(report\.startTime, report\.endTime, report\.duration\)/);
   assert.doesNotMatch(print, /\.slice\(0, 5\)|function shortTime|durationShort/);
   assert.match(print, /second: '2-digit'/);
   assert.match(print, /printReportLocation\(report, lang\)/);
-  assert.match(print, /axisTime\(label\)/);
+  assert.match(print, /periodAxis\(summary\.start, summary\.end, lang\)/);
   assert.match(printStyles, /@page\{size:A4 landscape;margin:0\}/);
   assert.match(printStyles, /width:297mm;height:210mm/);
 });
@@ -157,7 +157,7 @@ test('dashboard and daily print timelines expose event-timed alert arrows and de
   assert.match(markers, /role="tooltip"/);
   assert.match(markers, /formatTimelineAlertTime\(alert, lang\)/);
   assert.match(print, /deriveTimelineAlerts\(summary\.rows, speedSeries\.samplesByReportId\)/);
-  assert.match(print, /<TimelineAlertMarkers alerts=\{alerts\} lang=\{lang\} startMinute=\{6 \* 60\} endMinute=\{24 \* 60\} interactive=\{false\}/);
+  assert.match(print, /<TimelineAlertMarkers alerts=\{alerts\} lang=\{lang\} startMinute=\{0\} endMinute=\{timelineSpanMinutes\} interactive=\{false\}/);
   assert.match(print, /<TimelineAlertChips alerts=\{alerts\} lang=\{lang\} limit=\{3\}/);
   assert.doesNotMatch(print, /function alertFor|className="timeline-flag"/);
 });
@@ -186,11 +186,11 @@ test('large fleet filters use bounded searchable multi-comboboxes instead of nat
 test('daily print requires exactly one vehicle and never falls back to a fleet vehicle', async () => {
   const reports = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
   const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
-  assert.match(reports, /const canPrintDailyReport = Boolean\(selectedPrintDate && vehicles\.length === 1/);
+  assert.match(reports, /const canPrintDailyReport = Boolean\(selectedPrintPeriodId && vehicles\.length === 1/);
   assert.match(reports, /disabled=\{!canPrintDailyReport\}/);
   assert.match(reports, /printVehicleRequired: 'Select exactly one vehicle in the header\.'/);
   assert.match(reports, /const vehicle = String\(report\.vehicleNumber \|\| ''\)\.trim\(\)/);
-  assert.match(reports, /new URLSearchParams\(\{ vehicle, date, lang \}\)/);
+  assert.match(reports, /new URLSearchParams\(\{ vehicle, workPeriodId, lang \}\)/);
   assert.match(print, /const vehicle = String\(requestedVehicle \|\| ''\)\.trim\(\)/);
   assert.match(print, /vehicle \? \{ vehicle: \[vehicle\] \} : \{\}/);
   assert.match(print, /if \(!vehicle\) return <MissingVehiclePrintState lang=\{lang\} \/>/);

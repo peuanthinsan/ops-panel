@@ -570,6 +570,40 @@ function reportColumns() {
   `;
 }
 
+function workPeriodReportsCte() {
+  return `
+    sequenced_reports AS (
+      SELECT
+        source_report.*,
+        COALESCE(sum(
+          CASE WHEN source_report.mode = 'Finish work' AND source_report.status <> 'Cancelled' THEN 1 ELSE 0 END
+        ) OVER (
+          PARTITION BY lower(source_report.vehicle_number)
+          ORDER BY source_report.start_time, source_report.end_time, source_report.id
+          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ), 0)::bigint AS work_period_sequence
+      FROM ops_reports source_report
+    ),
+    work_period_reports AS (
+      SELECT
+        sequenced_report.*,
+        first_value(sequenced_report.id) OVER work_period AS work_period_id,
+        min(sequenced_report.start_time) OVER work_period AS work_period_start_time,
+        max(CASE
+          WHEN sequenced_report.mode = 'Finish work' AND sequenced_report.status <> 'Cancelled'
+          THEN sequenced_report.end_time
+        END) OVER work_period AS work_period_end_time,
+        bool_or(sequenced_report.mode = 'Finish work' AND sequenced_report.status <> 'Cancelled') OVER work_period AS work_period_complete
+      FROM sequenced_reports sequenced_report
+      WINDOW work_period AS (
+        PARTITION BY lower(sequenced_report.vehicle_number), sequenced_report.work_period_sequence
+        ORDER BY sequenced_report.start_time, sequenced_report.end_time, sequenced_report.id
+        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+      )
+    )
+  `;
+}
+
 async function getReport(id) {
   const sql = getDatabase();
   const rows = await sql.query(`SELECT ${reportColumns()} FROM ops_reports WHERE id = $1 LIMIT 1`, [id]);
@@ -668,15 +702,21 @@ async function getReportsPage(request) {
   const pageValues = [...query.values, query.pageSize, query.offset];
   const [reports, summaryRows, fleetRows] = await sql.transaction(transaction => [
     transaction.query(`
-    WITH page_reports AS (
+    WITH ${workPeriodReportsCte()},
+    page_reports AS (
       SELECT report.*, ROW_NUMBER() OVER (ORDER BY ${query.orderBy}) AS "rowOrder"
-      FROM ops_reports report
+      FROM work_period_reports report
       ${query.whereSql}
       ORDER BY ${query.orderBy}
       LIMIT ${limitParameter} OFFSET ${offsetParameter}
     )
     SELECT
       ${reportColumns()},
+      report.work_period_id AS "workPeriodId",
+      report.work_period_start_time AS "workPeriodStartTime",
+      report.work_period_end_time AS "workPeriodEndTime",
+      to_char(report.work_period_start_time AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') AS "workPeriodDate",
+      report.work_period_complete AS "workPeriodComplete",
       (SELECT max(sample.device_speed_mps) * 3.6 FROM gps_sync_samples sample WHERE sample.job_id = report.id) AS "topSpeed",
       COALESCE(gps_summary.device_gps_samples, 0)::int AS "deviceGpsSamples",
       COALESCE(gps_summary.fms_gps_samples, 0)::int AS "fmsGpsSamples",
@@ -708,6 +748,7 @@ async function getReportsPage(request) {
     ORDER BY report."rowOrder"
   `, pageValues),
     transaction.query(`
+      WITH ${workPeriodReportsCte()}
       SELECT
         count(*)::int AS total,
         count(DISTINCT report.vehicle_number) FILTER (WHERE report.status <> 'Cancelled')::int AS "activeVehicles",
@@ -726,7 +767,7 @@ async function getReportsPage(request) {
         COALESCE(sum(gps_summary.fms_samples), 0)::int AS "fmsGpsSamples",
         COALESCE(sum(gps_summary.paired_samples), 0)::int AS "pairedGpsSamples",
         COALESCE(sum(gps_summary.attention_samples), 0)::int AS "attentionGpsSamples"
-      FROM ops_reports report
+      FROM work_period_reports report
       LEFT JOIN job_gps_summaries gps_summary ON gps_summary.job_id = report.id
       ${query.whereSql}
     `, query.values),

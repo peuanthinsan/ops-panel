@@ -4,6 +4,7 @@ import { localReportFacets, queryLocalReports } from '../lib/local-report-query.
 
 const reports = [
   { id: 'R1', vehicleNumber: '10', deviceId: 'D1', driverName: 'Narin', mode: 'Load', status: 'Completed', gpsLookupStatus: 'device_only', startTime: '2026-08-18T01:00:00Z', endTime: '2026-08-18T02:00:00Z', deviceGpsSamples: 1 },
+  { id: 'R1F', vehicleNumber: '10', deviceId: 'D1', driverName: 'Narin', mode: 'Finish work', status: 'Completed', gpsLookupStatus: 'device_only', startTime: '2026-08-18T10:00:00Z', endTime: '2026-08-18T10:00:00Z' },
   { id: 'R2', vehicleNumber: '2', deviceId: 'D2', driverName: 'Somchai', mode: 'Unload', status: 'Cancelled', gpsLookupStatus: 'not_applicable', startTime: '2026-08-19T01:00:00Z', endTime: '2026-08-19T01:30:00Z' },
   { id: 'R3', vehicleNumber: '10', deviceId: 'D1', driverName: 'Narin', mode: 'Break', status: 'Completed', gpsLookupStatus: 'pending', startTime: '2026-08-19T03:00:00Z', endTime: '2026-08-19T03:15:00Z', deviceGpsSamples: 10, fmsGpsSamples: 8, pairedGpsSamples: 8, attentionGpsSamples: 2 },
 ];

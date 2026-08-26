@@ -4,6 +4,7 @@ export const reportFilterKeys = [
   'search',
   'startDate',
   'endDate',
+  'workPeriodId',
   'vehicle',
   'device',
   'driver',
@@ -52,7 +53,7 @@ export function reportMatchesFilters(
   filters: ReportFilters,
   language: 'en' | 'th',
 ) {
-  const date = reportDateKey(report.startTime);
+  const date = String(report.workPeriodDate || reportDateKey(report.workPeriodStartTime || report.startTime));
   const startDate = firstFilterValue(filters.startDate);
   const endDate = firstFilterValue(filters.endDate);
   if (startDate && date < startDate) return false;
@@ -64,6 +65,7 @@ export function reportMatchesFilters(
     [filters.mode, report.mode],
     [filters.status, report.status],
     [filters.gps, gpsValue(report)],
+    [filters.workPeriodId, report.workPeriodId],
   ];
   for (const [filter, actual, caseInsensitive = false] of exactFilters) {
     const values = filterValues(filter);

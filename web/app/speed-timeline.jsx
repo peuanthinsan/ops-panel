@@ -30,6 +30,7 @@ export default function SpeedTimelineOverlay({
   lang = 'en',
   startMinute = 0,
   endMinute = 24 * 60,
+  originTime = '',
   className = '',
   interactive = true,
 }) {
@@ -42,7 +43,12 @@ export default function SpeedTimelineOverlay({
     points: normalizeSpeedSamples(samplesByReportId[report.id] || []),
   })).filter(item => item.points.length), [reports, samplesByReportId]);
   const { maximum, chartPoints, linePath, peak } = useMemo(() => {
-    const timelinePoints = mergeReportSpeedSeries(series);
+    const origin = Date.parse(originTime);
+    const timelinePoints = mergeReportSpeedSeries(series).flatMap(point => {
+      if (!Number.isFinite(origin)) return [point];
+      const timestamp = Date.parse(point.capturedAt);
+      return Number.isFinite(timestamp) ? [{ ...point, minute: (timestamp - origin) / 60_000 }] : [];
+    });
     const nextMaximum = speedDomainMaximum([timelinePoints]);
     const nextPoints = speedChartPoints(timelinePoints, { startMinute, endMinute, maxSpeed: nextMaximum })
       .map(point => ({ ...point, copy: pointCopy(point, lang) }));
@@ -52,7 +58,7 @@ export default function SpeedTimelineOverlay({
       linePath: speedLinePath(nextPoints),
       peak: nextPoints.reduce((value, point) => Math.max(value, point.speedKph), 0),
     };
-  }, [series, startMinute, endMinute, lang]);
+  }, [series, startMinute, endMinute, originTime, lang]);
 
   if (!chartPoints.length) {
     return <span className={`speed-timeline-state ${className}`.trim()}>{loading

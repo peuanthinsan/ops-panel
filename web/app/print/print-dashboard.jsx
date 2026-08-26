@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { operationActions } from '../../lib/actions';
 import { formatReportDuration, reportDateKey } from '../../lib/report-view';
 import { printReportLocation } from '../../lib/report-print-view';
@@ -59,23 +59,38 @@ function jobTypeClass(mode) {
   return 'other';
 }
 function totalDuration(seconds) { return `${String(Math.floor(seconds / 3600)).padStart(2, '0')}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`; }
-function portraitTimelinePosition(startValue, endValue, fallbackMinutes = 5) {
-  const start = bangkokMinuteOfDay(startValue);
-  const end = bangkokMinuteOfDay(endValue);
-  const startDate = dateValue(startValue);
-  const endDate = dateValue(endValue);
-  if (start == null || !startDate) return null;
-  const windowStart = 6 * 60;
-  const windowEnd = 24 * 60;
-  const crossesMidnight = Boolean(endDate && end != null && endDate > startDate && end < start);
-  const rawEnd = crossesMidnight ? windowEnd : (end ?? start + fallbackMinutes);
-  const boundedStart = Math.max(windowStart, Math.min(windowEnd, start));
-  const boundedEnd = Math.max(boundedStart + fallbackMinutes, Math.min(windowEnd, rawEnd));
-  if (boundedStart >= windowEnd) return null;
+function portraitTimelinePosition(startValue, endValue, originValue, spanMinutes, fallbackMinutes = 5) {
+  const origin = Date.parse(originValue);
+  const startTime = Date.parse(startValue);
+  const endTime = Date.parse(endValue);
+  if (!Number.isFinite(origin) || !Number.isFinite(startTime)) return null;
+  const start = Math.max(0, (startTime - origin) / 60_000);
+  const end = Number.isFinite(endTime) ? (endTime - origin) / 60_000 : start + fallbackMinutes;
+  const boundedStart = Math.min(spanMinutes, start);
+  const boundedEnd = Math.max(boundedStart + fallbackMinutes, Math.min(spanMinutes, end));
+  if (boundedStart >= spanMinutes) return null;
   return {
-    left: ((boundedStart - windowStart) / (windowEnd - windowStart)) * 100,
-    width: ((Math.min(windowEnd, boundedEnd) - boundedStart) / (windowEnd - windowStart)) * 100,
+    left: (boundedStart / spanMinutes) * 100,
+    width: ((Math.min(spanMinutes, boundedEnd) - boundedStart) / spanMinutes) * 100,
   };
+}
+
+function periodAxis(startValue, endValue, lang) {
+  const start = Date.parse(startValue);
+  const end = Date.parse(endValue);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
+  const startDay = reportDateKey(startValue);
+  return Array.from({ length: 9 }, (_, index) => {
+    const value = new Date(start + ((end - start) * index / 8)).toISOString();
+    const dayOffset = calendarDayOffset(startDay, reportDateKey(value));
+    return `${time(value, lang)}${dayOffset ? ` +${dayOffset}` : ''}`;
+  });
+}
+
+function calendarDayOffset(startDay, actualDay) {
+  const start = Date.parse(`${startDay}T00:00:00Z`);
+  const actual = Date.parse(`${actualDay}T00:00:00Z`);
+  return Number.isFinite(start) && Number.isFinite(actual) ? Math.max(0, Math.round((actual - start) / 86_400_000)) : 0;
 }
 function statusLabel(report, lang) {
   if (report.status === 'Cancelled') return lang === 'th' ? 'ยกเลิก' : 'Cancelled';
@@ -90,15 +105,9 @@ function useDocumentLanguage(lang) {
   }, [lang]);
 }
 
-function PrintToolbar({ lang, onPrint, backPath = '/', date = '', onDateChange = null }) {
-  const reportDateInputRef = useRef(null);
-  function openReportDate() {
-    const nextDate = reportDateInputRef.current?.value || '';
-    if (nextDate) onDateChange?.(nextDate);
-  }
+function PrintToolbar({ lang, onPrint, backPath = '/' }) {
   return <div className="print-toolbar" role="toolbar" aria-label={lang === 'th' ? 'คำสั่งพิมพ์' : 'Print controls'}>
     <button type="button" onClick={() => window.location.assign(backPath)}>{lang === 'th' ? 'กลับแดชบอร์ด' : 'Back to dashboard'}</button>
-    {onDateChange ? <><label className="print-date-control"><span>{lang === 'th' ? 'วันที่รายงาน' : 'Report date'}</span><input key={date} ref={reportDateInputRef} type="date" defaultValue={date} /></label><button type="button" onClick={openReportDate}>{lang === 'th' ? 'เปิดวันที่' : 'View date'}</button></> : null}
     <button className="primary" type="button" onClick={onPrint}>{lang === 'th' ? 'พิมพ์ / บันทึก PDF' : 'Print / Save PDF'}</button>
   </div>;
 }
@@ -158,7 +167,7 @@ function summaryForVehicle(vehicle, reports) {
     topSpeed: topSpeed >= 0 ? topSpeed : null,
     distance: knownDistances.length ? knownDistances.reduce((sum, value) => sum + value, 0) : null,
     gpsMatched: rows.filter(hasGps).length,
-    dayFinished: dailyReportIsComplete(rows),
+    dayFinished: rows[0]?.workPeriodComplete ?? dailyReportIsComplete(rows),
     gpsPending: rows.filter(isLookupPending).length,
   };
 }
@@ -221,14 +230,14 @@ export function LandscapePrintDashboard({ filters = {}, lang: requestedLang, tim
     : reports, [reports, timelineOnly, timelineFilters]);
   const speedSeries = useReportSpeedSeries(timelineReports);
   const timelinePages = useMemo(() => {
-    const reportDates = [...new Set(timelineReports.map(report => reportDateKey(report.startTime)).filter(Boolean))].sort();
+    const reportDates = [...new Set(timelineReports.map(report => report.workPeriodDate || reportDateKey(report.workPeriodStartTime || report.startTime)).filter(Boolean))].sort();
     const dates = reportDates.length
       ? reportDates
       : [validDate(stableFilters.endDate || stableFilters.startDate)];
     const restricted = hasRestrictiveReportFilters(stableFilters) || Boolean(timelineOnly && timelineFilters);
     const result = [];
     for (const date of dates) {
-      const dayReports = timelineReports.filter(report => reportDateKey(report.startTime) === date);
+      const dayReports = timelineReports.filter(report => (report.workPeriodDate || reportDateKey(report.workPeriodStartTime || report.startTime)) === date);
       const vehicles = new Set([
         ...(restricted ? [] : bindings.map(binding => binding.vehicleNumber)),
         ...dayReports.map(report => report.vehicleNumber),
@@ -276,11 +285,12 @@ function DailyReportMasthead({ lang, documentId, printedAt, page, totalPages, co
 }
 
 function DailyTripInfo({ lang, vehicle, summary, date }) {
-  return <div className="trip-info-row"><div><small>{lang === 'th' ? 'ทะเบียนรถ' : 'Vehicle Plate'}</small><strong>{vehicle || '—'}</strong></div><div><small>{lang === 'th' ? 'คนขับ' : 'Driver'}</small><strong>{summary.driver}</strong></div><div><small>{lang === 'th' ? 'วันที่' : 'Date'}</small><strong>{reportDate(date, lang)}</strong></div><div><small>{lang === 'th' ? 'เวลาเริ่ม–สิ้นสุด' : 'Shift Start–End'}</small><strong>{time(summary.start, lang)} – {time(summary.end, lang)}</strong></div><div><small>{lang === 'th' ? 'สถานะ' : 'Status'}</small><strong className="trip-status">{lang === 'th' ? (summary.dayFinished ? 'เสร็จสิ้น' : 'ยังไม่จบงาน') : (summary.dayFinished ? 'Completed' : 'Attention')}</strong></div></div>;
+  const endDayOffset = calendarDayOffset(date, reportDateKey(summary.end));
+  return <div className="trip-info-row"><div><small>{lang === 'th' ? 'ทะเบียนรถ' : 'Vehicle Plate'}</small><strong>{vehicle || '—'}</strong></div><div><small>{lang === 'th' ? 'คนขับ' : 'Driver'}</small><strong>{summary.driver}</strong></div><div><small>{lang === 'th' ? 'วันที่เริ่มรอบงาน' : 'Work Started'}</small><strong>{reportDate(date, lang)}</strong></div><div><small>{lang === 'th' ? 'เวลาเริ่ม–สิ้นสุด' : 'Work Start–End'}</small><strong>{time(summary.start, lang)} – {time(summary.end, lang)}{endDayOffset ? ` +${endDayOffset}` : ''}</strong></div><div><small>{lang === 'th' ? 'สถานะ' : 'Status'}</small><strong className={`trip-status ${summary.dayFinished ? '' : 'trip-status-open'}`}>{lang === 'th' ? (summary.dayFinished ? 'เสร็จสิ้น' : 'ยังไม่จบงาน') : (summary.dayFinished ? 'Completed' : 'In progress')}</strong></div></div>;
 }
 
 function DailyJobTable({ rows, lang }) {
-  return <table className="simple-job-table"><caption className="sr-only">{lang === 'th' ? 'รายการงาน' : 'Job list'}</caption><thead><tr><th>{lang === 'th' ? 'เวลา' : 'TIME'}</th><th>{lang === 'th' ? 'ประเภท' : 'TYPE'}</th><th>{lang === 'th' ? 'สถานที่ / รายละเอียด' : 'LOCATION / DETAILS'}</th><th>{lang === 'th' ? 'ระยะเวลา' : 'DURATION'}</th></tr></thead><tbody>{rows.map(report => { const place = printReportLocation(report, lang); return <tr key={report.id || report.startTime}><td>{time(report.startTime, lang)}–{time(report.endTime, lang)}</td><td><span className={`job-type ${jobTypeClass(report.mode)}`} style={{ backgroundColor: reportModeColor(report.mode) }}>{modeLabel(report, lang)}</span></td><td>{place.name}</td><td>{formatReportDuration(report.startTime, report.endTime, report.duration)}</td></tr>; })}</tbody></table>;
+  return <table className="simple-job-table"><caption className="sr-only">{lang === 'th' ? 'รายการงาน' : 'Job list'}</caption><thead><tr><th>{lang === 'th' ? 'เวลา' : 'TIME'}</th><th>{lang === 'th' ? 'ประเภท' : 'TYPE'}</th><th>{lang === 'th' ? 'สถานที่ / รายละเอียด' : 'LOCATION / DETAILS'}</th><th>{lang === 'th' ? 'ระยะเวลา' : 'DURATION'}</th></tr></thead><tbody>{rows.map(report => { const place = printReportLocation(report, lang); const dayOffset = calendarDayOffset(report.workPeriodDate || reportDateKey(rows[0]?.startTime), reportDateKey(report.startTime)); return <tr key={report.id || report.startTime}><td>{time(report.startTime, lang)}–{time(report.endTime, lang)}{dayOffset ? <small className="print-next-day">+{dayOffset} {lang === 'th' ? 'วัน' : dayOffset === 1 ? 'day' : 'days'}</small> : null}</td><td><span className={`job-type ${jobTypeClass(report.mode)}`} style={{ backgroundColor: reportModeColor(report.mode) }}>{modeLabel(report, lang)}</span></td><td>{place.name}</td><td>{formatReportDuration(report.startTime, report.endTime, report.duration)}</td></tr>; })}</tbody></table>;
 }
 
 function DailySignatureFooter({ lang }) {
@@ -293,41 +303,39 @@ function dailyJobRangeLabel(lang, start, end, total) {
   return lang === 'th' ? `งาน ${start}–${end} จาก ${total}` : `Jobs ${start}–${end} of ${total}`;
 }
 
-export function PortraitPrintDashboard({ date: requestedDate, vehicle: requestedVehicle, lang: requestedLang }) {
+export function PortraitPrintDashboard({ date: requestedDate, workPeriodId: requestedWorkPeriodId, vehicle: requestedVehicle, lang: requestedLang }) {
   const lang = requestedLang === 'en' ? 'en' : 'th';
   useDocumentLanguage(lang);
-  const date = validDate(requestedDate);
   const vehicle = String(requestedVehicle || '').trim();
-  const portraitFilters = useMemo(() => ({ startDate: date, endDate: date, ...(vehicle ? { vehicle: [vehicle] } : {}) }), [date, vehicle]);
+  const workPeriodId = String(requestedWorkPeriodId || '').trim();
+  const fallbackDate = validDate(requestedDate);
+  const portraitFilters = useMemo(() => ({ ...(workPeriodId ? { workPeriodId } : { startDate: fallbackDate, endDate: fallbackDate }), ...(vehicle ? { vehicle: [vehicle] } : {}) }), [fallbackDate, vehicle, workPeriodId]);
   const { reports, loading, error, load } = usePrintData(portraitFilters, lang);
   const summary = useMemo(() => summaryForVehicle(vehicle, reports), [vehicle, reports]);
+  const date = summary.rows[0]?.workPeriodDate || reportDateKey(summary.start) || fallbackDate;
   const speedSeries = useReportSpeedSeries(summary.rows);
   if (!vehicle) return <MissingVehiclePrintState lang={lang} />;
   if (loading || speedSeries.loading || error) return <PrintState lang={lang} loading={loading || speedSeries.loading} error={error} onRetry={load} />;
   const totalSeconds = summary.rows.reduce((sum, report) => sum + elapsedSeconds(report), 0);
   const shiftSeconds = summary.start && summary.end ? Math.max(0, Math.floor((dateValue(summary.end) - dateValue(summary.start)) / 1000)) : 0;
+  const timelineSpanMinutes = Math.max(5, Math.ceil(shiftSeconds / 60));
   const breakSeconds = Math.max(0, shiftSeconds - totalSeconds);
-  const alerts = deriveTimelineAlerts(summary.rows, speedSeries.samplesByReportId);
+  const timelineOrigin = summary.start || '';
+  const alerts = deriveTimelineAlerts(summary.rows, speedSeries.samplesByReportId).map(alert => ({ ...alert, minute: Math.max(0, (Date.parse(alert.capturedAt) - Date.parse(timelineOrigin)) / 60_000) }));
   const printedAt = new Intl.DateTimeFormat(lang === 'th' ? 'th-TH' : 'en-GB', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date());
   const documentId = `SD-${date.replaceAll('-', '')}-${vehicle}`;
   const timelineRows = summary.rows.map(report => {
-    const position = portraitTimelinePosition(report.startTime, report.endTime);
+    const position = portraitTimelinePosition(report.startTime, report.endTime, timelineOrigin, timelineSpanMinutes);
     return position ? { report, position } : null;
   }).filter(Boolean);
   const jobPages = paginateDailyReportJobs(summary.rows);
-  function changeReportDate(nextDate) {
-    if (!nextDate) return;
-    const params = new URLSearchParams({ date: nextDate, lang });
-    params.set('vehicle', vehicle);
-    window.location.assign(`/print/portrait?${params}`);
-  }
   return <main className="print-preview portrait-preview">
-    <PrintToolbar lang={lang} date={date} onDateChange={changeReportDate} onPrint={() => window.print()} />
+    <PrintToolbar lang={lang} onPrint={() => window.print()} />
     <section className="print-sheet portrait-sheet">
       <DailyReportMasthead lang={lang} documentId={documentId} printedAt={printedAt} page={1} totalPages={jobPages.totalPages} />
       <DailyTripInfo lang={lang} vehicle={vehicle} summary={summary} date={date} />
       <div className="report-kpi-grid"><Kpi label={lang === 'th' ? 'ระยะทางรวม' : 'Total Distance'} value={summary.distance == null ? '—' : summary.distance.toFixed(1)} note="km" /><Kpi label={lang === 'th' ? 'งานที่เสร็จ' : 'Jobs Completed'} value={summary.rows.length} note={lang === 'th' ? 'งาน' : 'jobs'} /><Kpi label={lang === 'th' ? 'เวลาทำงานรวม' : 'Total Working Time'} value={totalDuration(totalSeconds)} note={lang === 'th' ? 'ชม.' : 'hrs'} /><Kpi label={lang === 'th' ? 'เวลาพัก / รอ' : 'Break / Wait Time'} value={totalDuration(breakSeconds)} note={lang === 'th' ? 'ชม.' : 'hrs'} /></div>
-      <section className="report-section"><div className="report-section-heading"><h2>{lang === 'th' ? 'ไทม์ไลน์การเดินรถ' : 'TRIP TIMELINE'}</h2><strong className={alerts.length ? 'timeline-alert-count' : 'timeline-clear'}><WarningIcon weight="bold" aria-hidden="true" /> {alerts.length} {lang === 'th' ? 'การแจ้งเตือนระหว่างทาง' : alerts.length === 1 ? 'alert during this trip' : 'alerts during this trip'}</strong></div><div className="timeline-legend">{operationActions.map(([number, thai, english]) => <span key={number}><i style={{ backgroundColor: reportModeColor(english) }} /><b>{number}</b>{lang === 'th' ? thai : english}</span>)}<span><i className="speed" />{lang === 'th' ? 'ความเร็ว (กม./ชม.)' : 'Speed (km/h)'}</span><span><i className="alert" />{lang === 'th' ? 'การแจ้งเตือน' : 'Alert'}</span></div><div className="trip-timeline" role="group" aria-label={lang === 'th' ? 'ไทม์ไลน์การเดินรถพร้อมกราฟความเร็วและการแจ้งเตือน' : 'Trip timeline with vehicle speed graph and alerts'}>{timelineRows.map(({ report, position }) => <span key={report.id || report.startTime} className="timeline-segment" style={{ left: `${position.left}%`, width: `${Math.max(.9, position.width)}%`, background: reportModeColor(report.mode), opacity: report.status === 'Cancelled' ? .45 : 1 }} />)}<SpeedTimelineOverlay reports={summary.rows} samplesByReportId={speedSeries.samplesByReportId} loading={speedSeries.loading} lang={lang} startMinute={6 * 60} endMinute={24 * 60} className="print-speed-overlay" interactive={false} /><TimelineAlertMarkers alerts={alerts} lang={lang} startMinute={6 * 60} endMinute={24 * 60} interactive={false} /></div><div className="timeline-axis">{['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00', '24:00'].map(label => <span key={label}>{axisTime(label)}</span>)}</div><TimelineAlertChips alerts={alerts} lang={lang} limit={3} className="alert-list" /></section>
+      <section className="report-section"><div className="report-section-heading"><h2>{lang === 'th' ? 'ไทม์ไลน์การเดินรถ' : 'TRIP TIMELINE'}</h2><strong className={alerts.length ? 'timeline-alert-count' : 'timeline-clear'}><WarningIcon weight="bold" aria-hidden="true" /> {alerts.length} {lang === 'th' ? 'การแจ้งเตือนระหว่างทาง' : alerts.length === 1 ? 'alert during this trip' : 'alerts during this trip'}</strong></div><div className="timeline-legend">{operationActions.map(([number, thai, english]) => <span key={number}><i style={{ backgroundColor: reportModeColor(english) }} /><b>{number}</b>{lang === 'th' ? thai : english}</span>)}<span><i className="speed" />{lang === 'th' ? 'ความเร็ว (กม./ชม.)' : 'Speed (km/h)'}</span><span><i className="alert" />{lang === 'th' ? 'การแจ้งเตือน' : 'Alert'}</span></div><div className="trip-timeline" role="group" aria-label={lang === 'th' ? 'ไทม์ไลน์การเดินรถพร้อมกราฟความเร็วและการแจ้งเตือน' : 'Trip timeline with vehicle speed graph and alerts'}>{timelineRows.map(({ report, position }) => <span key={report.id || report.startTime} className="timeline-segment" style={{ left: `${position.left}%`, width: `${Math.max(.9, position.width)}%`, background: reportModeColor(report.mode), opacity: report.status === 'Cancelled' ? .45 : 1 }} />)}<SpeedTimelineOverlay reports={summary.rows} samplesByReportId={speedSeries.samplesByReportId} loading={speedSeries.loading} lang={lang} startMinute={0} endMinute={timelineSpanMinutes} originTime={timelineOrigin} className="print-speed-overlay" interactive={false} /><TimelineAlertMarkers alerts={alerts} lang={lang} startMinute={0} endMinute={timelineSpanMinutes} interactive={false} /></div><div className="timeline-axis">{periodAxis(summary.start, summary.end, lang).map((label, index) => <span key={`${label}-${index}`}>{label}</span>)}</div><TimelineAlertChips alerts={alerts} lang={lang} limit={3} className="alert-list" /></section>
       <section className="report-section job-section"><div className="report-section-heading"><h2>{lang === 'th' ? 'รายการงาน' : 'JOB LIST'}</h2><span>{dailyJobRangeLabel(lang, 1, jobPages.firstPage.length, summary.rows.length)}</span></div><DailyJobTable rows={jobPages.firstPage} lang={lang} />{!summary.rows.length ? <p className="print-empty">{lang === 'th' ? 'ไม่มีงานที่บันทึกสำหรับรถและวันที่นี้' : 'No saved jobs for this vehicle and date.'}</p> : null}</section>
       {!jobPages.continuationPages.length ? <DailySignatureFooter lang={lang} /> : null}
     </section>

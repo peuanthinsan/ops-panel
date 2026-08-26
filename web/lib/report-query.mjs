@@ -45,6 +45,7 @@ export function buildReportQuery(searchParams) {
     search: String(searchParams.get('search') || '').trim().slice(0, 180),
     startDate: validDate(searchParams.get('startDate')),
     endDate: validDate(searchParams.get('endDate')),
+    workPeriodId: String(searchParams.get('workPeriodId') || '').trim().slice(0, 180),
     vehicle: boundedValues(searchParams, 'vehicle', 80),
     device: boundedValues(searchParams, 'device', 180),
     driver: boundedValues(searchParams, 'driver', 180),
@@ -55,8 +56,9 @@ export function buildReportQuery(searchParams) {
   const values = [];
   const clauses = [];
   const parameter = value => { values.push(value); return `$${values.length}`; };
-  if (filters.startDate) clauses.push(`report.start_time >= (${parameter(filters.startDate)}::date::timestamp AT TIME ZONE 'Asia/Bangkok')`);
-  if (filters.endDate) clauses.push(`report.start_time < ((${parameter(filters.endDate)}::date + 1)::timestamp AT TIME ZONE 'Asia/Bangkok')`);
+  if (filters.startDate) clauses.push(`report.work_period_start_time >= (${parameter(filters.startDate)}::date::timestamp AT TIME ZONE 'Asia/Bangkok')`);
+  if (filters.endDate) clauses.push(`report.work_period_start_time < ((${parameter(filters.endDate)}::date + 1)::timestamp AT TIME ZONE 'Asia/Bangkok')`);
+  if (filters.workPeriodId) clauses.push(`report.work_period_id = ${parameter(filters.workPeriodId)}`);
   if (filters.vehicle.length) clauses.push(`lower(report.vehicle_number) = ANY(${parameter(filters.vehicle.map(value => value.toLocaleLowerCase()))}::text[])`);
   if (filters.device.length) clauses.push(`report.device_id = ANY(${parameter(filters.device)}::text[])`);
   if (filters.driver.length) clauses.push(`report.driver_name = ANY(${parameter(filters.driver)}::text[])`);
