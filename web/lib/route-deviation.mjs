@@ -6,11 +6,13 @@ export function parseRouteAnchors(value) {
   let parsed;
   try { parsed = new URL(url); } catch { return []; }
   const text = `${parsed.pathname} ${parsed.search}`;
-  const matches = [...text.matchAll(/(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)/g)];
+  const matches = [...text.matchAll(/(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)/g)]
+    .map(match => ({ latitude: Number(match[1]), longitude: Number(match[2]) }));
   const anchors = [];
-  for (const match of matches) {
-    const latitude = Number(match[1]);
-    const longitude = Number(match[2]);
+  const encodedWaypoints = [...text.matchAll(/!1d(-?\d+(?:\.\d+)?)!2d(-?\d+(?:\.\d+)?)/g)]
+    .map(match => ({ latitude: Number(match[2]), longitude: Number(match[1]) }));
+  for (const match of [...matches, ...encodedWaypoints]) {
+    const { latitude, longitude } = match;
     if (latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180
       && !anchors.some(point => point.latitude === latitude && point.longitude === longitude)) {
       anchors.push({ latitude, longitude });

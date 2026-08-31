@@ -1312,7 +1312,9 @@ async function saveJobRoute(input, id = null) {
   let parsed;
   try { parsed = new URL(googleMapsUrl); } catch { throw new ApiError(400, 'googleMapsUrl must be a valid Google Maps link'); }
   const hostname = parsed.hostname.toLowerCase();
-  const isGoogleMapsHost = hostname === 'maps.app.goo.gl' || hostname.endsWith('.google.com') || hostname === 'google.com';
+  const isGoogleMapsHost = hostname === 'maps.app.goo.gl'
+    || hostname === 'google.com'
+    || /^([a-z0-9-]+\.)?google\.[a-z]{2,}(?:\.[a-z]{2,})?$/.test(hostname);
   if (!isGoogleMapsHost || (!hostname.includes('goo.gl') && !parsed.pathname.toLowerCase().includes('maps'))) {
     throw new ApiError(400, 'googleMapsUrl must be a Google Maps link');
   }
