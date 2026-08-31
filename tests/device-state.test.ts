@@ -34,6 +34,15 @@ test('stored active jobs allow only real modes and valid timing state', () => {
   );
 });
 
+test('stored active jobs preserve the selected route through restart', () => {
+  assert.deepEqual(parseStoredActiveJob(JSON.stringify({
+    vehicleNumber: 'V1', deviceId: 'D1', selected: '1', routeName: ' N21 ', startedAt: 100,
+  })), {
+    vehicleNumber: 'V1', deviceId: 'D1', selected: '1', routeName: 'N21', startedAt: 100,
+    driverName: null, driverId: null,
+  });
+});
+
 test('an active job preserves only the binding it started with during startup reconciliation', () => {
   const job = {
     jobId: 'OPS-1', vehicleNumber: '74-1286', deviceId: 'tablet-101', selected: '1', startedAt: 100,

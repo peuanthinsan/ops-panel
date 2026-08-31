@@ -11,7 +11,7 @@ export function parseRouteAnchors(value) {
   const anchors = [];
   const encodedWaypoints = [...text.matchAll(/!1d(-?\d+(?:\.\d+)?)!2d(-?\d+(?:\.\d+)?)/g)]
     .map(match => ({ latitude: Number(match[2]), longitude: Number(match[1]) }));
-  for (const match of [...matches, ...encodedWaypoints]) {
+  for (const match of (encodedWaypoints.length >= 2 ? encodedWaypoints : matches)) {
     const { latitude, longitude } = match;
     if (latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180
       && !anchors.some(point => point.latitude === latitude && point.longitude === longitude)) {
@@ -81,6 +81,7 @@ export function evaluateRouteDeviation(samples, anchors, { distanceKm = 0.5, dur
   for (const sample of ordered) {
     const offRoute = sample.distanceKm != null && sample.distanceKm > thresholdKm;
     if (!offRoute) { close(); continue; }
+    if (active && (sample.capturedAt - active.lastAt) / 1000 > Math.max(120, thresholdSeconds * 2)) close();
     if (!active) active = { firstAt: sample.capturedAt, lastAt: sample.capturedAt, maxDistanceKm: sample.distanceKm, samples: 1 };
     else {
       active.lastAt = sample.capturedAt;

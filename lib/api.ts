@@ -168,6 +168,21 @@ export async function fetchVehicleMotion(deviceId: string) {
   return normalizeVehicleMotion(await response.json());
 }
 
+export type JobRouteOption = { id: string; routeName: string };
+
+export async function fetchJobRoutes(deviceId: string) {
+  const path = `/api/job-routes?deviceId=${encodeURIComponent(deviceId)}`;
+  const response = await deviceFetch(path, {}, 8000);
+  if (!response.ok) throw await responseError(response, 'Could not load job routes');
+  const data = await response.json() as { routes?: unknown };
+  if (!Array.isArray(data.routes)) throw new Error('The route response is invalid');
+  return data.routes.filter((route): route is JobRouteOption => Boolean(
+    route && typeof route === 'object'
+    && typeof (route as JobRouteOption).id === 'string'
+    && typeof (route as JobRouteOption).routeName === 'string',
+  ));
+}
+
 export async function saveJobStart(jobStart: JobStartInput) {
   const body = JSON.stringify(jobStart);
   const response = await deviceFetch('/api/job-starts', { method: 'POST', body }, 8000);

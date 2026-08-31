@@ -10,13 +10,13 @@ const copy = {
     title: 'GPS detail', close: 'Close', vehicle: 'Vehicle', driver: 'Driver', activity: 'Activity', time: 'Time',
     device: 'GPS points', last: 'Last GPS fix', captured: 'GPS fix time', coordinates: 'Coordinates', speedLabel: 'Speed', heading: 'Heading',
     loading: 'Loading GPS points…', failed: 'Could not load GPS detail.', empty: 'No GPS points are linked to this job yet.',
-    previous: 'Previous', next: 'Next', page: 'Page', of: 'of', print: 'Print job', speed: 'km/h', degrees: '°', routeMap: 'Route vs GPS map', openRoute: 'Open saved route', withinRoute: 'Within route', deviated: 'Route deviation', deviationBody: 'GPS stayed outside the route corridor for', seconds: 'seconds', noRoute: 'No saved route is assigned to this job.',
+    previous: 'Previous', next: 'Next', page: 'Page', of: 'of', print: 'Print job', speed: 'km/h', degrees: '°', routeMap: 'Route vs GPS map', openRoute: 'Open saved route', withinRoute: 'Within route', deviated: 'Route deviation', deviationBody: 'GPS stayed outside the route corridor for', seconds: 'seconds', noRoute: 'No route is assigned to this job yet.', assignedRoute: 'Assigned route', noAssignedRoute: 'No route', savingRoute: 'Saving route…', routeSaveFailed: 'Could not update the assigned route.',
   },
   th: {
     title: 'รายละเอียด GPS', close: 'ปิด', vehicle: 'รถ', driver: 'พขร.', activity: 'กิจกรรม', time: 'เวลา',
     device: 'จุด GPS', last: 'พิกัด GPS ล่าสุด', captured: 'เวลาพิกัด GPS', coordinates: 'พิกัด', speedLabel: 'ความเร็ว', heading: 'ทิศทาง',
     loading: 'กำลังโหลดจุด GPS…', failed: 'ไม่สามารถโหลดรายละเอียด GPS', empty: 'ยังไม่มีจุด GPS ที่เชื่อมกับงานนี้',
-    previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', print: 'พิมพ์งาน', speed: 'กม./ชม.', degrees: '°', routeMap: 'แผนที่เส้นทางเทียบกับ GPS', openRoute: 'เปิดเส้นทางที่บันทึก', withinRoute: 'อยู่ในเส้นทาง', deviated: 'ออกนอกเส้นทาง', deviationBody: 'GPS อยู่นอกแนวเส้นทางต่อเนื่องเป็นเวลา', seconds: 'วินาที', noRoute: 'ยังไม่มีเส้นทางที่ผูกกับงานนี้',
+    previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', print: 'พิมพ์งาน', speed: 'กม./ชม.', degrees: '°', routeMap: 'แผนที่เส้นทางเทียบกับ GPS', openRoute: 'เปิดเส้นทางที่บันทึก', withinRoute: 'อยู่ในเส้นทาง', deviated: 'ออกนอกเส้นทาง', deviationBody: 'GPS อยู่นอกแนวเส้นทางต่อเนื่องเป็นเวลา', seconds: 'วินาที', noRoute: 'ยังไม่ได้กำหนดเส้นทางให้งานนี้', assignedRoute: 'เส้นทางที่กำหนด', noAssignedRoute: 'ไม่มีเส้นทาง', savingRoute: 'กำลังบันทึกเส้นทาง…', routeSaveFailed: 'ไม่สามารถอัปเดตเส้นทางที่กำหนดได้',
   },
 };
 
@@ -53,6 +53,9 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
   const [mapSamples, setMapSamples] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [routes, setRoutes] = useState([]);
+  const [routeBusy, setRouteBusy] = useState(false);
+  const [routeError, setRouteError] = useState('');
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -98,6 +101,24 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
     return () => { active = false; controller.abort(); };
   }, [page, report.id, t.failed]);
 
+  useEffect(() => {
+    adminFetch('/api/admin/job-routes').then(data => setRoutes(Array.isArray(data.routes) ? data.routes : [])).catch(() => setRoutes([]));
+  }, []);
+
+  async function assignRoute(routeName) {
+    if (routeBusy) return;
+    setRouteBusy(true);
+    setRouteError('');
+    try {
+      await adminFetch(`/api/admin/reports/${encodeURIComponent(report.id)}/route`, { method: 'PUT', body: JSON.stringify({ routeName: routeName || null }) });
+      const refreshed = await adminFetch(`/api/admin/reports/${encodeURIComponent(report.id)}/gps?page=${page}&pageSize=50`, { cacheOffline: false });
+      setDetail(refreshed);
+      if (refreshed.route) setMapSamples(await adminFetchReportGpsSamples(report.id));
+      else setMapSamples([]);
+    } catch { setRouteError(t.routeSaveFailed); }
+    finally { setRouteBusy(false); }
+  }
+
   const summary = detail?.gpsSummary || {};
   const samples = Array.isArray(detail?.samples) ? detail.samples : [];
   const pageInfo = detail?.pageInfo || { page: 1, totalPages: 1 };
@@ -118,6 +139,7 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
           <div><dt>{t.activity}</dt><dd>{displayedReport.mode || '—'}</dd></div>
           <div><dt>{t.time}</dt><dd>{time(displayedReport.startTime, lang)}–{time(displayedReport.endTime, lang)}</dd></div>
         </dl>
+        <div className="gps-route-assignment"><label htmlFor="gps-route-assignment">{t.assignedRoute}</label><select id="gps-route-assignment" value={displayedReport.routeName || ''} disabled={routeBusy} onChange={event => void assignRoute(event.target.value)}><option value="">{t.noAssignedRoute}</option>{routes.map(route => <option key={route.id} value={route.routeName}>{route.routeName}</option>)}</select>{routeBusy ? <small role="status">{t.savingRoute}</small> : null}{routeError ? <small className="error" role="alert">{routeError}</small> : null}</div>
         <section className="gps-detail-section">
           <h2 id="gps-detail-title">{t.title}</h2>
           <dl className="gps-detail-summary">

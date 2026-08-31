@@ -5,5 +5,6 @@ export type JobStartInput = {
   driverName: string | null;
   driverId: string | null;
   mode: string;
+  routeName?: string | null;
   startTime: string;
 };

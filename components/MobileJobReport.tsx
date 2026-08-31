@@ -100,7 +100,7 @@ function JobCard({ job, language, landscape }: { job: SavedJob; language: 'en' |
     <Text style={styles.jobTime}>{language === 'en' ? 'Start' : 'เริ่ม'} {formatMobileReportDateTime(job.startTime, language)}</Text>
     <Text style={styles.jobTimeSecondary}>{language === 'en' ? 'End' : 'จบ'} {formatMobileReportDateTime(job.endTime, language)}</Text>
     <Text style={styles.jobMeta}>{language === 'en' ? 'Duration' : 'ระยะเวลา'} {formatReportDuration(durationSeconds(job.duration))} · {job.driverName || (language === 'en' ? 'No driver identified' : 'ไม่พบข้อมูลพนักงานขับรถ')}</Text>
-    <Text numberOfLines={1} style={styles.jobId}>{job.id}</Text>
+    <Text numberOfLines={1} style={styles.jobId}>{job.routeName ? `${language === 'en' ? 'Route' : 'เส้นทาง'} ${job.routeName} · ` : ''}{job.id}</Text>
   </View>;
 }
 

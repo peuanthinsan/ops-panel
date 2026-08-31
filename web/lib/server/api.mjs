@@ -57,7 +57,7 @@ function corsHeaders() {
     ...(allowedOrigin ? { 'Access-Control-Allow-Origin': allowedOrigin } : {}),
     'Access-Control-Allow-Headers': 'Content-Type, x-admin-token, Authorization, x-device-key-id, x-device-timestamp, x-device-nonce, x-device-signature',
     'Access-Control-Expose-Headers': 'x-songdee-error-code, x-songdee-server-time',
-    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Cache-Control': 'no-store',
     Vary: 'Origin',
   };
@@ -561,6 +561,7 @@ function reportColumns() {
     driver_name AS "driverName",
     driver_id AS "driverId",
     mode,
+    route_name AS "routeName",
     start_time AS "startTime",
     end_time AS "endTime",
     duration,
@@ -813,6 +814,7 @@ function activeJobColumns() {
     driver_name AS "driverName",
     driver_id AS "driverId",
     mode,
+    route_name AS "routeName",
     start_time AS "startTime",
     'Active' AS status,
     created_at AS "createdAt",
@@ -1192,7 +1194,7 @@ async function getJobGpsDetail(request, reportId) {
   const pageSize = positivePageValue(query.get('pageSize'), 100, 200);
   const offset = (page - 1) * pageSize;
   const sql = getDatabase();
-  const [samples, summaryRows, routeRows, settingRows] = await sql.transaction(transaction => [
+  const [samples, summaryRows, routeRows, settingRows, routeSamples] = await sql.transaction(transaction => [
     transaction.query(`
       SELECT
         id,
@@ -1236,7 +1238,16 @@ async function getJobGpsDetail(request, reportId) {
     transaction.query(`
       SELECT id, route_name AS "routeName", google_maps_url AS "googleMapsUrl", anchors
       FROM job_routes
-      WHERE active = true AND lower(route_name) = lower($1)
+      WHERE (
+          lower(route_name) = lower(COALESCE((SELECT route_name FROM ops_reports WHERE id = $1), $1))
+          OR (
+            (SELECT route_name FROM ops_reports WHERE id = $1) IS NULL
+            AND (
+              lower(route_name) = lower(regexp_replace($1, '^ops[-_:]', ''))
+              OR lower($1) LIKE '%' || lower(route_name)
+            )
+          )
+        )
       LIMIT 1
     `, [reportId]),
     transaction.query(`
@@ -1244,6 +1255,10 @@ async function getJobGpsDetail(request, reportId) {
       FROM app_settings
       WHERE setting_key IN ('route_deviation_distance_km', 'route_deviation_duration_seconds')
     `),
+    transaction.query(`
+      SELECT captured_at AS "capturedAt", device_latitude AS latitude, device_longitude AS longitude
+      FROM gps_sync_samples WHERE job_id = $1 ORDER BY captured_at ASC, id ASC
+    `, [reportId]),
   ]);
   const summary = summaryRows[0] || {
     deviceSamples: 0,
@@ -1257,7 +1272,7 @@ async function getJobGpsDetail(request, reportId) {
   const settings = Object.fromEntries(settingRows.map(item => [item.settingKey, Number(item.settingValue)]));
   const route = routeRows[0] || null;
   const routeDeviation = route
-    ? evaluateRouteDeviation(samples, route.anchors, {
+    ? evaluateRouteDeviation(routeSamples, route.anchors, {
         distanceKm: settings.route_deviation_distance_km || 0.5,
         durationSeconds: settings.route_deviation_duration_seconds || 60,
       })
@@ -1306,6 +1321,26 @@ async function listJobRoutes() {
   `;
 }
 
+async function activeRouteByName(routeName) {
+  if (!routeName) return null;
+  const sql = getDatabase();
+  const rows = await sql`
+    SELECT id, route_name AS "routeName"
+    FROM job_routes
+    WHERE active = true AND lower(route_name) = lower(${routeName})
+    LIMIT 1
+  `;
+  return rows[0] || null;
+}
+
+async function validatedRouteName(value, { allowEmpty = true } = {}) {
+  const routeName = optionalText(value, 'routeName', 120);
+  if (!routeName && allowEmpty) return null;
+  const route = await activeRouteByName(routeName);
+  if (!route) throw new ApiError(409, 'The selected route is no longer available. Refresh routes and choose again.');
+  return route.routeName;
+}
+
 async function saveJobRoute(input, id = null) {
   const routeName = requiredText(input.routeName, 'routeName', 120);
   const googleMapsUrl = requiredText(input.googleMapsUrl, 'googleMapsUrl', 2000);
@@ -1322,6 +1357,7 @@ async function saveJobRoute(input, id = null) {
   const sql = getDatabase();
   const routeId = id || `ROUTE-${crypto.randomUUID()}`;
   try {
+    const previous = id ? (await sql`SELECT route_name AS "routeName" FROM job_routes WHERE id = ${routeId} LIMIT 1`)[0] : null;
     const rows = await sql`
       INSERT INTO job_routes (id, route_name, google_maps_url, anchors)
       VALUES (${routeId}, ${routeName}, ${googleMapsUrl}, ${JSON.stringify(anchors)}::jsonb)
@@ -1334,6 +1370,12 @@ async function saveJobRoute(input, id = null) {
       RETURNING id, route_name AS "routeName", google_maps_url AS "googleMapsUrl", anchors,
         active, created_at AS "createdAt", updated_at AS "updatedAt"
     `;
+    if (previous?.routeName && previous.routeName.toLowerCase() !== routeName.toLowerCase()) {
+      await sql.transaction(transaction => [
+        transaction`UPDATE active_jobs SET route_name = ${routeName} WHERE lower(route_name) = lower(${previous.routeName})`,
+        transaction`UPDATE ops_reports SET route_name = ${routeName} WHERE lower(route_name) = lower(${previous.routeName})`,
+      ]);
+    }
     return rows[0];
   } catch (error) {
     if (String(error?.code) === '23505') throw new ApiError(409, 'A route with this name already exists.');
@@ -1465,6 +1507,22 @@ async function routeRequest(request, route) {
     return json(await getJobGpsDetail(request, reportId));
   }
 
+  const reportRouteMatch = route.match(/^admin\/reports\/([^/]+)\/route$/);
+  if (reportRouteMatch && method === 'PUT') {
+    await requireAdmin(request);
+    const reportId = validClientId(decodeURIComponent(reportRouteMatch[1]));
+    if (!reportId) throw new ApiError(400, 'A valid report id is required');
+    const input = await readJson(request);
+    const routeName = await validatedRouteName(input.routeName);
+    const sql = database();
+    const rows = await sql.query(
+      `UPDATE ops_reports SET route_name = $2 WHERE id = $1 RETURNING ${reportColumns()}`,
+      [reportId, routeName],
+    );
+    if (!rows.length) throw new ApiError(404, 'Report not found');
+    return json({ report: rows[0] });
+  }
+
   if (route === 'device-config' && method === 'GET') {
     const deviceId = new URL(request.url).searchParams.get('deviceId') || undefined;
     if (!deviceId) throw new ApiError(400, 'deviceId is required');
@@ -1517,6 +1575,21 @@ async function routeRequest(request, route) {
   if (route === 'driver-identity' && method === 'GET') return proxyDriverIdentity(request);
   if (route === 'vehicle-motion' && method === 'GET') return proxyVehicleMotion(request);
 
+  if (route === 'job-routes' && method === 'GET') {
+    const query = new URL(request.url).searchParams;
+    const deviceId = requiredText(query.get('deviceId'), 'deviceId', 180);
+    await authenticateDeviceRequest(request, deviceId);
+    await consumeRateLimit(request, 'device-routes', 120, 15 * 60, deviceId);
+    if (!await findBinding(deviceId)) throw new ApiError(409, 'Device binding does not match.', { code: 'DEVICE_BINDING_MISMATCH' });
+    const sql = database();
+    const routes = await sql`
+      SELECT id, route_name AS "routeName"
+      FROM job_routes WHERE active = true
+      ORDER BY lower(route_name), route_name
+    `;
+    return json({ routes });
+  }
+
   if (route === 'device-jobs' && method === 'GET') {
     const query = new URL(request.url).searchParams;
     const deviceId = requiredText(query.get('deviceId'), 'deviceId', 180);
@@ -1546,9 +1619,11 @@ async function routeRequest(request, route) {
     if (!await bindingWasValid(deviceId, vehicleNumber, start.iso)) {
       throw new ApiError(409, 'Vehicle and device were not connected when this job started.');
     }
-    const inputShape = { vehicleNumber, deviceId, driverName, driverId, mode, startTime: start.iso };
     const sql = database();
     const completed = await getReport(jobId);
+    const existingJob = completed ? null : await getActiveJob(jobId);
+    const routeName = completed?.routeName || existingJob?.routeName || await validatedRouteName(input.routeName);
+    const inputShape = { vehicleNumber, deviceId, driverName, driverId, mode, routeName, startTime: start.iso };
     if (completed) {
       if (!sameJobStart(completed, inputShape)) throw new ApiError(409, 'Job id is already used by different data.');
       await sql`DELETE FROM active_jobs WHERE id = ${jobId}`;
@@ -1560,12 +1635,12 @@ async function routeRequest(request, route) {
       throw new ApiError(409, 'Device already has an active job.');
     }
     const rows = await sql.query(
-      `INSERT INTO active_jobs (id, vehicle_number, device_id, driver_name, driver_id, mode, start_time)
-       SELECT $1,$2,$3,$4,$5,$6,$7
+      `INSERT INTO active_jobs (id, vehicle_number, device_id, driver_name, driver_id, mode, route_name, start_time)
+       SELECT $1,$2,$3,$4,$5,$6,$7,$8
        WHERE NOT EXISTS (SELECT 1 FROM ops_reports WHERE id = $1)
        ON CONFLICT (id) DO NOTHING
        RETURNING ${activeJobColumns()}`,
-      [jobId, vehicleNumber, deviceId, driverName, driverId, mode, start.iso],
+      [jobId, vehicleNumber, deviceId, driverName, driverId, mode, routeName, start.iso],
     );
     if (rows.length) {
       await linkGpsSamplesToActiveJob(rows[0]);
@@ -1641,6 +1716,18 @@ async function routeRequest(request, route) {
     await requireAdmin(request);
     const routeId = validClientId(decodeURIComponent(jobRouteMatch[1]));
     const sql = getDatabase();
+    const [assigned] = await sql`
+      SELECT EXISTS (
+        SELECT 1
+        FROM job_routes route
+        WHERE route.id = ${routeId}
+          AND (
+            EXISTS (SELECT 1 FROM ops_reports report WHERE lower(report.route_name) = lower(route.route_name))
+            OR EXISTS (SELECT 1 FROM active_jobs job WHERE lower(job.route_name) = lower(route.route_name))
+          )
+      ) AS assigned
+    `;
+    if (assigned?.assigned) throw new ApiError(409, 'This route is assigned to a job. Reassign saved jobs or finish active jobs before deleting it.');
     const rows = await sql`DELETE FROM job_routes WHERE id = ${routeId} RETURNING id`;
     if (!rows.length) throw new ApiError(404, 'Route not found');
     return json({ ok: true });
@@ -1753,13 +1840,16 @@ async function routeRequest(request, route) {
     const cancelled = input.status === 'Cancelled';
     const driverName = optionalText(input.driverName, 'driverName', 180);
     const driverId = optionalText(input.driverId, 'driverId', 180);
+    const existingReport = await getReport(reportId);
+    const activeReportJob = await getActiveJob(reportId);
+    const routeName = existingReport?.routeName || activeReportJob?.routeName || await validatedRouteName(input.routeName);
     const sql = database();
     const rows = await sql.query(
       `INSERT INTO ops_reports (
-        id, vehicle_number, device_id, driver_name, driver_id, mode,
+        id, vehicle_number, device_id, driver_name, driver_id, mode, route_name,
         start_time, end_time, duration, gps, status,
         gps_lookup_status, gps_lookup_message
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
       ON CONFLICT (id) DO NOTHING
       RETURNING ${reportColumns()}`,
       [
@@ -1769,6 +1859,7 @@ async function routeRequest(request, route) {
         driverName,
         driverId,
         mode,
+        routeName,
         start.iso,
         end.iso,
         formatDurationMs(end.milliseconds - start.milliseconds),
@@ -1778,9 +1869,9 @@ async function routeRequest(request, route) {
         cancelled ? 'Cancelled job recorded.' : 'Waiting for GPS lookup.',
       ],
     );
-    const inputShape = { vehicleNumber, deviceId, driverName, driverId, mode, startTime: start.iso, endTime: end.iso, cancelled };
+    const inputShape = { vehicleNumber, deviceId, driverName, driverId, mode, routeName, startTime: start.iso, endTime: end.iso, cancelled };
     if (!rows.length) {
-      const existing = await getReport(reportId);
+      const existing = existingReport || await getReport(reportId);
       if (!existing || !sameReport(existing, inputShape)) {
         throw new ApiError(409, 'Report id is already used by a different job.');
       }

@@ -9,6 +9,7 @@ import { queryLocalDeviceJobs } from './lib/device-job-history.mjs';
 import { localReportFacets, queryLocalReports } from './lib/local-report-query.mjs';
 import { fetchDataFmDriverIdentity, fetchDataFmGpsHistory } from './web/lib/server/data-fm-gps.mjs';
 import { DEFAULT_GPS_PAIR_TOLERANCE_MS, pairExternalGpsSources } from './web/lib/server/external-gps.mjs';
+import { evaluateRouteDeviation, parseRouteAnchors } from './web/lib/route-deviation.mjs';
 
 const port = process.env.PORT || 4000;
 const maximumJsonBodyBytes = 64 * 1024;
@@ -44,6 +45,8 @@ function loadState() {
 const stored = loadState();
 const reports = Array.isArray(stored.reports) ? stored.reports : [...seedReports];
 const activeJobs = Array.isArray(stored.activeJobs) ? stored.activeJobs : [];
+const jobRoutes = Array.isArray(stored.jobRoutes) ? stored.jobRoutes : [];
+let routeDeviationSettings = stored.routeDeviationSettings || { distanceKm: 0.5, durationSeconds: 60 };
 const deviceBindings = Array.isArray(stored.deviceBindings) ? stored.deviceBindings : [];
 const bindingHistory = Array.isArray(stored.bindingHistory)
   ? stored.bindingHistory
@@ -75,7 +78,7 @@ const dataFmEnvironmentSelected = Boolean(dataFmOptions.username || dataFmOption
 const saveState = () => {
   fs.mkdirSync(path.dirname(dataFile), { recursive: true });
   const temporaryFile = `${dataFile}.tmp`;
-  fs.writeFileSync(temporaryFile, JSON.stringify({ reports, activeJobs, deviceBindings, bindingHistory, deviceConfig, driverIdentity, gpsSyncSamples, adminPasswordHash }, null, 2));
+  fs.writeFileSync(temporaryFile, JSON.stringify({ reports, activeJobs, jobRoutes, routeDeviationSettings, deviceBindings, bindingHistory, deviceConfig, driverIdentity, gpsSyncSamples, adminPasswordHash }, null, 2));
   fs.renameSync(temporaryFile, dataFile);
 };
 function openBindingHistory(binding, boundAt = new Date().toISOString()) {
@@ -333,6 +336,10 @@ function jobGpsDetail(report, searchParams) {
     pairStatus: sample.pairStatus || (sample.fmsStatus === 'received' ? 'fms_received' : sample.fmsStatus === 'not_configured' ? 'device_only' : 'fms_delayed'),
     syncedAt: sample.syncedAt,
   }));
+  const route = report.routeName
+    ? jobRoutes.find(item => item.routeName.toLowerCase() === report.routeName.toLowerCase()) || null
+    : null;
+  const routeDeviation = route ? evaluateRouteDeviation(samples, route.anchors, routeDeviationSettings) : null;
   return {
     report,
     gpsSummary: {
@@ -344,6 +351,9 @@ function jobGpsDetail(report, searchParams) {
       medianPositionDeltaM: summaryReport.medianPositionDeltaM,
     },
     samples: pageSamples,
+    route,
+    routeDeviation,
+    routeDeviationSettings,
     pageInfo: {
       page,
       pageSize,
@@ -355,7 +365,28 @@ function jobGpsDetail(report, searchParams) {
   };
 }
 
-const send = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.SONGDEE_CORS_ORIGIN || '*', 'Access-Control-Allow-Headers': 'Content-Type, x-admin-token, Authorization', 'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS', 'Cache-Control': 'no-store', 'Vary': 'Origin' }); res.end(JSON.stringify(body)); };
+function routeInput(input, existingId = null) {
+  const routeName = validRequiredText(input.routeName, 120);
+  const googleMapsUrl = validRequiredText(input.googleMapsUrl, 2000);
+  let parsed;
+  try { parsed = new URL(googleMapsUrl || ''); } catch { return { error: 'googleMapsUrl must be a valid Google Maps link' }; }
+  const hostname = parsed.hostname.toLowerCase();
+  const isGoogleMapsHost = hostname === 'maps.app.goo.gl' || hostname === 'google.com' || /^([a-z0-9-]+\.)?google\.[a-z]{2,}(?:\.[a-z]{2,})?$/.test(hostname);
+  if (!routeName || !googleMapsUrl || !isGoogleMapsHost || (!hostname.includes('goo.gl') && !parsed.pathname.toLowerCase().includes('maps'))) {
+    return { error: 'googleMapsUrl must be a Google Maps link' };
+  }
+  const duplicate = jobRoutes.find(item => item.routeName.toLowerCase() === routeName.toLowerCase() && item.id !== existingId);
+  if (duplicate) return { error: 'A route with this name already exists.', status: 409 };
+  return { routeName, googleMapsUrl, anchors: parseRouteAnchors(googleMapsUrl) };
+}
+
+function activeRouteName(value) {
+  const requested = optionalText(value, 120);
+  if (!requested) return null;
+  return jobRoutes.find(item => item.routeName.toLowerCase() === requested.toLowerCase())?.routeName || undefined;
+}
+
+const send = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.SONGDEE_CORS_ORIGIN || '*', 'Access-Control-Allow-Headers': 'Content-Type, x-admin-token, Authorization', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Cache-Control': 'no-store', 'Vary': 'Origin' }); res.end(JSON.stringify(body)); };
 class RequestBodyError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
@@ -411,6 +442,60 @@ const server = http.createServer(async (req, res) => {
     if (!isAdmin(req)) return send(res, 401, { error: 'Admin login required' });
     return send(res, 200, { facets: localReportFacets(reports) });
   }
+  if (req.url === '/api/admin/job-routes' && req.method === 'GET') {
+    if (!isAdmin(req)) return send(res, 401, { error: 'Admin login required' });
+    return send(res, 200, { routes: jobRoutes, settings: routeDeviationSettings });
+  }
+  if (req.url === '/api/admin/job-routes' && req.method === 'POST') {
+    if (!isAdmin(req)) return send(res, 401, { error: 'Admin login required' });
+    try {
+      const input = await readJsonBody(req);
+      const normalized = routeInput(input);
+      if (normalized.error) return send(res, normalized.status || 400, { error: normalized.error });
+      const route = { id: `ROUTE-${crypto.randomUUID()}`, ...normalized, active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      jobRoutes.push(route); saveState(); return send(res, 201, { route });
+    } catch (error) { return sendBodyError(res, error); }
+  }
+  if (req.url === '/api/admin/job-route-settings' && req.method === 'PUT') {
+    if (!isAdmin(req)) return send(res, 401, { error: 'Admin login required' });
+    try {
+      const input = await readJsonBody(req);
+      const distanceKm = Number(input.distanceKm); const durationSeconds = Number(input.durationSeconds);
+      if (!Number.isFinite(distanceKm) || distanceKm <= 0 || distanceKm > 50 || !Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 86400) return send(res, 400, { error: 'Invalid route deviation settings' });
+      routeDeviationSettings = { distanceKm, durationSeconds: Math.round(durationSeconds) }; saveState(); return send(res, 200, { settings: routeDeviationSettings });
+    } catch (error) { return sendBodyError(res, error); }
+  }
+  if (req.url?.startsWith('/api/admin/job-routes/') && ['PUT', 'DELETE'].includes(req.method)) {
+    if (!isAdmin(req)) return send(res, 401, { error: 'Admin login required' });
+    const routeId = decodeURIComponent(new URL(req.url, 'http://localhost').pathname.split('/').at(-1) || '');
+    const index = jobRoutes.findIndex(item => item.id === routeId);
+    if (index < 0) return send(res, 404, { error: 'Route not found' });
+    if (req.method === 'DELETE') {
+      if ([...activeJobs, ...reports].some(job => String(job.routeName || '').toLowerCase() === jobRoutes[index].routeName.toLowerCase())) return send(res, 409, { error: 'This route is assigned to a job. Reassign saved jobs or finish active jobs before deleting it.' });
+      jobRoutes.splice(index, 1); saveState(); return send(res, 200, { ok: true });
+    }
+    try {
+      const normalized = routeInput(await readJsonBody(req), routeId);
+      if (normalized.error) return send(res, normalized.status || 400, { error: normalized.error });
+      const previousRouteName = jobRoutes[index].routeName;
+      jobRoutes[index] = { ...jobRoutes[index], ...normalized, active: true, updatedAt: new Date().toISOString() };
+      if (previousRouteName.toLowerCase() !== normalized.routeName.toLowerCase()) {
+        for (const job of [...activeJobs, ...reports]) if (String(job.routeName || '').toLowerCase() === previousRouteName.toLowerCase()) job.routeName = normalized.routeName;
+      }
+      saveState(); return send(res, 200, { route: jobRoutes[index] });
+    } catch (error) { return sendBodyError(res, error); }
+  }
+  const localReportRouteMatch = new URL(req.url || '/', 'http://localhost').pathname.match(/^\/api\/admin\/reports\/([^/]+)\/route$/);
+  if (localReportRouteMatch && req.method === 'PUT') {
+    if (!isAdmin(req)) return send(res, 401, { error: 'Admin login required' });
+    try {
+      const report = reports.find(item => item.id === decodeURIComponent(localReportRouteMatch[1]));
+      if (!report) return send(res, 404, { error: 'Report not found' });
+      const input = await readJsonBody(req); const routeName = activeRouteName(input.routeName);
+      if (input.routeName && routeName === undefined) return send(res, 409, { error: 'The selected route is no longer available. Refresh routes and choose again.' });
+      report.routeName = routeName || null; saveState(); return send(res, 200, { report });
+    } catch (error) { return sendBodyError(res, error); }
+  }
   if (req.url?.startsWith('/api/device-config') && req.method === 'GET') {
     const deviceId = new URL(req.url, 'http://localhost').searchParams.get('deviceId');
     const matched = deviceId ? deviceBindings.find(item => item.deviceId === deviceId) : null;
@@ -423,6 +508,11 @@ const server = http.createServer(async (req, res) => {
     const binding = deviceBindings.find(item => item.deviceId === deviceId);
     if (!binding || binding.vehicleNumber !== vehicleNumber) return send(res, 409, { error: 'Vehicle and device binding does not match.', code: 'DEVICE_BINDING_MISMATCH' });
     return send(res, 200, queryLocalDeviceJobs(reports, deviceId, vehicleNumber, query));
+  }
+  if (req.url?.startsWith('/api/job-routes') && req.method === 'GET') {
+    const deviceId = new URL(req.url, 'http://localhost').searchParams.get('deviceId') || '';
+    if (!deviceBindings.some(binding => binding.deviceId === deviceId)) return send(res, 409, { error: 'Device binding does not match.', code: 'DEVICE_BINDING_MISMATCH' });
+    return send(res, 200, { routes: jobRoutes.map(({ id, routeName }) => ({ id, routeName })) });
   }
   if (req.url === '/api/device-config' && req.method === 'POST') {
     try { const input = await readJsonBody(req); const vehicleNumber = validRequiredText(input.vehicleNumber, 80); const deviceId = validRequiredText(input.deviceId, 180); if (!vehicleNumber || !deviceId) return send(res, 400, { error: 'vehicleNumber and deviceId are required and must be within their size limits' }); const existingDevice = deviceBindings.find(item => item.deviceId === deviceId); if (existingDevice?.vehicleNumber === vehicleNumber) return send(res, 200, { deviceConfig: existingDevice, deduplicated: true }); if (existingDevice) return send(res, 409, { error: 'Device is already connected; change it from the admin dashboard.' }); deviceConfig = { vehicleNumber, deviceId }; deviceBindings.push(deviceConfig); openBindingHistory(deviceConfig); saveState(); return send(res, 200, { deviceConfig }); }
@@ -503,12 +593,15 @@ const server = http.createServer(async (req, res) => {
         const startTimeMs = Date.parse(String(input.startTime || ''));
         const driverName = optionalText(input.driverName, 180);
         const driverId = optionalText(input.driverId, 180);
+        const completed = reports.find(item => item.id === id);
+        const existing = activeJobs.find(item => item.id === id);
+        const routeName = completed?.routeName || existing?.routeName || activeRouteName(input.routeName);
+        if (input.routeName && routeName === undefined) return send(res, 409, { error: 'The selected route is no longer available. Refresh routes and choose again.' });
         if (!id || id.length > 180 || !/^[a-zA-Z0-9._:-]+$/.test(id)) return send(res, 400, { error: 'A valid id is required' });
         if (!vehicleNumber || !deviceId || !allowedModes.has(mode) || !Number.isFinite(startTimeMs)) return send(res, 400, { error: 'A valid vehicleNumber, deviceId, mode, and startTime are required' });
         if ((driverName?.length || 0) > 180 || (driverId?.length || 0) > 180) return send(res, 400, { error: 'driverName and driverId must be 180 characters or fewer' });
         if (!wasBindingValidAt(deviceId, vehicleNumber, startTimeMs)) return send(res, 409, { error: 'Vehicle and device were not connected when this job started.' });
-        const normalized = { id, vehicleNumber, deviceId, driverName, driverId, mode, startTime: new Date(startTimeMs).toISOString() };
-        const completed = reports.find(item => item.id === id);
+        const normalized = { id, vehicleNumber, deviceId, driverName, driverId, mode, routeName: routeName || null, startTime: new Date(startTimeMs).toISOString() };
         if (completed) {
           if (!sameJobStart(completed, normalized)) return send(res, 409, { error: 'Job id is already used by different data.' });
           removeActiveJob(id);
@@ -516,7 +609,6 @@ const server = http.createServer(async (req, res) => {
           saveState();
           return send(res, 200, { jobStart: null, closed: true, deduplicated: true });
         }
-        const existing = activeJobs.find(item => item.id === id);
         if (existing) {
           if (!sameJobStart(existing, normalized)) return send(res, 409, { error: 'Job id is already used by different data.' });
           linkGpsSamplesToJob(existing);
@@ -646,6 +738,10 @@ const server = http.createServer(async (req, res) => {
         const endTimeMs = Date.parse(String(input.endTime || ''));
         const driverName = optionalText(input.driverName, 180);
         const driverId = optionalText(input.driverId, 180);
+        const existing = requestedId ? reports.find(item => item.id === requestedId) : null;
+        const activeReportJob = activeJobs.find(item => item.id === requestedId);
+        const routeName = existing?.routeName || activeReportJob?.routeName || activeRouteName(input.routeName);
+        if (input.routeName && routeName === undefined) return send(res, 409, { error: 'The selected route is no longer available. Refresh routes and choose again.' });
         if (!vehicleNumber || !deviceId || !allowedModes.has(mode) || !Number.isFinite(startTimeMs) || !Number.isFinite(endTimeMs)) return send(res, 400, { error: 'A valid vehicleNumber, deviceId, mode, startTime, and endTime are required' });
         if ((driverName?.length || 0) > 180 || (driverId?.length || 0) > 180) return send(res, 400, { error: 'driverName and driverId must be 180 characters or fewer' });
         if (requestedId && (requestedId.length > 180 || !/^[a-zA-Z0-9._:-]+$/.test(requestedId))) return send(res, 400, { error: 'id must contain only letters, numbers, dots, underscores, colons, or hyphens' });
@@ -653,7 +749,6 @@ const server = http.createServer(async (req, res) => {
         if (!wasBindingValidAt(deviceId, vehicleNumber, startTimeMs)) return send(res, 409, { error: 'Vehicle and device were not connected when this job started.' });
         const cancelled = input.status === 'Cancelled';
         const normalizedStartTime = new Date(startTimeMs).toISOString();
-        const existing = requestedId ? reports.find(item => item.id === requestedId) : null;
         if (existing) {
           const sameJob = existing.vehicleNumber === vehicleNumber
             && existing.deviceId === deviceId
@@ -676,6 +771,7 @@ const server = http.createServer(async (req, res) => {
           driverName,
           driverId,
           mode,
+          routeName: routeName || null,
           startTime: normalizedStartTime,
           endTime: new Date(endTimeMs).toISOString(),
           duration: formatDurationMs(endTimeMs - startTimeMs),

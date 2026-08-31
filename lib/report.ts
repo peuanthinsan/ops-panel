@@ -5,6 +5,7 @@ export type JobReportInput = {
   driverName: string | null;
   driverId: string | null;
   mode: string;
+  routeName?: string | null;
   startTime: string;
   endTime: string;
   duration: string;

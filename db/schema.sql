@@ -77,6 +77,25 @@ CREATE TABLE IF NOT EXISTS app_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS job_routes (
+  id TEXT PRIMARY KEY,
+  route_name TEXT NOT NULL UNIQUE,
+  google_maps_url TEXT NOT NULL,
+  anchors JSONB NOT NULL DEFAULT '[]'::jsonb,
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS job_routes_active_name_idx
+  ON job_routes (active, lower(route_name));
+
+INSERT INTO app_settings (setting_key, setting_value)
+VALUES
+  ('route_deviation_distance_km', '0.5'),
+  ('route_deviation_duration_seconds', '60')
+ON CONFLICT (setting_key) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS ops_reports (
   id TEXT PRIMARY KEY,
   vehicle_number TEXT NOT NULL,
@@ -84,6 +103,7 @@ CREATE TABLE IF NOT EXISTS ops_reports (
   driver_name TEXT,
   driver_id TEXT,
   mode TEXT NOT NULL,
+  route_name TEXT,
   start_time TIMESTAMPTZ NOT NULL,
   end_time TIMESTAMPTZ NOT NULL,
   duration TEXT NOT NULL,
@@ -109,6 +129,8 @@ CREATE INDEX IF NOT EXISTS ops_reports_gps_lookup_status_idx ON ops_reports (gps
 
 ALTER TABLE ops_reports ADD COLUMN IF NOT EXISTS gps_lookup_status TEXT;
 ALTER TABLE ops_reports ADD COLUMN IF NOT EXISTS gps_lookup_message TEXT;
+ALTER TABLE ops_reports ADD COLUMN IF NOT EXISTS route_name TEXT;
+CREATE INDEX IF NOT EXISTS ops_reports_route_name_idx ON ops_reports (lower(route_name), start_time DESC) WHERE route_name IS NOT NULL;
 
 DO $$
 BEGIN
@@ -138,6 +160,7 @@ CREATE TABLE IF NOT EXISTS active_jobs (
   driver_name TEXT,
   driver_id TEXT,
   mode TEXT NOT NULL,
+  route_name TEXT,
   start_time TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -145,6 +168,8 @@ CREATE TABLE IF NOT EXISTS active_jobs (
 
 CREATE INDEX IF NOT EXISTS active_jobs_vehicle_start_idx ON active_jobs (vehicle_number, start_time DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS active_jobs_one_per_device_idx ON active_jobs (device_id);
+ALTER TABLE active_jobs ADD COLUMN IF NOT EXISTS route_name TEXT;
+CREATE INDEX IF NOT EXISTS active_jobs_route_name_idx ON active_jobs (lower(route_name)) WHERE route_name IS NOT NULL;
 
 ALTER TABLE active_jobs DROP CONSTRAINT IF EXISTS active_jobs_mode_check;
 ALTER TABLE active_jobs
@@ -399,7 +424,7 @@ FROM report_coverage
 WHERE report.id = report_coverage.id;
 
 INSERT INTO app_settings (setting_key, setting_value, updated_at)
-VALUES ('database_schema_version', '2026-08-24.2', now())
+VALUES ('database_schema_version', '2026-08-31.1', now())
 ON CONFLICT (setting_key) DO UPDATE
   SET setting_value = EXCLUDED.setting_value,
       updated_at = now();

@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MobileJobReport } from '../components/MobileJobReport';
 import { RedGpsPin } from '../components/RedGpsPin';
 import { operationActions } from '../lib/actions';
-import { changeVehicleBindingWithAdminPassword, fetchDeviceJobs, fetchDriverIdentity, fetchVehicleBinding, fetchVehicleMotion, requestJobGpsSync, saveJob, saveJobStart, saveVehicleBinding } from '../lib/api';
+import { changeVehicleBindingWithAdminPassword, fetchDeviceJobs, fetchDriverIdentity, fetchJobRoutes, fetchVehicleBinding, fetchVehicleMotion, requestJobGpsSync, saveJob, saveJobStart, saveVehicleBinding, type JobRouteOption } from '../lib/api';
 import { isDeviceAccessError, isRetryableApiError } from '../lib/api-error';
 import { clearActiveJob, clearBinding, finalizeActiveJob, getActiveJob, getBinding, getDeviceId, persistActiveJob, persistBinding, type ActiveJob, type DeviceBinding } from '../lib/device';
 import { activeJobBelongsToBinding, deviceBindingKey, mobileStartupReady, recoverBindingFromActiveJob, shouldPreserveLocalBindingWithoutRemote } from '../lib/device-state';
@@ -71,6 +71,11 @@ export default function Index() {
   const [jobDriverIdentity, setJobDriverIdentity] = useState<DriverIdentity>(null);
   const [vehicleInput, setVehicleInput] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
+  const [routeOptions, setRouteOptions] = useState<JobRouteOption[]>([]);
+  const [selectedRouteName, setSelectedRouteName] = useState<string | null>(null);
+  const [routesVisible, setRoutesVisible] = useState(false);
+  const [routesLoading, setRoutesLoading] = useState(false);
+  const [routesError, setRoutesError] = useState('');
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [awaitingMovement, setAwaitingMovement] = useState(false);
@@ -203,6 +208,7 @@ export default function Index() {
       if (activeJobBelongsToBinding(storedJob, binding) && storedJob) {
         const restoredJobId = storedJob.jobId ?? createJobId(storedJob.deviceId, storedJob.selected, storedJob.startedAt || serverNowMs());
         setSelected(storedJob.selected);
+        setSelectedRouteName(storedJob.routeName || storedJob.pendingReport?.routeName || null);
         setActiveJobId(restoredJobId);
         setStartedAt(storedJob.startedAt || null);
         setAwaitingMovement(Boolean(storedJob.awaitingMovement));
@@ -210,7 +216,7 @@ export default function Index() {
         const restoredDriver = snapshotDriver({ driverName: storedJob.driverName, driverId: storedJob.driverId });
         setJobDriverIdentity(restoredDriver);
         if (!storedJob.jobId) void persistActiveJob({ ...storedJob, jobId: restoredJobId }).catch(() => { /* Older active jobs remain usable if migration persistence fails. */ });
-        if (storedJob.startedAt) void queueJobStartForSync({ id: restoredJobId, vehicleNumber: storedJob.vehicleNumber, deviceId: storedJob.deviceId, driverName: restoredDriver?.driverName ?? null, driverId: restoredDriver?.driverId ?? null, mode: actionLabel(storedJob.selected, 'en'), startTime: new Date(storedJob.startedAt).toISOString() });
+        if (storedJob.startedAt) void queueJobStartForSync({ id: restoredJobId, vehicleNumber: storedJob.vehicleNumber, deviceId: storedJob.deviceId, driverName: restoredDriver?.driverName ?? null, driverId: restoredDriver?.driverId ?? null, mode: actionLabel(storedJob.selected, 'en'), routeName: storedJob.routeName || storedJob.pendingReport?.routeName || null, startTime: new Date(storedJob.startedAt).toISOString() });
         setMessage(storedJob.pendingReport
           ? storedJob.pendingReport.status === 'Cancelled'
             ? (language === 'en' ? 'Cancellation restored — retry saving it' : 'กู้คืนการยกเลิกงาน — กรุณาลองบันทึกอีกครั้ง')
@@ -244,6 +250,7 @@ export default function Index() {
           setDriverIdentity(null);
           setJobDriverIdentity(null);
           setSelected(null);
+          setSelectedRouteName(null);
           setActiveJobId(null);
           setStartedAt(null);
           setAwaitingMovement(false);
@@ -261,6 +268,7 @@ export default function Index() {
           setDriverIdentity(null);
           setJobDriverIdentity(null);
           setSelected(null);
+          setSelectedRouteName(null);
           setActiveJobId(null);
           setStartedAt(null);
           setAwaitingMovement(false);
@@ -290,6 +298,34 @@ export default function Index() {
     refresh();
     const timer = setInterval(refresh, 15000);
     return () => { active = false; clearInterval(timer); };
+  }, [binding?.deviceId, binding?.vehicleNumber]);
+
+  async function loadRoutes() {
+    if (!binding) return;
+    setRoutesLoading(true);
+    setRoutesError('');
+    try {
+      const routes = await fetchJobRoutes(binding.deviceId);
+      setRouteOptions(routes);
+      setSelectedRouteName(current => {
+        if (selected && current) return current;
+        if (current && routes.some(route => route.routeName === current)) return current;
+        return routes.length === 1 ? routes[0].routeName : null;
+      });
+    } catch {
+      setRoutesError(language === 'en' ? 'Could not load routes. Tap to retry.' : 'ไม่สามารถโหลดเส้นทางได้ แตะเพื่อลองใหม่');
+    } finally {
+      setRoutesLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!binding) {
+      setRouteOptions([]);
+      setSelectedRouteName(null);
+      return;
+    }
+    void loadRoutes();
   }, [binding?.deviceId, binding?.vehicleNumber]);
 
   useEffect(() => {
@@ -405,7 +441,7 @@ export default function Index() {
       const startedDriver = snapshotDriver(driverIdentity) ?? jobDriverIdentity;
       const jobId = activeJobId ?? createJobId(binding.deviceId, selected, timestamp);
       try {
-        await persistActiveJob({ jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, selected, startedAt: timestamp, driverName: startedDriver?.driverName ?? null, driverId: startedDriver?.driverId ?? null });
+        await persistActiveJob({ jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, selected, routeName: selectedRouteName, startedAt: timestamp, driverName: startedDriver?.driverName ?? null, driverId: startedDriver?.driverId ?? null });
       } catch {
         if (active) setMessage(language === 'en' ? 'Could not save the job start — retrying' : 'ไม่สามารถบันทึกเวลาเริ่มงานได้ — กำลังลองใหม่');
         starting = false;
@@ -417,7 +453,7 @@ export default function Index() {
       setJobDriverIdentity(startedDriver);
       setAwaitingMovement(false);
       setMessage(language === 'en' ? 'Vehicle movement detected' : 'ตรวจพบรถเริ่มเคลื่อนที่แล้ว');
-      void queueJobStartForSync({ id: jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, driverName: startedDriver?.driverName ?? null, driverId: startedDriver?.driverId ?? null, mode: actionLabel(selected, 'en'), startTime: new Date(timestamp).toISOString() });
+      void queueJobStartForSync({ id: jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, driverName: startedDriver?.driverName ?? null, driverId: startedDriver?.driverId ?? null, mode: actionLabel(selected, 'en'), routeName: selectedRouteName, startTime: new Date(timestamp).toISOString() });
     };
     const poll = async () => {
       if (polling) return;
@@ -431,7 +467,7 @@ export default function Index() {
     void poll();
     const timer = setInterval(poll, 2000);
     return () => { active = false; clearInterval(timer); };
-  }, [activeJobId, awaitingMovement, binding?.deviceId, binding?.vehicleNumber, driverIdentity?.driverId, driverIdentity?.driverName, jobDriverIdentity, language, pendingReport, selected]);
+  }, [activeJobId, awaitingMovement, binding?.deviceId, binding?.vehicleNumber, driverIdentity?.driverId, driverIdentity?.driverName, jobDriverIdentity, language, pendingReport, selected, selectedRouteName]);
 
   async function connectVehicle() {
     if (!vehicleInput.trim() || savingSetup) return;
@@ -496,6 +532,7 @@ export default function Index() {
       setDriverIdentity(null);
       setJobDriverIdentity(null);
       setSelected(null);
+      setSelectedRouteName(null);
       setActiveJobId(null);
       setStartedAt(null);
       setAwaitingMovement(false);
@@ -522,6 +559,13 @@ export default function Index() {
   }
 
   function selectAction(number: string) {
+    if (number !== '9' && !selected && !selectedRouteName && (routesLoading || routeOptions.length)) {
+      setMessage(routesLoading
+        ? (language === 'en' ? 'Loading job routes…' : 'กำลังโหลดเส้นทางงาน…')
+        : (language === 'en' ? 'Choose a route before starting this job' : 'เลือกเส้นทางก่อนเริ่มงานนี้'));
+      if (!routesLoading) setRoutesVisible(true);
+      return;
+    }
     if (number === selected && pendingReport?.status === 'Cancelled') {
       setConfirmType('cancel');
       return;
@@ -595,7 +639,7 @@ export default function Index() {
         waitForMovement = true;
       }
       if (waitForMovement) {
-        const stored = await persistNewActiveJob({ jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, selected, startedAt: 0, awaitingMovement: true, driverName: pendingDriver?.driverName ?? null, driverId: pendingDriver?.driverId ?? null });
+        const stored = await persistNewActiveJob({ jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, selected, routeName: selectedRouteName, startedAt: 0, awaitingMovement: true, driverName: pendingDriver?.driverName ?? null, driverId: pendingDriver?.driverId ?? null });
         if (!stored) return;
         setActiveJobId(jobId);
         setJobDriverIdentity(pendingDriver);
@@ -604,14 +648,14 @@ export default function Index() {
         return;
       }
       const timestamp = serverNowMs();
-      const stored = await persistNewActiveJob({ jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, selected, startedAt: timestamp, driverName: pendingDriver?.driverName ?? null, driverId: pendingDriver?.driverId ?? null });
+      const stored = await persistNewActiveJob({ jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, selected, routeName: selectedRouteName, startedAt: timestamp, driverName: pendingDriver?.driverName ?? null, driverId: pendingDriver?.driverId ?? null });
       if (!stored) return;
       setActiveJobId(jobId);
       setJobDriverIdentity(pendingDriver);
       setStartedAt(timestamp);
       setAwaitingMovement(false);
       setMessage(language === 'en' ? 'Vehicle started' : 'รถเริ่มแล้ว');
-      void queueJobStartForSync({ id: jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, driverName: pendingDriver?.driverName ?? null, driverId: pendingDriver?.driverId ?? null, mode: actionLabel(selected, 'en'), startTime: new Date(timestamp).toISOString() });
+      void queueJobStartForSync({ id: jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, driverName: pendingDriver?.driverName ?? null, driverId: pendingDriver?.driverId ?? null, mode: actionLabel(selected, 'en'), routeName: selectedRouteName, startTime: new Date(timestamp).toISOString() });
     } finally {
       setStartingJob(false);
     }
@@ -639,6 +683,7 @@ export default function Index() {
         vehicleNumber: binding.vehicleNumber,
         deviceId: binding.deviceId,
         selected,
+        routeName: report.routeName || selectedRouteName,
         startedAt: startedAt ?? (typeof completedStart === 'number' && Number.isFinite(completedStart) ? completedStart : 0),
         ...(awaitingMovement && report.status === 'Cancelled' ? { awaitingMovement: true } : {}),
         driverName: report.driverName,
@@ -680,7 +725,7 @@ export default function Index() {
       const report = finalReportForIntent(pendingReport, 'completed', () => {
         const end = Math.max(serverNowMs(), fallbackStart);
         const jobDriver = reportDriver(jobDriverIdentity, driverIdentity);
-        return { id: reportId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, driverName: jobDriver?.driverName || null, driverId: jobDriver?.driverId || null, mode: actionLabel(selected, 'en'), startTime: new Date(fallbackStart).toISOString(), endTime: new Date(end).toISOString(), duration: formatDuration(end - fallbackStart) };
+        return { id: reportId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, driverName: jobDriver?.driverName || null, driverId: jobDriver?.driverId || null, mode: actionLabel(selected, 'en'), routeName: selectedRouteName, startTime: new Date(fallbackStart).toISOString(), endTime: new Date(end).toISOString(), duration: formatDuration(end - fallbackStart) };
       });
       if (!report) {
         setMessage(language === 'en' ? 'Cancellation is already pending' : 'กำลังรอบันทึกการยกเลิกงาน');
@@ -707,6 +752,7 @@ export default function Index() {
         setAwaitingMovement(false);
         setJobDriverIdentity(null);
         updatePendingReport(null);
+        if (finishingDay) setSelectedRouteName(null);
         if (finishingDay) completedDayReport = { ...report, pendingUpload: syncState === 'queued', uploadFailed: syncState === 'rejected' };
       }
     } catch (error) {
@@ -733,7 +779,7 @@ export default function Index() {
         const end = serverNowMs();
         const effectiveStart = startedAt ?? end;
         const jobDriver = reportDriver(jobDriverIdentity, driverIdentity);
-        return { id: reportId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, driverName: jobDriver?.driverName || null, driverId: jobDriver?.driverId || null, mode: actionLabel(selected, 'en'), startTime: new Date(effectiveStart).toISOString(), endTime: new Date(end).toISOString(), duration: formatDuration(end - effectiveStart), status: 'Cancelled' };
+        return { id: reportId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, driverName: jobDriver?.driverName || null, driverId: jobDriver?.driverId || null, mode: actionLabel(selected, 'en'), routeName: selectedRouteName, startTime: new Date(effectiveStart).toISOString(), endTime: new Date(end).toISOString(), duration: formatDuration(end - effectiveStart), status: 'Cancelled' };
       });
       if (report !== pendingReport && !await persistPendingFinalReport(report)) return;
       const syncState = await saveOrQueueJob(report);
@@ -906,6 +952,21 @@ export default function Index() {
   // never the number or position of the job buttons.
   const actionPanel = <View style={styles.columns}>
     <View style={[styles.panel, compactLandscape && compactStyles.panel, largeText && accessibilityStyles.panel]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={selectedRouteName ? `${language === 'en' ? 'Selected route' : 'เส้นทางที่เลือก'} ${selectedRouteName}` : (language === 'en' ? 'Choose job route' : 'เลือกเส้นทางงาน')}
+        accessibilityHint={selected ? (language === 'en' ? 'Finish or cancel the active activity before changing route' : 'จบหรือยกเลิกกิจกรรมปัจจุบันก่อนเปลี่ยนเส้นทาง') : undefined}
+        accessibilityState={{ disabled: Boolean(selected), busy: routesLoading }}
+        disabled={Boolean(selected)}
+        onPress={() => {
+          setRoutesVisible(true);
+          if (routesError || !routeOptions.length) void loadRoutes();
+        }}
+        style={[routeStyles.selector, compactLandscape && routeStyles.selectorCompact, selected && routeStyles.selectorLocked]}
+      >
+        <View style={routeStyles.selectorText}><Text style={routeStyles.selectorLabel}>{language === 'en' ? 'JOB ROUTE' : 'เส้นทางงาน'}</Text><Text numberOfLines={1} style={routeStyles.selectorValue}>{selectedRouteName || (routesLoading ? (language === 'en' ? 'Loading routes…' : 'กำลังโหลดเส้นทาง…') : routesError || (language === 'en' ? 'Choose route' : 'เลือกเส้นทาง'))}</Text></View>
+        <Text style={routeStyles.selectorAction}>{selected ? (language === 'en' ? 'Locked' : 'ล็อก') : (language === 'en' ? 'Change' : 'เปลี่ยน')}</Text>
+      </Pressable>
       <View style={[styles.grid, compactLandscape && compactStyles.grid, largeText && accessibilityStyles.grid]}>
         {actionRows.map((row, rowIndex) => (
           <View style={[styles.actionRow, compactLandscape && compactStyles.actionRow, largeText && accessibilityStyles.actionRow]} key={rowIndex}>
@@ -957,7 +1018,10 @@ export default function Index() {
     </View>
     <View style={[styles.content, portrait && layoutStyles.contentPortrait, compactLandscape && compactStyles.content, largeText && accessibilityStyles.content]}>{actionPanel}</View>
     <Modal animationType="fade" onRequestClose={dismissConfirmation} onShow={focusConfirmationTitle} statusBarTranslucent transparent visible={confirmType !== null}>
-      {confirmType ? <Pressable accessible={false} onPress={dismissConfirmation} style={modalStyles.overlay}><Pressable accessibilityViewIsModal onAccessibilityEscape={dismissConfirmation} onPress={event => event.stopPropagation()} style={modalStyles.card}><ScrollView contentContainerStyle={modalStyles.cardContent} keyboardShouldPersistTaps="handled"><RedGpsPin size={42} /><Text ref={confirmationTitleRef} accessible accessibilityLiveRegion="assertive" accessibilityRole="header" style={modalStyles.title}>{confirmationTitle}</Text><Text style={modalStyles.body}>{confirmType === 'start' ? (language === 'en' ? `Job: ${actionLabel(selected, language)}\nThe start time will be recorded when the vehicle moves.` : `กิจกรรม: ${actionLabel(selected, language)}\nระบบจะบันทึกเวลาเริ่มเมื่อรถเคลื่อนที่`) : confirmType === 'day_end' ? (language === 'en' ? 'Finish work will be saved immediately, then today’s saved jobs and timeline will open.' : 'ระบบจะบันทึกการจบงานทันที แล้วเปิดงานที่บันทึกและไทม์ไลน์ของวันนี้') : confirmType === 'finish' ? selected === '9' ? (language === 'en' ? 'Finish work will be saved, then today’s saved jobs and timeline will open on this tablet.' : 'ระบบจะบันทึกการจบงาน แล้วเปิดงานที่บันทึกและไทม์ไลน์ของวันนี้บนแท็บเล็ต') : awaitingMovement && !startedAt ? (language === 'en' ? 'Movement has not been detected. The job selection time will be used as the start time, and the job will be saved to the dashboard.' : 'ยังไม่ตรวจพบการเคลื่อนที่ ระบบจะใช้เวลาที่เลือกกิจกรรมเป็นเวลาเริ่ม และบันทึกงานไปยังแดชบอร์ด') : (language === 'en' ? 'The completed job will be saved and sent to the web dashboard.' : 'ระบบจะบันทึกงานที่เสร็จแล้วและส่งไปยังแดชบอร์ดเว็บ') : (language === 'en' ? 'The job will be recorded as cancelled.' : 'งานนี้จะถูกบันทึกเป็นงานที่ยกเลิก')}</Text><View style={modalStyles.actions}><Pressable accessibilityLabel={confirmationDismissLabel} accessibilityRole="button" accessibilityState={{ disabled: savingJob }} disabled={savingJob} onPress={dismissConfirmation} style={[modalStyles.cancel, savingJob && layoutStyles.disabled]}><Text style={modalStyles.cancelText}>{confirmType === 'start' ? (language === 'en' ? 'Choose another' : 'เลือกกิจกรรมอื่น') : confirmType === 'day_end' ? (language === 'en' ? 'Cancel' : 'ยกเลิก') : (language === 'en' ? 'Keep job on' : 'ทำงานต่อ')}</Text></Pressable>{confirmType === 'finish' ? <Pressable accessibilityLabel={language === 'en' ? 'Cancel current job' : 'ยกเลิกงานปัจจุบัน'} accessibilityRole="button" accessibilityState={{ disabled: savingJob, busy: savingJob }} disabled={savingJob} onPress={confirmCancel} style={[modalStyles.cancelJob, savingJob && layoutStyles.disabled]}><Text style={modalStyles.cancelJobText}>{language === 'en' ? 'Cancel job' : 'ยกเลิกงาน'}</Text></Pressable> : null}<Pressable accessibilityLabel={confirmationSubmitLabel} accessibilityRole="button" accessibilityState={{ disabled: savingJob, busy: savingJob }} disabled={savingJob} onPress={confirmType === 'start' ? confirmStart : confirmType === 'finish' || confirmType === 'day_end' ? confirmFinish : confirmCancel} style={[modalStyles.confirm, savingJob && layoutStyles.disabled]}><Text style={modalStyles.confirmText}>{savingJob ? (language === 'en' ? 'Saving…' : 'กำลังบันทึก…') : confirmType === 'cancel' ? (language === 'en' ? 'Retry cancellation' : 'ลองบันทึกการยกเลิกอีกครั้ง') : confirmType === 'start' ? (language === 'en' ? 'Turn on' : 'เริ่มงาน') : confirmType === 'day_end' ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน') : selected === '9' ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน') : (language === 'en' ? 'Turn off' : 'ปิดงาน')}</Text></Pressable></View></ScrollView></Pressable></Pressable> : null}
+      {confirmType ? <Pressable accessible={false} onPress={dismissConfirmation} style={modalStyles.overlay}><Pressable accessibilityViewIsModal onAccessibilityEscape={dismissConfirmation} onPress={event => event.stopPropagation()} style={modalStyles.card}><ScrollView contentContainerStyle={modalStyles.cardContent} keyboardShouldPersistTaps="handled"><RedGpsPin size={42} /><Text ref={confirmationTitleRef} accessible accessibilityLiveRegion="assertive" accessibilityRole="header" style={modalStyles.title}>{confirmationTitle}</Text>{selectedRouteName ? <Text style={routeStyles.confirmRoute}>{language === 'en' ? 'Route' : 'เส้นทาง'} · {selectedRouteName}</Text> : null}<Text style={modalStyles.body}>{confirmType === 'start' ? (language === 'en' ? `Job: ${actionLabel(selected, language)}\nThe start time will be recorded when the vehicle moves.` : `กิจกรรม: ${actionLabel(selected, language)}\nระบบจะบันทึกเวลาเริ่มเมื่อรถเคลื่อนที่`) : confirmType === 'day_end' ? (language === 'en' ? 'Finish work will be saved immediately, then today’s saved jobs and timeline will open.' : 'ระบบจะบันทึกการจบงานทันที แล้วเปิดงานที่บันทึกและไทม์ไลน์ของวันนี้') : confirmType === 'finish' ? selected === '9' ? (language === 'en' ? 'Finish work will be saved, then today’s saved jobs and timeline will open on this tablet.' : 'ระบบจะบันทึกการจบงาน แล้วเปิดงานที่บันทึกและไทม์ไลน์ของวันนี้บนแท็บเล็ต') : awaitingMovement && !startedAt ? (language === 'en' ? 'Movement has not been detected. The job selection time will be used as the start time, and the job will be saved to the dashboard.' : 'ยังไม่ตรวจพบการเคลื่อนที่ ระบบจะใช้เวลาที่เลือกกิจกรรมเป็นเวลาเริ่ม และบันทึกงานไปยังแดชบอร์ด') : (language === 'en' ? 'The completed job will be saved and sent to the web dashboard.' : 'ระบบจะบันทึกงานที่เสร็จแล้วและส่งไปยังแดชบอร์ดเว็บ') : (language === 'en' ? 'The job will be recorded as cancelled.' : 'งานนี้จะถูกบันทึกเป็นงานที่ยกเลิก')}</Text><View style={modalStyles.actions}><Pressable accessibilityLabel={confirmationDismissLabel} accessibilityRole="button" accessibilityState={{ disabled: savingJob }} disabled={savingJob} onPress={dismissConfirmation} style={[modalStyles.cancel, savingJob && layoutStyles.disabled]}><Text style={modalStyles.cancelText}>{confirmType === 'start' ? (language === 'en' ? 'Choose another' : 'เลือกกิจกรรมอื่น') : confirmType === 'day_end' ? (language === 'en' ? 'Cancel' : 'ยกเลิก') : (language === 'en' ? 'Keep job on' : 'ทำงานต่อ')}</Text></Pressable>{confirmType === 'finish' ? <Pressable accessibilityLabel={language === 'en' ? 'Cancel current job' : 'ยกเลิกงานปัจจุบัน'} accessibilityRole="button" accessibilityState={{ disabled: savingJob, busy: savingJob }} disabled={savingJob} onPress={confirmCancel} style={[modalStyles.cancelJob, savingJob && layoutStyles.disabled]}><Text style={modalStyles.cancelJobText}>{language === 'en' ? 'Cancel job' : 'ยกเลิกงาน'}</Text></Pressable> : null}<Pressable accessibilityLabel={confirmationSubmitLabel} accessibilityRole="button" accessibilityState={{ disabled: savingJob, busy: savingJob }} disabled={savingJob} onPress={confirmType === 'start' ? confirmStart : confirmType === 'finish' || confirmType === 'day_end' ? confirmFinish : confirmCancel} style={[modalStyles.confirm, savingJob && layoutStyles.disabled]}><Text style={modalStyles.confirmText}>{savingJob ? (language === 'en' ? 'Saving…' : 'กำลังบันทึก…') : confirmType === 'cancel' ? (language === 'en' ? 'Retry cancellation' : 'ลองบันทึกการยกเลิกอีกครั้ง') : confirmType === 'start' ? (language === 'en' ? 'Turn on' : 'เริ่มงาน') : confirmType === 'day_end' ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน') : selected === '9' ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน') : (language === 'en' ? 'Turn off' : 'ปิดงาน')}</Text></Pressable></View></ScrollView></Pressable></Pressable> : null}
+    </Modal>
+    <Modal animationType="fade" onRequestClose={() => setRoutesVisible(false)} statusBarTranslucent transparent visible={routesVisible && !selected}>
+      <Pressable accessible={false} onPress={() => setRoutesVisible(false)} style={modalStyles.overlay}><Pressable accessibilityViewIsModal onAccessibilityEscape={() => setRoutesVisible(false)} onPress={event => event.stopPropagation()} style={modalStyles.card}><Text accessibilityRole="header" style={modalStyles.title}>{language === 'en' ? 'Choose job route' : 'เลือกเส้นทางงาน'}</Text><Text style={modalStyles.body}>{language === 'en' ? 'This route will stay selected for each activity until you change it or finish work.' : 'เส้นทางนี้จะใช้กับแต่ละกิจกรรมจนกว่าจะเปลี่ยนเส้นทางหรือจบงาน'}</Text>{routesLoading ? <Text accessibilityLiveRegion="polite" style={routeStyles.routeState}>{language === 'en' ? 'Loading routes…' : 'กำลังโหลดเส้นทาง…'}</Text> : null}{routesError ? <Text accessibilityRole="alert" style={routeStyles.routeError}>{routesError}</Text> : null}<ScrollView style={routeStyles.routeList}>{routeOptions.map(route => <Pressable accessibilityRole="radio" accessibilityState={{ checked: selectedRouteName === route.routeName }} key={route.id} onPress={() => { setSelectedRouteName(route.routeName); setRoutesVisible(false); setMessage(language === 'en' ? `Route ${route.routeName} selected` : `เลือกเส้นทาง ${route.routeName} แล้ว`); }} style={[routeStyles.routeOption, selectedRouteName === route.routeName && routeStyles.routeOptionSelected]}><Text style={routeStyles.routeOptionName}>{route.routeName}</Text><Text style={routeStyles.routeOptionMark}>{selectedRouteName === route.routeName ? '✓' : '›'}</Text></Pressable>)}</ScrollView>{!routesLoading && !routeOptions.length ? <Text style={routeStyles.routeState}>{language === 'en' ? 'No routes are configured yet. Ask an administrator to add one in the Routes dashboard.' : 'ยังไม่มีเส้นทาง ให้ผู้ดูแลเพิ่มในหน้าเส้นทางบนแดชบอร์ด'}</Text> : null}<View style={modalStyles.actions}><Pressable accessibilityRole="button" onPress={() => void loadRoutes()} style={modalStyles.cancel}><Text style={modalStyles.cancelText}>{language === 'en' ? 'Refresh routes' : 'รีเฟรชเส้นทาง'}</Text></Pressable><Pressable accessibilityRole="button" onPress={() => setRoutesVisible(false)} style={modalStyles.confirm}><Text style={modalStyles.confirmText}>{language === 'en' ? 'Close' : 'ปิด'}</Text></Pressable></View></Pressable></Pressable>
     </Modal>
     <Modal animationType="fade" onAccessibilityEscape={dismissVehicleAdmin} onRequestClose={dismissVehicleAdmin} onShow={focusVehicleAdminTitle} statusBarTranslucent transparent visible={vehicleAdminVisible}>
       <ScrollView contentContainerStyle={vehicleAdminStyles.scroll} keyboardShouldPersistTaps="handled">
@@ -1025,6 +1089,24 @@ const languageStyles = StyleSheet.create({
   setupButton: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-end', borderWidth: 1, borderColor: '#C8CDD2', borderRadius: 7, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
   setupButtonText: { color: colors.black, fontWeight: '800' },
   headerButton: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+});
+
+const routeStyles = StyleSheet.create({
+  selector: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#C8CDD2', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 7, marginBottom: 8, backgroundColor: '#F8F9FA' },
+  selectorCompact: { minHeight: 42, marginBottom: 6, paddingVertical: 5 },
+  selectorLocked: { backgroundColor: '#EEF0F2' },
+  selectorText: { flex: 1, minWidth: 0 },
+  selectorLabel: { color: colors.grey, fontSize: 9, fontWeight: '800', letterSpacing: 1 },
+  selectorValue: { color: colors.black, fontSize: 15, fontWeight: '800', marginTop: 1 },
+  selectorAction: { color: colors.red, fontSize: 12, fontWeight: '800' },
+  confirmRoute: { alignSelf: 'flex-start', marginTop: 10, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 5, backgroundColor: '#FFF1F1', color: colors.maroon, fontSize: 12, fontWeight: '800' },
+  routeList: { maxHeight: 300, marginTop: 14 },
+  routeOption: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#D7DBDF', borderRadius: 8, paddingHorizontal: 14, marginBottom: 8, backgroundColor: colors.white },
+  routeOptionSelected: { borderColor: colors.red, borderWidth: 2, backgroundColor: '#FFF7F7' },
+  routeOptionName: { flex: 1, color: colors.black, fontSize: 16, fontWeight: '800' },
+  routeOptionMark: { color: colors.red, fontSize: 18, fontWeight: '800' },
+  routeState: { color: colors.grey, fontSize: 13, lineHeight: 19, marginTop: 14 },
+  routeError: { color: colors.maroon, fontSize: 12, fontWeight: '700', marginTop: 12 },
 });
 
 const modalStyles = StyleSheet.create({ overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 }, card: { width: '100%', maxWidth: 420, maxHeight: '90%', backgroundColor: colors.white, borderRadius: 14, padding: 26 }, cardContent: { flexGrow: 1 }, title: { color: colors.black, fontSize: 22, fontWeight: '800', marginTop: 12 }, body: { color: colors.grey, fontSize: 14, lineHeight: 21, marginTop: 8 }, actions: { gap: 8, marginTop: 24 }, cancel: { minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#D7DBDF' }, cancelText: { color: colors.black, fontWeight: '700', textAlign: 'center' }, cancelJob: { minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.red, backgroundColor: '#FFF1F1' }, cancelJobText: { color: colors.red, fontWeight: '800', textAlign: 'center' }, confirm: { minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, backgroundColor: colors.red }, confirmText: { color: colors.white, fontWeight: '800', textAlign: 'center' } });

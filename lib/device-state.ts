@@ -63,12 +63,14 @@ function parsePendingReport(value: unknown): JobReportInput | null {
     || (report.status !== undefined && report.status !== 'Cancelled')) return null;
   const driverName = trimmedText(report.driverName) || null;
   const driverId = trimmedText(report.driverId) || null;
+  const routeName = trimmedText(report.routeName) || null;
   return {
     id,
     vehicleNumber,
     deviceId,
     driverName,
     driverId,
+    ...(routeName ? { routeName } : {}),
     mode,
     startTime,
     endTime,
@@ -120,6 +122,7 @@ export function parseStoredActiveJob(raw: string | null): ActiveJob | null {
     const rawJobId = trimmedText(value.jobId) || undefined;
     const driverName = trimmedText(value.driverName) || null;
     const driverId = trimmedText(value.driverId) || null;
+    const routeName = trimmedText(value.routeName) || null;
     const pendingCandidate = parsePendingReport(value.pendingReport);
     const pendingReport = pendingCandidate
       && pendingCandidate.vehicleNumber === vehicleNumber
@@ -142,6 +145,7 @@ export function parseStoredActiveJob(raw: string | null): ActiveJob | null {
       ...(awaitingMovement ? { awaitingMovement: true } : {}),
       driverName,
       driverId,
+      ...(routeName ? { routeName } : {}),
       ...(pendingReport ? { pendingReport } : {}),
     };
   } catch {

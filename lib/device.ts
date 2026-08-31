@@ -8,7 +8,7 @@ const CONFIG_KEY='songdee.vehicle.binding';
 const ACTIVE_JOB_KEY='songdee.active.job';
 const DEVICE_CREDENTIAL_KEY='songdee.device.credential';
 export type DeviceBinding={vehicleNumber:string;deviceId:string};
-export type ActiveJob={jobId?:string;vehicleNumber:string;deviceId:string;selected:string;startedAt:number;awaitingMovement?:boolean;driverName?:string|null;driverId?:string|null;pendingReport?:JobReportInput};
+export type ActiveJob={jobId?:string;vehicleNumber:string;deviceId:string;selected:string;routeName?:string|null;startedAt:number;awaitingMovement?:boolean;driverName?:string|null;driverId?:string|null;pendingReport?:JobReportInput};
 export async function getDeviceId(){const deviceId=Application.getAndroidId?.()?.trim();if(!deviceId)throw new Error('Android device ID is unavailable');return deviceId}
 export async function getBinding(){const raw=await SecureStore.getItemAsync(CONFIG_KEY);const binding=parseStoredBinding(raw);if(raw&&!binding)await SecureStore.deleteItemAsync(CONFIG_KEY).catch(()=>{});return binding}
 export async function persistBinding(binding:DeviceBinding){await SecureStore.setItemAsync(CONFIG_KEY,JSON.stringify(binding));return binding}

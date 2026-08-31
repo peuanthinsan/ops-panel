@@ -35,3 +35,12 @@ test('flags a GPS run that remains outside the route for the configured duration
   assert.equal(result.status, 'deviated');
   assert.equal(result.longestDurationSeconds, 120);
 });
+
+test('does not join sparse off-route samples across a long GPS gap', () => {
+  const anchors = [{ latitude: 13.7563, longitude: 100.5018 }, { latitude: 13.7563, longitude: 100.5118 }];
+  const result = evaluateRouteDeviation([
+    { capturedAt: '2026-08-31T01:00:00.000Z', latitude: 13.7663, longitude: 100.5020 },
+    { capturedAt: '2026-08-31T02:00:00.000Z', latitude: 13.7663, longitude: 100.5020 },
+  ], anchors, { distanceKm: 0.5, durationSeconds: 90 });
+  assert.equal(result.status, 'within_route');
+});
