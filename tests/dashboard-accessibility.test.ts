@@ -188,7 +188,7 @@ test('daily print requires exactly one vehicle and never falls back to a fleet v
   const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
   assert.match(reports, /const canPrintDailyReport = Boolean\(selectedPrintPeriodId && vehicles\.length === 1/);
   assert.match(reports, /disabled=\{!canPrintDailyReport\}/);
-  assert.match(reports, /printVehicleRequired: 'Select exactly one vehicle in the header\.'/);
+  assert.match(reports, /printVehicleRequired: 'Select exactly one vehicle\.'/);
   assert.match(reports, /const vehicle = String\(report\.vehicleNumber \|\| ''\)\.trim\(\)/);
   assert.match(reports, /new URLSearchParams\(\{ vehicle, workPeriodId, lang \}\)/);
   assert.match(print, /const vehicle = String\(requestedVehicle \|\| ''\)\.trim\(\)/);

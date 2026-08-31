@@ -69,6 +69,9 @@ function timelineSegment(report, lang, labels, scaleStart, scaleEnd) {
     ? { left: ((start - scaleStart) / duration) * 100, width: (Math.max(60_000, end - start) / duration) * 100 }
     : timelinePosition(report.startTime, report.endTime);
   if (!position) return null;
+  const left = Number.isFinite(position.left) ? Math.max(0, Math.min(100, position.left)) : 0;
+  const availableWidth = Math.max(0, 100 - left);
+  const width = Math.min(availableWidth, Number.isFinite(position.width) ? Math.max(0.01, position.width) : 0.01);
   const modeLabel = modeCopy[report.mode]?.[lang] || report.mode || '—';
   const cancelled = report.status === 'Cancelled';
   const finishWork = report.mode === 'Finish work';
@@ -93,7 +96,7 @@ function timelineSegment(report, lang, labels, scaleStart, scaleEnd) {
     finishWork,
     detail,
     accessibleLabel: `${labels.activity}: ${detail.activity}. ${labels.status}: ${detail.status}. ${labels.start}: ${detail.start}. ${labels.end}: ${detail.end}. ${labels.duration}: ${detail.duration}. ${labels.topSpeed}: ${detail.speed}. ${labels.vehicle}: ${detail.vehicle}. ${labels.driver}: ${detail.driver}. ${labels.device}: ${detail.device}. ${labels.gps}: ${detail.gps}. ${labels.location}: ${detail.location}. ${labels.reportId}: ${detail.reportId}.`,
-    style: { left: `${position.left}%`, width: `${Math.max(0.01, position.width)}%`, backgroundColor: reportModeColor(report.mode), opacity: cancelled ? 0.42 : 1 },
+    style: { left: `${left}%`, width: `${width}%`, backgroundColor: reportModeColor(report.mode), opacity: cancelled ? 0.42 : 1 },
   };
 }
 
