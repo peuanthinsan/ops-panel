@@ -22,7 +22,7 @@ import { fetchDataFmDriverIdentity, fetchDataFmGpsHistory } from './data-fm-gps.
 import { fmsSyncNeedsRetry } from './fms-sync-state.mjs';
 import { DEFAULT_GPS_PAIR_TOLERANCE_MS, pairExternalGpsSources } from './external-gps.mjs';
 import { gpsPairingMetadata } from './gps-pairing.mjs';
-import { evaluateRouteDeviation, parseRouteAnchors } from '../route-deviation.mjs';
+import { evaluateRouteDeviation, normalizeRoutePath, parseRouteAnchors } from '../route-deviation.mjs';
 
 const allowedModes = new Set([
   'Load',
@@ -1353,7 +1353,8 @@ async function saveJobRoute(input, id = null) {
   if (!isGoogleMapsHost || (!hostname.includes('goo.gl') && !parsed.pathname.toLowerCase().includes('maps'))) {
     throw new ApiError(400, 'googleMapsUrl must be a Google Maps link');
   }
-  const anchors = parseRouteAnchors(googleMapsUrl);
+  const routePath = normalizeRoutePath(input.routePath);
+  const anchors = routePath.length >= 2 ? routePath : parseRouteAnchors(googleMapsUrl);
   const sql = getDatabase();
   const routeId = id || `ROUTE-${crypto.randomUUID()}`;
   try {

@@ -21,6 +21,24 @@ export function parseRouteAnchors(value) {
   return anchors.slice(0, 50);
 }
 
+export function normalizeRoutePath(value, maximumPoints = 2000) {
+  if (!Array.isArray(value)) return [];
+  const points = [];
+  for (const item of value) {
+    const latitude = Number(item?.latitude ?? item?.lat);
+    const longitude = Number(item?.longitude ?? item?.lng);
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180
+      || !Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
+    const previous = points.at(-1);
+    if (!previous || previous.latitude !== latitude || previous.longitude !== longitude) {
+      points.push({ latitude, longitude });
+    }
+  }
+  const limit = Math.max(2, Math.min(5000, Math.floor(Number(maximumPoints) || 2000)));
+  if (points.length <= limit) return points;
+  return Array.from({ length: limit }, (_, index) => points[Math.round(index * (points.length - 1) / (limit - 1))]);
+}
+
 function toRadians(value) { return value * Math.PI / 180; }
 
 function distanceBetween(a, b) {

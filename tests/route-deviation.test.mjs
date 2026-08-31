@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateRouteDeviation, parseRouteAnchors } from '../web/lib/route-deviation.mjs';
+import { evaluateRouteDeviation, normalizeRoutePath, parseRouteAnchors } from '../web/lib/route-deviation.mjs';
 
 test('parses coordinate anchors from a Google Maps directions link', () => {
   const anchors = parseRouteAnchors('https://www.google.com/maps/dir/13.7563,100.5018/13.7367,100.5231');
@@ -22,6 +22,14 @@ test('extracts route waypoints from Google Maps encoded place data', () => {
     { latitude: 13.6159393, longitude: 101.0266272 },
     { latitude: 14.4764361, longitude: 100.9632852 },
   ]);
+});
+
+test('normalizes a computed Google route path for storage and preserves both endpoints', () => {
+  const path = Array.from({ length: 8 }, (_, index) => ({ lat: 13 + index / 10, lng: 100 + index / 10 }));
+  const normalized = normalizeRoutePath(path, 4);
+  assert.equal(normalized.length, 4);
+  assert.deepEqual(normalized[0], { latitude: 13, longitude: 100 });
+  assert.deepEqual(normalized.at(-1), { latitude: 13.7, longitude: 100.7 });
 });
 
 test('flags a GPS run that remains outside the route for the configured duration', () => {

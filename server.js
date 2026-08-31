@@ -9,7 +9,7 @@ import { queryLocalDeviceJobs } from './lib/device-job-history.mjs';
 import { localReportFacets, queryLocalReports } from './lib/local-report-query.mjs';
 import { fetchDataFmDriverIdentity, fetchDataFmGpsHistory } from './web/lib/server/data-fm-gps.mjs';
 import { DEFAULT_GPS_PAIR_TOLERANCE_MS, pairExternalGpsSources } from './web/lib/server/external-gps.mjs';
-import { evaluateRouteDeviation, parseRouteAnchors } from './web/lib/route-deviation.mjs';
+import { evaluateRouteDeviation, normalizeRoutePath, parseRouteAnchors } from './web/lib/route-deviation.mjs';
 
 const port = process.env.PORT || 4000;
 const maximumJsonBodyBytes = 64 * 1024;
@@ -377,7 +377,8 @@ function routeInput(input, existingId = null) {
   }
   const duplicate = jobRoutes.find(item => item.routeName.toLowerCase() === routeName.toLowerCase() && item.id !== existingId);
   if (duplicate) return { error: 'A route with this name already exists.', status: 409 };
-  return { routeName, googleMapsUrl, anchors: parseRouteAnchors(googleMapsUrl) };
+  const routePath = normalizeRoutePath(input.routePath);
+  return { routeName, googleMapsUrl, anchors: routePath.length >= 2 ? routePath : parseRouteAnchors(googleMapsUrl) };
 }
 
 function activeRouteName(value) {
