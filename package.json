@@ -36,6 +36,7 @@
     "test:server-contract": "node --test tests/server-contract.test.ts",
     "test:actions": "node --test tests/actions.test.ts",
     "test:active-job-finalization": "node --test tests/active-job-finalization.test.ts",
+    "test:route-deviation": "node --test tests/route-deviation.test.mjs",
     "test:adapter-url": "node --test tests/adapter-url.test.ts",
     "server": "node server.js",
     "dev:web": "npm --prefix web run dev",

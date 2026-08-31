@@ -2,20 +2,21 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { formatReportCoordinate, formatReportDateTime, reportDateKey } from '../lib/report-view';
-import { adminFetch } from './dashboard-api';
+import { adminFetch, adminFetchReportGpsSamples } from './dashboard-api';
+import RouteMap from './route-map';
 
 const copy = {
   en: {
     title: 'GPS detail', close: 'Close', vehicle: 'Vehicle', driver: 'Driver', activity: 'Activity', time: 'Time',
     device: 'GPS points', last: 'Last GPS fix', captured: 'GPS fix time', coordinates: 'Coordinates', speedLabel: 'Speed', heading: 'Heading',
     loading: 'Loading GPS points…', failed: 'Could not load GPS detail.', empty: 'No GPS points are linked to this job yet.',
-    previous: 'Previous', next: 'Next', page: 'Page', of: 'of', print: 'Print job', speed: 'km/h', degrees: '°',
+    previous: 'Previous', next: 'Next', page: 'Page', of: 'of', print: 'Print job', speed: 'km/h', degrees: '°', routeMap: 'Route vs GPS map', openRoute: 'Open saved route', withinRoute: 'Within route', deviated: 'Route deviation', deviationBody: 'GPS stayed outside the route corridor for', seconds: 'seconds', noRoute: 'No saved route is assigned to this job.',
   },
   th: {
     title: 'รายละเอียด GPS', close: 'ปิด', vehicle: 'รถ', driver: 'พขร.', activity: 'กิจกรรม', time: 'เวลา',
     device: 'จุด GPS', last: 'พิกัด GPS ล่าสุด', captured: 'เวลาพิกัด GPS', coordinates: 'พิกัด', speedLabel: 'ความเร็ว', heading: 'ทิศทาง',
     loading: 'กำลังโหลดจุด GPS…', failed: 'ไม่สามารถโหลดรายละเอียด GPS', empty: 'ยังไม่มีจุด GPS ที่เชื่อมกับงานนี้',
-    previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', print: 'พิมพ์งาน', speed: 'กม./ชม.', degrees: '°',
+    previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', print: 'พิมพ์งาน', speed: 'กม./ชม.', degrees: '°', routeMap: 'แผนที่เส้นทางเทียบกับ GPS', openRoute: 'เปิดเส้นทางที่บันทึก', withinRoute: 'อยู่ในเส้นทาง', deviated: 'ออกนอกเส้นทาง', deviationBody: 'GPS อยู่นอกแนวเส้นทางต่อเนื่องเป็นเวลา', seconds: 'วินาที', noRoute: 'ยังไม่มีเส้นทางที่ผูกกับงานนี้',
   },
 };
 
@@ -49,6 +50,7 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
   const closeRef = useRef(null);
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState(null);
+  const [mapSamples, setMapSamples] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -90,7 +92,7 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
     setLoading(true);
     setError('');
     adminFetch(`/api/admin/reports/${encodeURIComponent(report.id)}/gps?page=${page}&pageSize=50`, { signal: controller.signal })
-      .then(data => { if (active) setDetail(data); })
+      .then(data => { if (active) { setDetail(data); if (data.route) adminFetchReportGpsSamples(report.id, { signal: controller.signal }).then(all => active && setMapSamples(all)).catch(() => {}); } })
       .catch(errorValue => { if (active && errorValue?.name !== 'AbortError') setError(t.failed); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; controller.abort(); };
@@ -100,6 +102,7 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
   const samples = Array.isArray(detail?.samples) ? detail.samples : [];
   const pageInfo = detail?.pageInfo || { page: 1, totalPages: 1 };
   const displayedReport = detail?.report || report;
+  const routeDeviation = detail?.routeDeviation;
 
   return <div className="gps-drawer-layer">
     <button className="gps-drawer-scrim" type="button" aria-label={t.close} onClick={onClose} />
@@ -122,6 +125,7 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
             <div><dt>{t.last}</dt><dd>{summary.lastCapturedAt ? time(summary.lastCapturedAt, lang) : '—'}</dd></div>
           </dl>
         </section>
+        {detail?.route ? <section className="gps-route-section"><div className="gps-route-heading"><h2>{t.routeMap}</h2><a href={detail.route.googleMapsUrl} target="_blank" rel="noreferrer">{t.openRoute}</a></div><RouteMap anchors={detail.route.anchors} samples={mapSamples.length ? mapSamples : samples} label={t.routeMap} />{routeDeviation?.status === 'deviated' ? <p className="route-deviation-status deviated"><strong>{t.deviated}</strong>{` · ${t.deviationBody} ${Math.round(routeDeviation.longestDurationSeconds)} ${t.seconds}`}</p> : null}{routeDeviation?.status === 'within_route' ? <p className="route-deviation-status within-route"><strong>{t.withinRoute}</strong></p> : null}</section> : <p className="gps-route-missing">{t.noRoute}</p>}
         {loading ? <p className="gps-detail-state" role="status">{t.loading}</p> : null}
         {error ? <p className="error gps-detail-state" role="alert">{error}</p> : null}
         {!loading && !error && !samples.length ? <p className="gps-detail-state">{t.empty}</p> : null}

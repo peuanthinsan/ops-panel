@@ -8,4 +8,4 @@ async function route(request, context) {
   return handleApiRequest(request, parameters?.segments || []);
 }
 
-export { route as DELETE, route as GET, route as OPTIONS, route as POST };
+export { route as DELETE, route as GET, route as OPTIONS, route as POST, route as PUT };

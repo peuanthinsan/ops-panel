@@ -22,6 +22,7 @@ import { fetchDataFmDriverIdentity, fetchDataFmGpsHistory } from './data-fm-gps.
 import { fmsSyncNeedsRetry } from './fms-sync-state.mjs';
 import { DEFAULT_GPS_PAIR_TOLERANCE_MS, pairExternalGpsSources } from './external-gps.mjs';
 import { gpsPairingMetadata } from './gps-pairing.mjs';
+import { evaluateRouteDeviation, parseRouteAnchors } from '../route-deviation.mjs';
 
 const allowedModes = new Set([
   'Load',
@@ -1191,7 +1192,7 @@ async function getJobGpsDetail(request, reportId) {
   const pageSize = positivePageValue(query.get('pageSize'), 100, 200);
   const offset = (page - 1) * pageSize;
   const sql = getDatabase();
-  const [samples, summaryRows] = await sql.transaction(transaction => [
+  const [samples, summaryRows, routeRows, settingRows] = await sql.transaction(transaction => [
     transaction.query(`
       SELECT
         id,
@@ -1232,6 +1233,17 @@ async function getJobGpsDetail(request, reportId) {
       FROM job_gps_summaries
       WHERE job_id = $1
     `, [reportId]),
+    transaction.query(`
+      SELECT id, route_name AS "routeName", google_maps_url AS "googleMapsUrl", anchors
+      FROM job_routes
+      WHERE active = true AND lower(route_name) = lower($1)
+      LIMIT 1
+    `, [reportId]),
+    transaction.query(`
+      SELECT setting_key AS "settingKey", setting_value AS "settingValue"
+      FROM app_settings
+      WHERE setting_key IN ('route_deviation_distance_km', 'route_deviation_duration_seconds')
+    `),
   ]);
   const summary = summaryRows[0] || {
     deviceSamples: 0,
@@ -1242,10 +1254,24 @@ async function getJobGpsDetail(request, reportId) {
     medianPositionDeltaM: null,
   };
   const total = Number(summary.deviceSamples || 0);
+  const settings = Object.fromEntries(settingRows.map(item => [item.settingKey, Number(item.settingValue)]));
+  const route = routeRows[0] || null;
+  const routeDeviation = route
+    ? evaluateRouteDeviation(samples, route.anchors, {
+        distanceKm: settings.route_deviation_distance_km || 0.5,
+        durationSeconds: settings.route_deviation_duration_seconds || 60,
+      })
+    : null;
   return {
     report,
     gpsSummary: summary,
     samples,
+    route: route ? { ...route, anchors: route.anchors || [] } : null,
+    routeDeviation,
+    routeDeviationSettings: {
+      distanceKm: settings.route_deviation_distance_km || 0.5,
+      durationSeconds: settings.route_deviation_duration_seconds || 60,
+    },
     pageInfo: {
       page,
       pageSize,
@@ -1255,6 +1281,76 @@ async function getJobGpsDetail(request, reportId) {
       end: offset + samples.length,
     },
   };
+}
+
+async function getRouteSettings() {
+  const sql = getDatabase();
+  const rows = await sql`
+    SELECT setting_key AS "settingKey", setting_value AS "settingValue"
+    FROM app_settings
+    WHERE setting_key IN ('route_deviation_distance_km', 'route_deviation_duration_seconds')
+  `;
+  const values = Object.fromEntries(rows.map(item => [item.settingKey, Number(item.settingValue)]));
+  return {
+    distanceKm: Number.isFinite(values.route_deviation_distance_km) ? values.route_deviation_distance_km : 0.5,
+    durationSeconds: Number.isFinite(values.route_deviation_duration_seconds) ? values.route_deviation_duration_seconds : 60,
+  };
+}
+
+async function listJobRoutes() {
+  const sql = getDatabase();
+  return sql`
+    SELECT id, route_name AS "routeName", google_maps_url AS "googleMapsUrl", anchors,
+      active, created_at AS "createdAt", updated_at AS "updatedAt"
+    FROM job_routes ORDER BY lower(route_name), route_name
+  `;
+}
+
+async function saveJobRoute(input, id = null) {
+  const routeName = requiredText(input.routeName, 'routeName', 120);
+  const googleMapsUrl = requiredText(input.googleMapsUrl, 'googleMapsUrl', 2000);
+  let parsed;
+  try { parsed = new URL(googleMapsUrl); } catch { throw new ApiError(400, 'googleMapsUrl must be a valid Google Maps link'); }
+  const hostname = parsed.hostname.toLowerCase();
+  const isGoogleMapsHost = hostname === 'maps.app.goo.gl' || hostname.endsWith('.google.com') || hostname === 'google.com';
+  if (!isGoogleMapsHost || (!hostname.includes('goo.gl') && !parsed.pathname.toLowerCase().includes('maps'))) {
+    throw new ApiError(400, 'googleMapsUrl must be a Google Maps link');
+  }
+  const anchors = parseRouteAnchors(googleMapsUrl);
+  const sql = getDatabase();
+  const routeId = id || `ROUTE-${crypto.randomUUID()}`;
+  try {
+    const rows = await sql`
+      INSERT INTO job_routes (id, route_name, google_maps_url, anchors)
+      VALUES (${routeId}, ${routeName}, ${googleMapsUrl}, ${JSON.stringify(anchors)}::jsonb)
+      ON CONFLICT (id) DO UPDATE SET
+        route_name = EXCLUDED.route_name,
+        google_maps_url = EXCLUDED.google_maps_url,
+        anchors = EXCLUDED.anchors,
+        active = true,
+        updated_at = now()
+      RETURNING id, route_name AS "routeName", google_maps_url AS "googleMapsUrl", anchors,
+        active, created_at AS "createdAt", updated_at AS "updatedAt"
+    `;
+    return rows[0];
+  } catch (error) {
+    if (String(error?.code) === '23505') throw new ApiError(409, 'A route with this name already exists.');
+    throw error;
+  }
+}
+
+async function updateRouteSettings(input) {
+  const distanceKm = Number(input.distanceKm);
+  const durationSeconds = Number(input.durationSeconds);
+  if (!Number.isFinite(distanceKm) || distanceKm <= 0 || distanceKm > 50) throw new ApiError(400, 'distanceKm must be between 0 and 50');
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 86400) throw new ApiError(400, 'durationSeconds must be between 0 and 86400');
+  const sql = getDatabase();
+  await sql`
+    INSERT INTO app_settings (setting_key, setting_value, updated_at)
+    VALUES ('route_deviation_distance_km', ${String(distanceKm)}, now()), ('route_deviation_duration_seconds', ${String(Math.round(durationSeconds))}, now())
+    ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = now()
+  `;
+  return getRouteSettings();
 }
 
 async function proxyDriverIdentity(request) {
@@ -1519,6 +1615,38 @@ async function routeRequest(request, route) {
   if (route === 'admin/device-bindings' && method === 'GET') {
     await requireAdmin(request);
     return json({ deviceBindings: await allBindings() });
+  }
+
+  if (route === 'admin/job-routes' && method === 'GET') {
+    await requireAdmin(request);
+    return json({ routes: await listJobRoutes(), settings: await getRouteSettings() });
+  }
+
+  if (route === 'admin/job-routes' && method === 'POST') {
+    await requireAdmin(request);
+    return json({ route: await saveJobRoute(await readJson(request)) }, 201);
+  }
+
+  const jobRouteMatch = route.match(/^admin\/job-routes\/([^/]+)$/);
+  if (jobRouteMatch && method === 'PUT') {
+    await requireAdmin(request);
+    const routeId = validClientId(decodeURIComponent(jobRouteMatch[1]));
+    if (!routeId) throw new ApiError(400, 'A valid route id is required');
+    return json({ route: await saveJobRoute(await readJson(request), routeId) });
+  }
+
+  if (jobRouteMatch && method === 'DELETE') {
+    await requireAdmin(request);
+    const routeId = validClientId(decodeURIComponent(jobRouteMatch[1]));
+    const sql = getDatabase();
+    const rows = await sql`DELETE FROM job_routes WHERE id = ${routeId} RETURNING id`;
+    if (!rows.length) throw new ApiError(404, 'Route not found');
+    return json({ ok: true });
+  }
+
+  if (route === 'admin/job-route-settings' && method === 'PUT') {
+    await requireAdmin(request);
+    return json({ settings: await updateRouteSettings(await readJson(request)) });
   }
 
   if (route === 'admin/device-bindings/import' && method === 'POST') {

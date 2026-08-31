@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 import FullReportDashboard from './report-dashboard';
 import FleetDashboard from './fleet-dashboard';
 import SettingsDashboard from './settings-dashboard';
+import RoutesDashboard from './routes-dashboard';
 import { adminFetch } from './dashboard-api';
 import { clearAdminSessionToken, getAdminSessionToken, setAdminSessionToken } from './dashboard-session';
 import { localizedDashboardAdminError } from '../lib/dashboard-errors';
@@ -14,16 +15,17 @@ import { clearOfflineResponses } from './offline-store';
 
 const copy = {
   en: {
-    reports: 'Reports', reportsSub: 'Jobs & timeline', fleet: 'Fleet', fleetSub: 'จัดการรถและแท็บเล็ต', settings: 'Settings', settingsSub: 'การตั้งค่าผู้ดูแล', title: 'Songdee GPS Ops Panel', adminLabel: 'Ops Panel · Admin', password: 'Admin password', continue: 'Continue', signingIn: 'Signing in…', signOut: 'Sign out', loginTitle: 'Admin access', loginBody: 'Enter the fleet administrator password. No username is required.', invalid: 'Incorrect password', skip: 'Skip to content', loading: 'Loading dashboard…', language: 'Switch language', navigation: 'Primary navigation',
+    reports: 'Reports', reportsSub: 'Jobs & timeline', fleet: 'Fleet', fleetSub: 'จัดการรถและแท็บเล็ต', routes: 'Routes', routesSub: 'Job route links', settings: 'Settings', settingsSub: 'การตั้งค่าผู้ดูแล', title: 'Songdee GPS Ops Panel', adminLabel: 'Ops Panel · Admin', password: 'Admin password', continue: 'Continue', signingIn: 'Signing in…', signOut: 'Sign out', loginTitle: 'Admin access', loginBody: 'Enter the fleet administrator password. No username is required.', invalid: 'Incorrect password', skip: 'Skip to content', loading: 'Loading dashboard…', language: 'Switch language', navigation: 'Primary navigation',
   },
   th: {
-    reports: 'รายงาน', reportsSub: 'งานและไทม์ไลน์', fleet: 'จัดการรถ', fleetSub: 'Fleet', settings: 'ตั้งค่า', settingsSub: 'Settings', title: 'Songdee GPS Ops Panel', adminLabel: 'Ops Panel · ผู้ดูแล', password: 'รหัสผ่านผู้ดูแล', continue: 'เข้าสู่ระบบ', signingIn: 'กำลังเข้าสู่ระบบ…', signOut: 'ออกจากระบบ', loginTitle: 'เข้าสู่ระบบผู้ดูแล', loginBody: 'กรอกรหัสผ่านผู้ดูแลฝูงรถ ไม่ต้องใช้ชื่อผู้ใช้', invalid: 'รหัสผ่านไม่ถูกต้อง', skip: 'ข้ามไปยังเนื้อหา', loading: 'กำลังโหลดแดชบอร์ด…', language: 'เปลี่ยนภาษา', navigation: 'เมนูหลัก',
+    reports: 'รายงาน', reportsSub: 'งานและไทม์ไลน์', fleet: 'จัดการรถ', fleetSub: 'Fleet', routes: 'เส้นทาง', routesSub: 'ลิงก์เส้นทางงาน', settings: 'ตั้งค่า', settingsSub: 'Settings', title: 'Songdee GPS Ops Panel', adminLabel: 'Ops Panel · ผู้ดูแล', password: 'รหัสผ่านผู้ดูแล', continue: 'เข้าสู่ระบบ', signingIn: 'กำลังเข้าสู่ระบบ…', signOut: 'ออกจากระบบ', loginTitle: 'เข้าสู่ระบบผู้ดูแล', loginBody: 'กรอกรหัสผ่านผู้ดูแลฝูงรถ ไม่ต้องใช้ชื่อผู้ใช้', invalid: 'รหัสผ่านไม่ถูกต้อง', skip: 'ข้ามไปยังเนื้อหา', loading: 'กำลังโหลดแดชบอร์ด…', language: 'เปลี่ยนภาษา', navigation: 'เมนูหลัก',
   },
 };
 
 const navigation = [
   { href: '/', key: 'reports' },
   { href: '/admin', key: 'fleet' },
+  { href: '/routes', key: 'routes' },
   { href: '/settings', key: 'settings' },
 ];
 
@@ -216,6 +218,7 @@ export default function Dashboard() {
 
   let screen = <FullReportDashboard lang={lang} />;
   if (pathname === '/admin') screen = <FleetDashboard lang={lang} />;
+  if (pathname === '/routes') screen = <RoutesDashboard lang={lang} />;
   if (pathname === '/settings') screen = <SettingsDashboard lang={lang} />;
 
   return <Shell lang={lang} setLang={setLang} onLogout={logout}>{screen}</Shell>;
