@@ -198,6 +198,17 @@ test('mobile saved jobs expose scalable search, filter, and sort controls withou
   assert.doesNotMatch(productionApi, /limit = 5000/);
 });
 
+test('mobile route selection uses bounded server search and a virtualized list', async () => {
+  const app = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
+  const api = await readFile(fileURLToPath(new NodeUrl('../lib/api.ts', import.meta.url)), 'utf8');
+  assert.match(app, /fetchJobRoutes\(binding\.deviceId, search, 50\)/);
+  assert.match(app, /accessibilityLabel=\{language === 'en' \? 'Search job routes'/);
+  assert.match(app, /<FlatList[\s\S]*data=\{routeOptions\}[\s\S]*windowSize=\{5\}/);
+  assert.doesNotMatch(app, /<ScrollView style=\{routeStyles\.routeList\}>\{routeOptions\.map/);
+  assert.match(api, /limit: String\(limit\)/);
+  assert.match(api, /query\.set\('q', search\.trim\(\)\)/);
+});
+
 test('the header GPS logo replaces the separate Admin text button', async () => {
   const source = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
   assert.match(source, /accessibilityLabel=\{language === 'en' \? 'Open admin vehicle settings'/);

@@ -168,6 +168,7 @@ function usePersistentLanguage() {
   const setLang = next => {
     setLangState(next);
     try { localStorage.setItem('songdee-language', next); } catch { /* Ignore storage restrictions. */ }
+    window.location.reload();
   };
   return [lang, setLang];
 }

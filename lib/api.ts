@@ -169,18 +169,22 @@ export async function fetchVehicleMotion(deviceId: string) {
 }
 
 export type JobRouteOption = { id: string; routeName: string };
+export type JobRouteOptions = { routes: JobRouteOption[]; hasMore: boolean };
 
-export async function fetchJobRoutes(deviceId: string) {
-  const path = `/api/job-routes?deviceId=${encodeURIComponent(deviceId)}`;
+export async function fetchJobRoutes(deviceId: string, search = '', limit = 50): Promise<JobRouteOptions> {
+  const query = new URLSearchParams({ deviceId, limit: String(limit) });
+  if (search.trim()) query.set('q', search.trim());
+  const path = `/api/job-routes?${query.toString()}`;
   const response = await deviceFetch(path, {}, 8000);
   if (!response.ok) throw await responseError(response, 'Could not load job routes');
-  const data = await response.json() as { routes?: unknown };
+  const data = await response.json() as { routes?: unknown; hasMore?: unknown };
   if (!Array.isArray(data.routes)) throw new Error('The route response is invalid');
-  return data.routes.filter((route): route is JobRouteOption => Boolean(
+  const routes = data.routes.filter((route): route is JobRouteOption => Boolean(
     route && typeof route === 'object'
     && typeof (route as JobRouteOption).id === 'string'
     && typeof (route as JobRouteOption).routeName === 'string',
   ));
+  return { routes, hasMore: data.hasMore === true };
 }
 
 export async function saveJobStart(jobStart: JobStartInput) {

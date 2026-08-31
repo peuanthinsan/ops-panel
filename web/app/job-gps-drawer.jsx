@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { formatReportCoordinate, formatReportDateTime, reportDateKey } from '../lib/report-view';
 import { adminFetch, adminFetchReportGpsSamples } from './dashboard-api';
 import RouteMap from './route-map';
+import RouteSelector from './route-selector';
 
 const copy = {
   en: {
@@ -53,7 +54,6 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
   const [mapSamples, setMapSamples] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [routes, setRoutes] = useState([]);
   const [routeBusy, setRouteBusy] = useState(false);
   const [routeError, setRouteError] = useState('');
 
@@ -101,10 +101,6 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
     return () => { active = false; controller.abort(); };
   }, [page, report.id, t.failed]);
 
-  useEffect(() => {
-    adminFetch('/api/admin/job-routes').then(data => setRoutes(Array.isArray(data.routes) ? data.routes : [])).catch(() => setRoutes([]));
-  }, []);
-
   async function assignRoute(routeName) {
     if (routeBusy) return;
     setRouteBusy(true);
@@ -139,7 +135,7 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
           <div><dt>{t.activity}</dt><dd>{displayedReport.mode || '—'}</dd></div>
           <div><dt>{t.time}</dt><dd>{time(displayedReport.startTime, lang)}–{time(displayedReport.endTime, lang)}</dd></div>
         </dl>
-        <div className="gps-route-assignment"><label htmlFor="gps-route-assignment">{t.assignedRoute}</label><select id="gps-route-assignment" value={displayedReport.routeName || ''} disabled={routeBusy} onChange={event => void assignRoute(event.target.value)}><option value="">{t.noAssignedRoute}</option>{routes.map(route => <option key={route.id} value={route.routeName}>{route.routeName}</option>)}</select>{routeBusy ? <small role="status">{t.savingRoute}</small> : null}{routeError ? <small className="error" role="alert">{routeError}</small> : null}</div>
+        <div className="gps-route-assignment"><RouteSelector busy={routeBusy} error={routeError} lang={lang} onSelect={assignRoute} value={displayedReport.routeName || ''} /></div>
         <section className="gps-detail-section">
           <h2 id="gps-detail-title">{t.title}</h2>
           <dl className="gps-detail-summary">

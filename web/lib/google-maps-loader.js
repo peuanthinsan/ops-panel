@@ -2,10 +2,15 @@ import { importLibrary, setOptions } from '@googlemaps/js-api-loader';
 
 const loaderState = globalThis.__songdeeGoogleMapsLoaderState || {
   configured: false,
+  language: null,
   mapsPromise: null,
   routeCache: new Map(),
 };
 globalThis.__songdeeGoogleMapsLoaderState = loaderState;
+
+function normalizeLanguage(language) {
+  return language === 'th' ? 'th' : 'en';
+}
 
 function pointLiteral(point) {
   const latitude = Number(point?.latitude ?? point?.lat);
@@ -15,8 +20,8 @@ function pointLiteral(point) {
     : null;
 }
 
-function routeCacheKey(points) {
-  return points.map(point => `${point.lat.toFixed(6)},${point.lng.toFixed(6)}`).join('|');
+function routeCacheKey(points, language) {
+  return `${language}:${points.map(point => `${point.lat.toFixed(6)},${point.lng.toFixed(6)}`).join('|')}`;
 }
 
 function computedPath(route) {
@@ -26,7 +31,7 @@ function computedPath(route) {
   }));
 }
 
-async function computeRoutesPath(points) {
+async function computeRoutesPath(points, language) {
   const { Route } = await importLibrary('routes');
   const result = await Route.computeRoutes({
     origin: points[0],
@@ -34,7 +39,7 @@ async function computeRoutesPath(points) {
     intermediates: points.slice(1, -1).map(location => ({ location, via: true })),
     travelMode: 'DRIVING',
     polylineQuality: 'HIGH_QUALITY',
-    language: 'th',
+    language,
     region: 'TH',
     fields: ['path', 'viewport'],
   });
@@ -69,7 +74,8 @@ function computeDirectionsPath(google, points) {
 }
 
 /** Load the same browser-restricted Google Maps integration used by Songdee Spark. */
-export function loadGoogleMaps() {
+export function loadGoogleMaps(language = 'en') {
+  const requestedLanguage = normalizeLanguage(language);
   if (loaderState.mapsPromise) return loaderState.mapsPromise;
 
   const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -80,8 +86,9 @@ export function loadGoogleMaps() {
   }
 
   if (!loaderState.configured) {
-    setOptions({ key, v: 'weekly', language: 'th', region: 'TH' });
+    setOptions({ key, v: 'weekly', language: requestedLanguage, region: 'TH' });
     loaderState.configured = true;
+    loaderState.language = requestedLanguage;
   }
   loaderState.mapsPromise = importLibrary('maps').then(() => window.google);
   loaderState.mapsPromise.catch(() => {});
@@ -89,17 +96,18 @@ export function loadGoogleMaps() {
 }
 
 /** Compute the road-following driving path represented by the saved Google Maps waypoints. */
-export async function computeGoogleDrivingRoute(anchors = []) {
+export async function computeGoogleDrivingRoute(anchors = [], language = 'en') {
   const points = anchors.map(pointLiteral).filter(Boolean);
   if (points.length < 2) throw new Error('At least two route points are required.');
 
-  const key = routeCacheKey(points);
+  const requestedLanguage = normalizeLanguage(language);
+  const key = routeCacheKey(points, requestedLanguage);
   if (loaderState.routeCache.has(key)) return loaderState.routeCache.get(key);
 
   const pending = (async () => {
-    const google = await loadGoogleMaps();
+    const google = await loadGoogleMaps(requestedLanguage);
     try {
-      return await computeRoutesPath(points);
+      return await computeRoutesPath(points, requestedLanguage);
     } catch (routesError) {
       try {
         return await computeDirectionsPath(google, points);

@@ -87,6 +87,15 @@ test('route rename, active-job deletion guard, completion retry, reassignment, a
   });
   assert.equal(renamed.response.status, 200);
 
+  const adminRouteSearch = await jsonRequest(baseUrl, '/api/admin/job-route-options?q=phet&limit=1', { headers: adminHeaders });
+  assert.equal(adminRouteSearch.response.status, 200);
+  assert.deepEqual(adminRouteSearch.body.routes, [{ id: routeId, routeName: 'N21 Phetchabun' }]);
+  assert.equal(adminRouteSearch.body.hasMore, false);
+
+  const deviceRouteSearch = await jsonRequest(baseUrl, '/api/job-routes?deviceId=route-device-001&q=N21&limit=1');
+  assert.equal(deviceRouteSearch.response.status, 200);
+  assert.deepEqual(deviceRouteSearch.body.routes, [{ id: routeId, routeName: 'N21 Phetchabun' }]);
+
   const report = { ...job, endTime: new Date(Date.parse(startTime) + 1_000).toISOString() };
   const completed = await jsonRequest(baseUrl, '/api/reports', { method: 'POST', body: JSON.stringify(report) });
   assert.equal(completed.response.status, 201);

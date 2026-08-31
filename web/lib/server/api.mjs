@@ -1321,6 +1321,34 @@ async function listJobRoutes() {
   `;
 }
 
+async function findJobRouteOptions(searchParams) {
+  const query = String(searchParams.get('q') || '').trim().slice(0, 120);
+  const limit = positivePageValue(searchParams.get('limit'), 50, 100);
+  const sql = getDatabase();
+  const rows = query
+    ? await sql`
+        SELECT id, route_name AS "routeName"
+        FROM job_routes
+        WHERE active = true AND position(lower(${query}) in lower(route_name)) > 0
+        ORDER BY
+          CASE
+            WHEN lower(route_name) = lower(${query}) THEN 0
+            WHEN left(lower(route_name), length(${query})) = lower(${query}) THEN 1
+            ELSE 2
+          END,
+          lower(route_name), route_name
+        LIMIT ${limit + 1}
+      `
+    : await sql`
+        SELECT id, route_name AS "routeName"
+        FROM job_routes
+        WHERE active = true
+        ORDER BY lower(route_name), route_name
+        LIMIT ${limit + 1}
+      `;
+  return { routes: rows.slice(0, limit), hasMore: rows.length > limit };
+}
+
 async function activeRouteByName(routeName) {
   if (!routeName) return null;
   const sql = getDatabase();
@@ -1582,13 +1610,7 @@ async function routeRequest(request, route) {
     await authenticateDeviceRequest(request, deviceId);
     await consumeRateLimit(request, 'device-routes', 120, 15 * 60, deviceId);
     if (!await findBinding(deviceId)) throw new ApiError(409, 'Device binding does not match.', { code: 'DEVICE_BINDING_MISMATCH' });
-    const sql = database();
-    const routes = await sql`
-      SELECT id, route_name AS "routeName"
-      FROM job_routes WHERE active = true
-      ORDER BY lower(route_name), route_name
-    `;
-    return json({ routes });
+    return json(await findJobRouteOptions(query));
   }
 
   if (route === 'device-jobs' && method === 'GET') {
@@ -1698,6 +1720,11 @@ async function routeRequest(request, route) {
   if (route === 'admin/job-routes' && method === 'GET') {
     await requireAdmin(request);
     return json({ routes: await listJobRoutes(), settings: await getRouteSettings() });
+  }
+
+  if (route === 'admin/job-route-options' && method === 'GET') {
+    await requireAdmin(request);
+    return json(await findJobRouteOptions(new URL(request.url).searchParams));
   }
 
   if (route === 'admin/job-routes' && method === 'POST') {

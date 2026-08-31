@@ -95,7 +95,7 @@ export default function RouteMap({ anchors = [], samples = [], label = 'Route ma
 
     async function renderMap() {
       try {
-        const google = await loadGoogleMaps();
+        const google = await loadGoogleMaps(lang);
         if (cancelled || !containerRef.current) return;
         map = new google.maps.Map(containerRef.current, {
           center: { lat: routePoints[0].latitude, lng: routePoints[0].longitude },
@@ -110,7 +110,7 @@ export default function RouteMap({ anchors = [], samples = [], label = 'Route ma
         let displayedRoute = routePoints;
         let routeState = 'ready';
         try {
-          const computed = await computeGoogleDrivingRoute(routePoints);
+          const computed = await computeGoogleDrivingRoute(routePoints, lang);
           if (cancelled) return;
           displayedRoute = computed.path.map(normalizePoint).filter(Boolean);
         } catch (error) {
@@ -161,7 +161,7 @@ export default function RouteMap({ anchors = [], samples = [], label = 'Route ma
       for (const overlay of overlays) overlay.setMap?.(null);
       if (map && window.google?.maps?.event) window.google.maps.event.clearInstanceListeners(map);
     };
-  }, [recordedPoints, routePoints]);
+  }, [lang, recordedPoints, routePoints]);
 
   if (state === 'empty') return <div className="route-map-empty">{label}: {t.noCoordinates}</div>;
   const fallback = state === 'unavailable';

@@ -12,7 +12,7 @@ test('route deviation thresholds accept ordinary hundredth-kilometre values and 
 
 test('route management computes and saves Google road geometry', async () => {
   const source = await readFile(fileURLToPath(new NodeUrl('../web/app/routes-dashboard.jsx', import.meta.url)), 'utf8');
-  assert.match(source, /normalizeRoutePath\(\(await computeGoogleDrivingRoute\(parsedAnchors\)\)\.path, 700\)/);
+  assert.match(source, /normalizeRoutePath\(\(await computeGoogleDrivingRoute\(parsedAnchors, lang\)\)\.path, 700\)/);
   assert.match(source, /JSON\.stringify\(\{ \.\.\.form, routePath \}\)/);
 });
 
@@ -23,4 +23,27 @@ test('route maps prefer the current Routes API and retain a directions fallback 
   assert.match(loader, /new google\.maps\.DirectionsService\(\)/);
   assert.match(map, /new google\.maps\.Data\(\{ map \}\)/);
   assert.doesNotMatch(map, /new google\.maps\.Marker/);
+});
+
+test('Google Maps follows the selected dashboard language', async () => {
+  const loader = await readFile(fileURLToPath(new NodeUrl('../web/lib/google-maps-loader.js', import.meta.url)), 'utf8');
+  const map = await readFile(fileURLToPath(new NodeUrl('../web/app/route-map.jsx', import.meta.url)), 'utf8');
+  const page = await readFile(fileURLToPath(new NodeUrl('../web/app/page.jsx', import.meta.url)), 'utf8');
+  assert.match(loader, /setOptions\(\{ key, v: 'weekly', language: requestedLanguage, region: 'TH' \}\)/);
+  assert.match(loader, /language,\n\s+region: 'TH'/);
+  assert.match(map, /loadGoogleMaps\(lang\)/);
+  assert.match(map, /computeGoogleDrivingRoute\(routePoints, lang\)/);
+  assert.match(page, /localStorage\.setItem\('songdee-language', next\)/);
+  assert.match(page, /window\.location\.reload\(\)/);
+});
+
+test('the dashboard route assignment selector searches a bounded server result', async () => {
+  const selector = await readFile(fileURLToPath(new NodeUrl('../web/app/route-selector.jsx', import.meta.url)), 'utf8');
+  const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
+  assert.match(selector, /\/api\/admin\/job-route-options\?\$\{params\}/);
+  assert.match(selector, /limit: '50'/);
+  assert.match(selector, /role="combobox"/);
+  assert.match(selector, /role="listbox"/);
+  assert.match(drawer, /<RouteSelector/);
+  assert.doesNotMatch(drawer, /<select id="gps-route-assignment"/);
 });

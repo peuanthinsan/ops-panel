@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useKeepAwake } from 'expo-keep-awake';
-import { AccessibilityInfo, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, findNodeHandle, useWindowDimensions } from 'react-native';
+import { AccessibilityInfo, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, findNodeHandle, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MobileJobReport } from '../components/MobileJobReport';
 import { RedGpsPin } from '../components/RedGpsPin';
@@ -76,6 +76,9 @@ export default function Index() {
   const [routesVisible, setRoutesVisible] = useState(false);
   const [routesLoading, setRoutesLoading] = useState(false);
   const [routesError, setRoutesError] = useState('');
+  const [routeSearch, setRouteSearch] = useState('');
+  const [routesHasMore, setRoutesHasMore] = useState(false);
+  const routeSearchRequestRef = useRef(0);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [awaitingMovement, setAwaitingMovement] = useState(false);
@@ -300,22 +303,24 @@ export default function Index() {
     return () => { active = false; clearInterval(timer); };
   }, [binding?.deviceId, binding?.vehicleNumber]);
 
-  async function loadRoutes() {
+  async function loadRoutes(search = '') {
     if (!binding) return;
+    const requestId = ++routeSearchRequestRef.current;
     setRoutesLoading(true);
     setRoutesError('');
     try {
-      const routes = await fetchJobRoutes(binding.deviceId);
-      setRouteOptions(routes);
+      const result = await fetchJobRoutes(binding.deviceId, search, 50);
+      if (requestId !== routeSearchRequestRef.current) return;
+      setRouteOptions(result.routes);
+      setRoutesHasMore(result.hasMore);
       setSelectedRouteName(current => {
-        if (selected && current) return current;
-        if (current && routes.some(route => route.routeName === current)) return current;
-        return routes.length === 1 ? routes[0].routeName : null;
+        if (current) return current;
+        return !search && result.routes.length === 1 && !result.hasMore ? result.routes[0].routeName : null;
       });
     } catch {
-      setRoutesError(language === 'en' ? 'Could not load routes. Tap to retry.' : 'ไม่สามารถโหลดเส้นทางได้ แตะเพื่อลองใหม่');
+      if (requestId === routeSearchRequestRef.current) setRoutesError(language === 'en' ? 'Could not load routes. Tap to retry.' : 'ไม่สามารถโหลดเส้นทางได้ แตะเพื่อลองใหม่');
     } finally {
-      setRoutesLoading(false);
+      if (requestId === routeSearchRequestRef.current) setRoutesLoading(false);
     }
   }
 
@@ -323,10 +328,17 @@ export default function Index() {
     if (!binding) {
       setRouteOptions([]);
       setSelectedRouteName(null);
+      setRoutesHasMore(false);
       return;
     }
-    void loadRoutes();
+    void loadRoutes('');
   }, [binding?.deviceId, binding?.vehicleNumber]);
+
+  useEffect(() => {
+    if (!routesVisible || !binding) return undefined;
+    const timer = setTimeout(() => { void loadRoutes(routeSearch); }, 250);
+    return () => clearTimeout(timer);
+  }, [binding?.deviceId, routeSearch, routesVisible]);
 
   useEffect(() => {
     let active = true;
@@ -959,8 +971,8 @@ export default function Index() {
         accessibilityState={{ disabled: Boolean(selected), busy: routesLoading }}
         disabled={Boolean(selected)}
         onPress={() => {
+          setRouteSearch('');
           setRoutesVisible(true);
-          if (routesError || !routeOptions.length) void loadRoutes();
         }}
         style={[routeStyles.selector, compactLandscape && routeStyles.selectorCompact, selected && routeStyles.selectorLocked]}
       >
@@ -1021,7 +1033,37 @@ export default function Index() {
       {confirmType ? <Pressable accessible={false} onPress={dismissConfirmation} style={modalStyles.overlay}><Pressable accessibilityViewIsModal onAccessibilityEscape={dismissConfirmation} onPress={event => event.stopPropagation()} style={modalStyles.card}><ScrollView contentContainerStyle={modalStyles.cardContent} keyboardShouldPersistTaps="handled"><RedGpsPin size={42} /><Text ref={confirmationTitleRef} accessible accessibilityLiveRegion="assertive" accessibilityRole="header" style={modalStyles.title}>{confirmationTitle}</Text>{selectedRouteName ? <Text style={routeStyles.confirmRoute}>{language === 'en' ? 'Route' : 'เส้นทาง'} · {selectedRouteName}</Text> : null}<Text style={modalStyles.body}>{confirmType === 'start' ? (language === 'en' ? `Job: ${actionLabel(selected, language)}\nThe start time will be recorded when the vehicle moves.` : `กิจกรรม: ${actionLabel(selected, language)}\nระบบจะบันทึกเวลาเริ่มเมื่อรถเคลื่อนที่`) : confirmType === 'day_end' ? (language === 'en' ? 'Finish work will be saved immediately, then today’s saved jobs and timeline will open.' : 'ระบบจะบันทึกการจบงานทันที แล้วเปิดงานที่บันทึกและไทม์ไลน์ของวันนี้') : confirmType === 'finish' ? selected === '9' ? (language === 'en' ? 'Finish work will be saved, then today’s saved jobs and timeline will open on this tablet.' : 'ระบบจะบันทึกการจบงาน แล้วเปิดงานที่บันทึกและไทม์ไลน์ของวันนี้บนแท็บเล็ต') : awaitingMovement && !startedAt ? (language === 'en' ? 'Movement has not been detected. The job selection time will be used as the start time, and the job will be saved to the dashboard.' : 'ยังไม่ตรวจพบการเคลื่อนที่ ระบบจะใช้เวลาที่เลือกกิจกรรมเป็นเวลาเริ่ม และบันทึกงานไปยังแดชบอร์ด') : (language === 'en' ? 'The completed job will be saved and sent to the web dashboard.' : 'ระบบจะบันทึกงานที่เสร็จแล้วและส่งไปยังแดชบอร์ดเว็บ') : (language === 'en' ? 'The job will be recorded as cancelled.' : 'งานนี้จะถูกบันทึกเป็นงานที่ยกเลิก')}</Text><View style={modalStyles.actions}><Pressable accessibilityLabel={confirmationDismissLabel} accessibilityRole="button" accessibilityState={{ disabled: savingJob }} disabled={savingJob} onPress={dismissConfirmation} style={[modalStyles.cancel, savingJob && layoutStyles.disabled]}><Text style={modalStyles.cancelText}>{confirmType === 'start' ? (language === 'en' ? 'Choose another' : 'เลือกกิจกรรมอื่น') : confirmType === 'day_end' ? (language === 'en' ? 'Cancel' : 'ยกเลิก') : (language === 'en' ? 'Keep job on' : 'ทำงานต่อ')}</Text></Pressable>{confirmType === 'finish' ? <Pressable accessibilityLabel={language === 'en' ? 'Cancel current job' : 'ยกเลิกงานปัจจุบัน'} accessibilityRole="button" accessibilityState={{ disabled: savingJob, busy: savingJob }} disabled={savingJob} onPress={confirmCancel} style={[modalStyles.cancelJob, savingJob && layoutStyles.disabled]}><Text style={modalStyles.cancelJobText}>{language === 'en' ? 'Cancel job' : 'ยกเลิกงาน'}</Text></Pressable> : null}<Pressable accessibilityLabel={confirmationSubmitLabel} accessibilityRole="button" accessibilityState={{ disabled: savingJob, busy: savingJob }} disabled={savingJob} onPress={confirmType === 'start' ? confirmStart : confirmType === 'finish' || confirmType === 'day_end' ? confirmFinish : confirmCancel} style={[modalStyles.confirm, savingJob && layoutStyles.disabled]}><Text style={modalStyles.confirmText}>{savingJob ? (language === 'en' ? 'Saving…' : 'กำลังบันทึก…') : confirmType === 'cancel' ? (language === 'en' ? 'Retry cancellation' : 'ลองบันทึกการยกเลิกอีกครั้ง') : confirmType === 'start' ? (language === 'en' ? 'Turn on' : 'เริ่มงาน') : confirmType === 'day_end' ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน') : selected === '9' ? (language === 'en' ? 'Finish and view report' : 'จบงานและดูรายงาน') : (language === 'en' ? 'Turn off' : 'ปิดงาน')}</Text></Pressable></View></ScrollView></Pressable></Pressable> : null}
     </Modal>
     <Modal animationType="fade" onRequestClose={() => setRoutesVisible(false)} statusBarTranslucent transparent visible={routesVisible && !selected}>
-      <Pressable accessible={false} onPress={() => setRoutesVisible(false)} style={modalStyles.overlay}><Pressable accessibilityViewIsModal onAccessibilityEscape={() => setRoutesVisible(false)} onPress={event => event.stopPropagation()} style={modalStyles.card}><Text accessibilityRole="header" style={modalStyles.title}>{language === 'en' ? 'Choose job route' : 'เลือกเส้นทางงาน'}</Text><Text style={modalStyles.body}>{language === 'en' ? 'This route will stay selected for each activity until you change it or finish work.' : 'เส้นทางนี้จะใช้กับแต่ละกิจกรรมจนกว่าจะเปลี่ยนเส้นทางหรือจบงาน'}</Text>{routesLoading ? <Text accessibilityLiveRegion="polite" style={routeStyles.routeState}>{language === 'en' ? 'Loading routes…' : 'กำลังโหลดเส้นทาง…'}</Text> : null}{routesError ? <Text accessibilityRole="alert" style={routeStyles.routeError}>{routesError}</Text> : null}<ScrollView style={routeStyles.routeList}>{routeOptions.map(route => <Pressable accessibilityRole="radio" accessibilityState={{ checked: selectedRouteName === route.routeName }} key={route.id} onPress={() => { setSelectedRouteName(route.routeName); setRoutesVisible(false); setMessage(language === 'en' ? `Route ${route.routeName} selected` : `เลือกเส้นทาง ${route.routeName} แล้ว`); }} style={[routeStyles.routeOption, selectedRouteName === route.routeName && routeStyles.routeOptionSelected]}><Text style={routeStyles.routeOptionName}>{route.routeName}</Text><Text style={routeStyles.routeOptionMark}>{selectedRouteName === route.routeName ? '✓' : '›'}</Text></Pressable>)}</ScrollView>{!routesLoading && !routeOptions.length ? <Text style={routeStyles.routeState}>{language === 'en' ? 'No routes are configured yet. Ask an administrator to add one in the Routes dashboard.' : 'ยังไม่มีเส้นทาง ให้ผู้ดูแลเพิ่มในหน้าเส้นทางบนแดชบอร์ด'}</Text> : null}<View style={modalStyles.actions}><Pressable accessibilityRole="button" onPress={() => void loadRoutes()} style={modalStyles.cancel}><Text style={modalStyles.cancelText}>{language === 'en' ? 'Refresh routes' : 'รีเฟรชเส้นทาง'}</Text></Pressable><Pressable accessibilityRole="button" onPress={() => setRoutesVisible(false)} style={modalStyles.confirm}><Text style={modalStyles.confirmText}>{language === 'en' ? 'Close' : 'ปิด'}</Text></Pressable></View></Pressable></Pressable>
+      <Pressable accessible={false} onPress={() => setRoutesVisible(false)} style={modalStyles.overlay}>
+        <Pressable accessibilityViewIsModal onAccessibilityEscape={() => setRoutesVisible(false)} onPress={event => event.stopPropagation()} style={modalStyles.card}>
+          <Text accessibilityRole="header" style={modalStyles.title}>{language === 'en' ? 'Choose job route' : 'เลือกเส้นทางงาน'}</Text>
+          <Text style={modalStyles.body}>{language === 'en' ? 'Search by route name. The route stays selected for each activity until you change it or finish work.' : 'ค้นหาด้วยชื่อเส้นทาง เส้นทางนี้จะใช้กับแต่ละกิจกรรมจนกว่าจะเปลี่ยนเส้นทางหรือจบงาน'}</Text>
+          <TextInput
+            accessibilityLabel={language === 'en' ? 'Search job routes' : 'ค้นหาเส้นทางงาน'}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            onChangeText={setRouteSearch}
+            placeholder={language === 'en' ? 'Search route name' : 'ค้นหาชื่อเส้นทาง'}
+            placeholderTextColor={colors.grey}
+            style={routeStyles.routeSearch}
+            value={routeSearch}
+          />
+          {routesLoading ? <Text accessibilityLiveRegion="polite" style={routeStyles.routeState}>{language === 'en' ? 'Searching routes…' : 'กำลังค้นหาเส้นทาง…'}</Text> : null}
+          {routesError ? <Text accessibilityRole="alert" style={routeStyles.routeError}>{routesError}</Text> : null}
+          <FlatList
+            data={routeOptions}
+            initialNumToRender={12}
+            keyboardShouldPersistTaps="handled"
+            keyExtractor={route => route.id}
+            maxToRenderPerBatch={16}
+            renderItem={({ item: route }) => <Pressable accessibilityRole="radio" accessibilityState={{ checked: selectedRouteName === route.routeName }} onPress={() => { setSelectedRouteName(route.routeName); setRoutesVisible(false); setMessage(language === 'en' ? `Route ${route.routeName} selected` : `เลือกเส้นทาง ${route.routeName} แล้ว`); }} style={[routeStyles.routeOption, selectedRouteName === route.routeName && routeStyles.routeOptionSelected]}><Text style={routeStyles.routeOptionName}>{route.routeName}</Text><Text style={routeStyles.routeOptionMark}>{selectedRouteName === route.routeName ? '✓' : '›'}</Text></Pressable>}
+            style={routeStyles.routeList}
+            windowSize={5}
+          />
+          {!routesLoading && !routeOptions.length ? <Text style={routeStyles.routeState}>{routeSearch.trim() ? (language === 'en' ? 'No matching routes.' : 'ไม่พบเส้นทางที่ตรงกัน') : (language === 'en' ? 'No routes are configured yet. Ask an administrator to add one in the Routes dashboard.' : 'ยังไม่มีเส้นทาง ให้ผู้ดูแลเพิ่มในหน้าเส้นทางบนแดชบอร์ด')}</Text> : null}
+          {!routesLoading && routesHasMore ? <Text style={routeStyles.routeMore}>{language === 'en' ? 'More routes match. Keep typing to narrow the results.' : 'ยังมีเส้นทางที่ตรงกันอีก กรุณาพิมพ์เพิ่มเพื่อจำกัดผลลัพธ์'}</Text> : null}
+          <View style={modalStyles.actions}><Pressable accessibilityRole="button" onPress={() => void loadRoutes(routeSearch)} style={modalStyles.cancel}><Text style={modalStyles.cancelText}>{language === 'en' ? 'Refresh routes' : 'รีเฟรชเส้นทาง'}</Text></Pressable><Pressable accessibilityRole="button" onPress={() => setRoutesVisible(false)} style={modalStyles.confirm}><Text style={modalStyles.confirmText}>{language === 'en' ? 'Close' : 'ปิด'}</Text></Pressable></View>
+        </Pressable>
+      </Pressable>
     </Modal>
     <Modal animationType="fade" onAccessibilityEscape={dismissVehicleAdmin} onRequestClose={dismissVehicleAdmin} onShow={focusVehicleAdminTitle} statusBarTranslucent transparent visible={vehicleAdminVisible}>
       <ScrollView contentContainerStyle={vehicleAdminStyles.scroll} keyboardShouldPersistTaps="handled">
@@ -1100,12 +1142,14 @@ const routeStyles = StyleSheet.create({
   selectorValue: { color: colors.black, fontSize: 15, fontWeight: '800', marginTop: 1 },
   selectorAction: { color: colors.red, fontSize: 12, fontWeight: '800' },
   confirmRoute: { alignSelf: 'flex-start', marginTop: 10, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 5, backgroundColor: '#FFF1F1', color: colors.maroon, fontSize: 12, fontWeight: '800' },
+  routeSearch: { minHeight: 46, borderWidth: 1, borderColor: '#9FA8AF', borderRadius: 8, paddingHorizontal: 13, marginTop: 14, color: colors.black, backgroundColor: colors.white, fontSize: 16 },
   routeList: { maxHeight: 300, marginTop: 14 },
   routeOption: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#D7DBDF', borderRadius: 8, paddingHorizontal: 14, marginBottom: 8, backgroundColor: colors.white },
   routeOptionSelected: { borderColor: colors.red, borderWidth: 2, backgroundColor: '#FFF7F7' },
   routeOptionName: { flex: 1, color: colors.black, fontSize: 16, fontWeight: '800' },
   routeOptionMark: { color: colors.red, fontSize: 18, fontWeight: '800' },
   routeState: { color: colors.grey, fontSize: 13, lineHeight: 19, marginTop: 14 },
+  routeMore: { color: colors.grey, fontSize: 11, lineHeight: 16, marginTop: 8 },
   routeError: { color: colors.maroon, fontSize: 12, fontWeight: '700', marginTop: 12 },
 });
 
