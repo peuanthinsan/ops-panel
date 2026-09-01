@@ -47,3 +47,11 @@ test('the dashboard route assignment selector searches a bounded server result',
   assert.match(drawer, /<RouteSelector/);
   assert.doesNotMatch(drawer, /<select id="gps-route-assignment"/);
 });
+
+test('the route list shows localized loading copy instead of the failure message', async () => {
+  const source = await readFile(fileURLToPath(new NodeUrl('../web/app/routes-dashboard.jsx', import.meta.url)), 'utf8');
+  assert.match(source, /loading \? <p role="status">\{t\.loading\}<\/p>/);
+  assert.doesNotMatch(source, /loading \? <p>\{t\.failed\}<\/p>/);
+  assert.match(source, /loading: 'Loading routes…'/);
+  assert.match(source, /loading: 'กำลังโหลดเส้นทาง…'/);
+});

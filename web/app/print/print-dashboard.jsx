@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { operationActions } from '../../lib/actions';
+import { localizedDashboardReportError } from '../../lib/dashboard-errors';
 import { formatReportDuration, reportDateKey } from '../../lib/report-view';
 import { printReportLocation } from '../../lib/report-print-view';
 import { filterReports, hasRestrictiveReportFilters } from '../../lib/report-filter';
@@ -133,7 +134,7 @@ function usePrintData(filters, lang) {
       ]);
       setReports(filterReports(reportResult, filters, lang));
       setBindings(bindingResult.deviceBindings || []);
-    } catch (errorValue) { setError(errorValue instanceof Error ? errorValue.message : 'Request failed'); }
+    } catch (errorValue) { setError(localizedDashboardReportError(errorValue instanceof Error ? errorValue.message : '', lang, lang === 'th' ? 'ไม่สามารถโหลดรายงานได้' : 'Could not load reports.')); }
     finally { setLoading(false); }
   }, [filters, lang]);
   useEffect(() => { void load(); }, [load]);

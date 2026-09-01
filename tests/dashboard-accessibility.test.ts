@@ -217,3 +217,10 @@ test('fleet bindings use a dedicated mobile card layout instead of a clipped des
   assert.match(fleet, /function BindingCard/);
   assert.match(styles, /\.fleet-table-wrap\{display:none\}\.fleet-cards\{display:grid/);
 });
+
+test('print dashboards localize fetch failures instead of raw server messages', async () => {
+  const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
+  assert.match(print, /import \{ localizedDashboardReportError \} from '\.\.\/\.\.\/lib\/dashboard-errors'/);
+  assert.match(print, /setError\(localizedDashboardReportError\(errorValue instanceof Error \? errorValue\.message : '', lang, lang === 'th' \? 'ไม่สามารถโหลดรายงานได้' : 'Could not load reports\.'\)\)/);
+  assert.doesNotMatch(print, /setError\(errorValue instanceof Error \? errorValue\.message/);
+});
