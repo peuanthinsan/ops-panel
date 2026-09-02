@@ -16,9 +16,27 @@ test('work-period GPS points stay grouped by job and the selected job is drawn l
   assert.deepEqual(result.groups.map(group => group.jobId), ['job-other', 'job-selected']);
   assert.equal(result.groups.at(-1).selected, true);
   assert.deepEqual(result.groups.at(-1).points.map(point => point.sampleId), ['selected-early', 'selected-late']);
+  assert.deepEqual(result.trailPoints.map(point => point.sampleId), ['selected-early', 'other', 'selected-late']);
   assert.equal(result.jobCount, 2);
   assert.equal(result.pointCount, 3);
   assert.equal(result.selectedPointCount, 2);
+});
+
+test('the work-period trail is chronological across one-point jobs and stable for missing timestamps', () => {
+  const result = groupGpsSamplesByJob([
+    sample('unknown-time-a', 'job-c', null, 13.74, 100.54),
+    sample('finish', 'job-finish', '2026-09-02T04:00:30Z', 13.73, 100.53),
+    sample('load', 'job-load', '2026-09-02T04:00:00Z', 13.70, 100.50),
+    sample('unload', 'job-unload', '2026-09-02T04:00:20Z', 13.72, 100.52),
+    sample('unknown-time-b', 'job-d', 'not-a-date', 13.75, 100.55),
+  ], 'job-unload');
+
+  assert.deepEqual(
+    result.trailPoints.map(point => point.sampleId),
+    ['load', 'unload', 'finish', 'unknown-time-a', 'unknown-time-b'],
+  );
+  assert.equal(result.groups.every(group => group.points.length === 1), true);
+  assert.equal(result.selectedPointCount, 1);
 });
 
 test('unlinked and invalid points never become selected-job points', () => {

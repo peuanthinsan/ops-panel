@@ -216,17 +216,27 @@ test('the GPS drawer maps the complete work period and refreshes it after a look
   assert.doesNotMatch(drawer, /activeDetail\?\.route \? <section className="gps-route-section"/);
 });
 
-test('the work-period map separates job paths, highlights the selected job, and fits every point', async () => {
+test('the work-period map draws a chronological cased trail, visible dots, selected-job emphasis, and fits every point', async () => {
   const map = await readFile(fileURLToPath(new NodeUrl('../web/app/route-map.jsx', import.meta.url)), 'utf8');
   assert.match(map, /groupGpsSamplesByJob\(samples, selectedJobId\)/);
   assert.match(map, /if \(!routePoints\.length && !recordedPoints\.length && !deviationPoints\.length\)/);
   assert.doesNotMatch(map, /if \(routePoints\.length < 2\)/);
   assert.match(map, /for \(const group of gpsData\.groups\)/);
+  assert.match(map, /const workPeriodPath = gpsData\.trailPoints\.map/);
+  assert.match(map, /if \(workPeriodPath\.length > 1\)/);
+  assert.match(map, /path: 'M 0,-1 0,1'/);
+  assert.match(map, /repeat: '16px'/);
+  assert.match(map, /icons: dashedLineIcons\('#FFFFFF', 8\),[\s\S]*zIndex: 31/);
+  assert.match(map, /icons: dashedLineIcons\('#0B6F70', 4\),[\s\S]*zIndex: 32/);
+  assert.match(map, /strokeDasharray="10 8"/);
   assert.match(map, /const gpsPath = group\.points\.map/);
-  assert.match(map, /if \(group\.linked && gpsPath\.length > 1\)/);
-  assert.match(map, /strokeWeight: group\.selected \? 6 : 3/);
-  assert.match(map, /scale: group\.selected \? 6 : 4/);
-  assert.match(map, /strokeWeight: group\.selected \? 3 : 1\.5/);
+  assert.match(map, /if \(group\.selected && gpsPath\.length > 1\)/);
+  assert.match(map, /scale: group\.selected \? 7 : 5/);
+  assert.match(map, /strokeWeight: group\.selected \? 3\.5 : 2\.5/);
+  assert.match(map, /zIndex: group\.selected \? 70 : 55/);
+  assert.match(map, /trailPoints=\{gpsData\.trailPoints\}/);
+  assert.match(map, /r=\{group\.selected \? 7 : 5\}/);
+  assert.match(map, /strokeWidth=\{group\.selected \? 3\.5 : 2\.5\}/);
   assert.match(map, /recordedPoints\.map\(point => \(\{ lat: point\.latitude, lng: point\.longitude \}\)\)/);
   assert.match(map, /t\.savedRoute/);
   assert.match(map, /t\.workPeriod/);

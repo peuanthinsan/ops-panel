@@ -7,8 +7,16 @@ function coordinate(value) {
 }
 
 function capturedAtValue(value) {
+  if (value == null || String(value).trim() === '') return null;
   const timestamp = new Date(value).getTime();
   return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function compareGpsPoints(left, right) {
+  if (left.capturedAt == null && right.capturedAt == null) return left.sourceIndex - right.sourceIndex;
+  if (left.capturedAt == null) return 1;
+  if (right.capturedAt == null) return -1;
+  return left.capturedAt - right.capturedAt || left.sourceIndex - right.sourceIndex;
 }
 
 export function normalizeGpsSample(sample) {
@@ -30,11 +38,13 @@ export function normalizeGpsSample(sample) {
 export function groupGpsSamplesByJob(samples = [], selectedJobId = '') {
   const selectedId = String(selectedJobId || '').trim();
   const groupsByJob = new Map();
+  const trailPoints = [];
 
   for (let index = 0; index < samples.length; index += 1) {
     const point = normalizeGpsSample(samples[index]);
     if (!point) continue;
     const entry = { ...point, sourceIndex: index };
+    trailPoints.push(entry);
     const group = groupsByJob.get(entry.jobId) || { jobId: entry.jobId, points: [] };
     group.points.push(entry);
     groupsByJob.set(entry.jobId, group);
@@ -44,12 +54,7 @@ export function groupGpsSamplesByJob(samples = [], selectedJobId = '') {
     ...group,
     linked: group.jobId !== UNKNOWN_JOB_ID,
     selected: Boolean(selectedId) && group.jobId === selectedId,
-    points: group.points.toSorted((left, right) => {
-      if (left.capturedAt == null && right.capturedAt == null) return left.sourceIndex - right.sourceIndex;
-      if (left.capturedAt == null) return 1;
-      if (right.capturedAt == null) return -1;
-      return left.capturedAt - right.capturedAt || left.sourceIndex - right.sourceIndex;
-    }),
+    points: group.points.toSorted(compareGpsPoints),
   }));
   const orderedGroups = [
     ...groups.filter(group => !group.selected),
@@ -61,6 +66,7 @@ export function groupGpsSamplesByJob(samples = [], selectedJobId = '') {
   return {
     groups: orderedGroups,
     points,
+    trailPoints: trailPoints.toSorted(compareGpsPoints),
     jobCount: orderedGroups.filter(group => group.linked).length,
     pointCount: points.length,
     selectedPointCount,

@@ -77,7 +77,7 @@ function project(point, bounds, width, height) {
   return { x: 18 + x * 0.92, y: 18 + y * 0.92 };
 }
 
-function CoordinateFallback({ anchors, gpsGroups, deviations = [], label, message }) {
+function CoordinateFallback({ anchors, gpsGroups, trailPoints = [], deviations = [], label, message }) {
   const gps = gpsGroups.flatMap(group => group.points);
   const points = [...anchors, ...gps, ...deviations];
   if (!points.length) return <div className="route-map-empty">{label}: {message}</div>;
@@ -88,6 +88,7 @@ function CoordinateFallback({ anchors, gpsGroups, deviations = [], label, messag
   const width = 520;
   const height = 260;
   const routeLine = anchors.map(point => { const projected = project(point, bounds, width, height); return `${projected.x},${projected.y}`; }).join(' ');
+  const workPeriodLine = trailPoints.map(point => { const projected = project(point, bounds, width, height); return `${projected.x},${projected.y}`; }).join(' ');
   return <div className="route-map-fallback">
     <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
       <defs><pattern id="route-grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M 36 0 L 0 0 0 36" fill="none" stroke="#e6eaee" strokeWidth="1" /></pattern></defs>
@@ -96,12 +97,17 @@ function CoordinateFallback({ anchors, gpsGroups, deviations = [], label, messag
         <polyline points={routeLine} fill="none" stroke="#e31b23" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" opacity=".22" />
         <polyline points={routeLine} fill="none" stroke="#e31b23" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
       </> : null}
+      {trailPoints.length > 1 ? <>
+        <polyline points={workPeriodLine} fill="none" stroke="#FFFFFF" strokeWidth="8" strokeDasharray="10 8" strokeLinecap="round" strokeLinejoin="round" opacity=".96" />
+        <polyline points={workPeriodLine} fill="none" stroke="#0B6F70" strokeWidth="4" strokeDasharray="10 8" strokeLinecap="round" strokeLinejoin="round" opacity=".98" />
+      </> : null}
       {gpsGroups.map(group => {
         const line = group.points.map(point => { const projected = project(point, bounds, width, height); return `${projected.x},${projected.y}`; }).join(' ');
-        const color = group.selected ? '#087CA7' : '#73838D';
+        const color = group.selected ? '#087CA7' : '#0B6F70';
         return <g key={group.jobId}>
-          {group.linked && group.points.length > 1 ? <polyline points={line} fill="none" stroke={color} strokeWidth={group.selected ? 5 : 2.5} strokeLinecap="round" strokeLinejoin="round" opacity={group.selected ? 1 : 0.48} /> : null}
-          {group.points.map((point, index) => { const projected = project(point, bounds, width, height); return <circle key={`${group.jobId}-${point.sampleId || index}`} cx={projected.x} cy={projected.y} r={group.selected ? 6 : 3.5} fill={color} fillOpacity={group.selected ? 1 : 0.7} stroke="#fff" strokeWidth={group.selected ? 3 : 1.5} />; })}
+          {group.selected && group.points.length > 1 ? <polyline points={line} fill="none" stroke="#FFFFFF" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" opacity=".98" /> : null}
+          {group.selected && group.points.length > 1 ? <polyline points={line} fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" /> : null}
+          {group.points.map((point, index) => { const projected = project(point, bounds, width, height); return <circle key={`${group.jobId}-${point.sampleId || index}`} cx={projected.x} cy={projected.y} r={group.selected ? 7 : 5} fill={color} stroke="#fff" strokeWidth={group.selected ? 3.5 : 2.5} />; })}
         </g>;
       })}
       {deviations.map((point, index) => { const projected = project(point, bounds, width, height); return <circle key={`deviation-${index}`} cx={projected.x} cy={projected.y} r="7" fill="#B92B3A" stroke="#fff" strokeWidth="2.5" />; })}
@@ -120,6 +126,20 @@ function markerIcon(google, color, scale = 5, fillOpacity = 1, strokeWeight = 2)
   };
 }
 
+function dashedLineIcons(color, strokeWeight) {
+  return [{
+    icon: {
+      path: 'M 0,-1 0,1',
+      strokeColor: color,
+      strokeOpacity: 1,
+      strokeWeight,
+      scale: 4,
+    },
+    offset: '0',
+    repeat: '16px',
+  }];
+}
+
 function countLabel(count, singular, plural) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
@@ -132,7 +152,7 @@ export default function RouteMap({ anchors = [], samples = [], deviationEvents =
   const mapBoundsRef = useRef(null);
   const routePoints = useMemo(() => anchors.map(normalizePoint).filter(Boolean), [anchors]);
   const gpsData = useMemo(() => groupGpsSamplesByJob(samples, selectedJobId), [samples, selectedJobId]);
-  const recordedPoints = gpsData.points;
+  const recordedPoints = gpsData.trailPoints;
   const deviationPoints = useMemo(() => deviationEvents.map(normalizePoint).filter(Boolean), [deviationEvents]);
   const [state, setState] = useState('loading');
   const [mapType, setMapType] = useState('roadmap');
@@ -216,27 +236,55 @@ export default function RouteMap({ anchors = [], samples = [], deviationEvents =
           overlays.push(routePointLayer);
         }
 
+        const workPeriodPath = gpsData.trailPoints.map(point => ({ lat: point.latitude, lng: point.longitude }));
+        if (workPeriodPath.length > 1) {
+          overlays.push(new google.maps.Polyline({
+            map,
+            path: workPeriodPath,
+            strokeOpacity: 0,
+            icons: dashedLineIcons('#FFFFFF', 8),
+            zIndex: 31,
+          }));
+          overlays.push(new google.maps.Polyline({
+            map,
+            path: workPeriodPath,
+            strokeOpacity: 0,
+            icons: dashedLineIcons('#0B6F70', 4),
+            zIndex: 32,
+          }));
+        }
+
         for (const group of gpsData.groups) {
           const gpsPath = group.points.map(point => ({ lat: point.latitude, lng: point.longitude }));
-          const color = group.selected ? '#087CA7' : '#73838D';
-          if (group.linked && gpsPath.length > 1) overlays.push(new google.maps.Polyline({
-            map,
-            path: gpsPath,
-            strokeColor: color,
-            strokeOpacity: group.selected ? 1 : 0.48,
-            strokeWeight: group.selected ? 6 : 3,
-            zIndex: group.selected ? 45 : 35,
-          }));
+          const color = group.selected ? '#087CA7' : '#0B6F70';
+          if (group.selected && gpsPath.length > 1) {
+            overlays.push(new google.maps.Polyline({
+              map,
+              path: gpsPath,
+              strokeColor: '#FFFFFF',
+              strokeOpacity: 0.98,
+              strokeWeight: 10,
+              zIndex: 45,
+            }));
+            overlays.push(new google.maps.Polyline({
+              map,
+              path: gpsPath,
+              strokeColor: color,
+              strokeOpacity: 1,
+              strokeWeight: 6,
+              zIndex: 46,
+            }));
+          }
           const pointLayer = new google.maps.Data({ map });
           for (const point of gpsPath) {
             pointLayer.add(new google.maps.Data.Feature({ geometry: new google.maps.Data.Point(point), properties: {
-              color, scale: group.selected ? 6 : 4, fillOpacity: group.selected ? 1 : 0.68, strokeWeight: group.selected ? 3 : 1.5,
+              color, scale: group.selected ? 7 : 5, fillOpacity: 1, strokeWeight: group.selected ? 3.5 : 2.5,
             } }));
           }
           pointLayer.setStyle(feature => ({
             clickable: false,
             icon: markerIcon(google, feature.getProperty('color'), feature.getProperty('scale'), feature.getProperty('fillOpacity'), feature.getProperty('strokeWeight')),
-            zIndex: group.selected ? 60 : 40,
+            zIndex: group.selected ? 70 : 55,
           }));
           overlays.push(pointLayer);
         }
@@ -318,7 +366,7 @@ export default function RouteMap({ anchors = [], samples = [], deviationEvents =
   const jobCount = Math.max(0, Number.isFinite(Number(workPeriodJobCount)) ? Number(workPeriodJobCount) : gpsData.jobCount);
   return <div className="route-map" role="region" aria-label={label}>
     <div ref={bodyRef} className={`route-map-body${isFullscreen ? ' is-fullscreen' : ''}`}>
-      {!fallback ? <div ref={containerRef} className="route-map-canvas" /> : <CoordinateFallback anchors={routePoints} gpsGroups={gpsData.groups} deviations={deviationPoints} label={label} message={t.noCoordinates} />}
+      {!fallback ? <div ref={containerRef} className="route-map-canvas" /> : <CoordinateFallback anchors={routePoints} gpsGroups={gpsData.groups} trailPoints={gpsData.trailPoints} deviations={deviationPoints} label={label} message={t.noCoordinates} />}
       {!fallback ? <div className="route-map-controls" role="group" aria-label={t.mapControls}>
         <div className="route-map-type-control" role="group" aria-label={t.mapStyle}>
           <button type="button" className={`route-map-control-button route-map-type-button${mapType === 'roadmap' ? ' is-active' : ''}`} aria-label={t.showRoadmap} aria-pressed={mapType === 'roadmap'} title={t.showRoadmap} disabled={controlsDisabled} onClick={() => changeMapType('roadmap')}>

@@ -216,7 +216,10 @@ button:disabled{opacity:.48;cursor:default}
 .route-map-legend{display:flex;flex-wrap:wrap;gap:7px 14px;padding:8px 10px;color:#405068;font-size:10px;font-weight:700;line-height:1.35}
 .route-map-legend span{display:inline-flex;align-items:center;gap:5px}
 .route-legend-line{width:18px;border-top:3px solid #E31B23}
-.work-period-legend-line{width:18px;border-top:3px solid rgba(115,131,141,.62)}
+.work-period-legend-line{position:relative;width:18px;border-top:4px dashed #0B6F70;box-shadow:0 -1px 0 #fff,0 1px 0 #fff}
+.work-period-legend-line:before,.work-period-legend-line:after{position:absolute;top:-6px;width:6px;height:6px;border:2px solid #fff;border-radius:50%;background:#0B6F70;content:""}
+.work-period-legend-line:before{left:0}
+.work-period-legend-line:after{right:0}
 .selected-job-legend-dot,.route-deviation-dot{width:8px;height:8px;border-radius:50%;background:#087CA7}
 .selected-job-legend-dot{box-shadow:0 0 0 2px #fff,0 0 0 3px #087CA7}
 .route-deviation-dot{width:10px;height:10px;background:#B92B3A;box-shadow:0 0 0 2px #fff,0 0 0 3px #B92B3A}
