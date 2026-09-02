@@ -171,6 +171,35 @@ test('timeline rows use the complete work-period grouping key', async () => {
   assert.doesNotMatch(timeline, /key=\{`\$\{row\.date\}-\$\{row\.actualDate\}-\$\{row\.vehicle\}`\}/);
 });
 
+test('in-drawer job navigation remounts the drawer and rejects stale action responses', async () => {
+  const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
+  const dashboard = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
+
+  assert.match(dashboard, /<JobGpsDrawer key=\{selectedReport\.id\} report=\{selectedReport\}/);
+  assert.match(dashboard, /const closeSelectedReport = useCallback\(\(\) => setSelectedReport\(null\), \[\]\);/);
+  assert.match(dashboard, /onClose=\{closeSelectedReport\}/);
+  assert.match(drawer, /const activeReportIdRef = useRef\(String\(report\.id \|\| ''\)\);/);
+  assert.match(drawer, /activeReportIdRef\.current = String\(report\.id \|\| ''\);/);
+  assert.match(drawer, /if \(activeReportIdRef\.current === mountedReportId\) activeReportIdRef\.current = '';/);
+  assert.match(drawer, /function isActiveReport\(reportId\)/);
+
+  const assignStart = drawer.indexOf('async function assignRoute() {');
+  const retryStart = drawer.indexOf('async function retryLookup() {');
+  const assignSource = drawer.slice(assignStart, retryStart);
+  const retryEnd = drawer.indexOf('\n\n  const activeDetail', retryStart);
+  const retrySource = drawer.slice(retryStart, retryEnd);
+  assert.match(assignSource, /const actionReportId = String\(report\.id \|\| ''\);/);
+  assert.match(assignSource, /onRouteAssigned\?\.\(assignment\);\n\s+if \(!isActiveReport\(actionReportId\)\) return;/);
+  assert.match(assignSource, /setWorkPeriodGpsRefreshKey\(value => value \+ 1\);/);
+  assert.match(assignSource, /const refreshed = await adminFetch\(`\/api\/admin\/reports\/\$\{encodeURIComponent\(actionReportId\)\}\/gps/);
+  assert.match(assignSource, /if \(!isActiveReport\(actionReportId\)\) return;\n\s+setDetail\(refreshed\);/);
+  assert.match(assignSource, /if \(isActiveReport\(actionReportId\)\) setRouteBusy\(false\);/);
+  assert.match(retrySource, /const actionReportId = String\(report\.id \|\| ''\);/);
+  assert.match(retrySource, /onReportUpdated\?\.\(mutatedReport\);\n\s+if \(!isActiveReport\(actionReportId\)\) return;/);
+  assert.match(retrySource, /if \(!isActiveReport\(actionReportId\)\) return;\n\s+setDetail\(refreshed\);/);
+  assert.match(retrySource, /if \(isActiveReport\(actionReportId\)\) setRetrying\(false\);/);
+});
+
 test('the GPS drawer keeps counts and retry feedback semantic when detail refreshes fail', async () => {
   const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
   assert.match(drawer, /const reportPointCount = pointCountValue\(report\.deviceGpsSamples\);/);
@@ -205,6 +234,7 @@ test('confirmed route deviations expose an exact GPS event in the map, drawer, a
 
 test('the GPS drawer maps the complete work period and refreshes it after a lookup retry', async () => {
   const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
+  const dashboard = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
   assert.match(drawer, /adminFetchWorkPeriodGpsData/);
   assert.match(drawer, /adminFetchWorkPeriodGpsData\(report\.id, \{ signal: controller\.signal \}\)/);
   assert.match(drawer, /setWorkPeriodGpsRefreshKey\(value => value \+ 1\)/);
@@ -213,10 +243,19 @@ test('the GPS drawer maps the complete work period and refreshes it after a look
   assert.match(drawer, /anchors=\{activeDetail\?\.route\?\.anchors \|\| \[\]\}/);
   assert.match(drawer, /selectedJobId=\{selectedJobId\}/);
   assert.match(drawer, /workPeriodJobCount=\{mapJobCount\}/);
+  assert.match(drawer, /groupGpsSamplesByJob\(mapSamples, selectedJobId\)/);
+  assert.match(drawer, /mapGpsData\.locationClusters\.length/);
+  assert.match(drawer, /mapGpsData\.pointCount/);
+  assert.match(drawer, /mappedMapJobCount/);
+  assert.match(drawer, /periodMapLoaded: '\{jobs\} jobs · \{points\} GPS fixes · \{locations\} map locations · \{mapped\} jobs mapped · \{selected\} from this job'/);
+  assert.match(drawer, /const mapReports = workPeriodGps \? workPeriodReports : \[displayedReport\];/);
+  assert.match(drawer, /reports=\{mapReports\}/);
+  assert.match(drawer, /onOpenJob=\{onOpenReport\}/);
+  assert.match(dashboard, /onOpenReport=\{setSelectedReport\}/);
   assert.doesNotMatch(drawer, /activeDetail\?\.route \? <section className="gps-route-section"/);
 });
 
-test('the work-period map draws a chronological cased trail, visible dots, selected-job emphasis, and fits every point', async () => {
+test('the work-period map draws the raw trail and truthful clickable location stacks without losing job-fix detail', async () => {
   const map = await readFile(fileURLToPath(new NodeUrl('../web/app/route-map.jsx', import.meta.url)), 'utf8');
   assert.match(map, /groupGpsSamplesByJob\(samples, selectedJobId\)/);
   assert.match(map, /if \(!routePoints\.length && !recordedPoints\.length && !deviationPoints\.length\)/);
@@ -231,13 +270,46 @@ test('the work-period map draws a chronological cased trail, visible dots, selec
   assert.match(map, /strokeDasharray="10 8"/);
   assert.match(map, /const gpsPath = group\.points\.map/);
   assert.match(map, /if \(group\.selected && gpsPath\.length > 1\)/);
-  assert.match(map, /scale: group\.selected \? 7 : 5/);
-  assert.match(map, /strokeWeight: group\.selected \? 3\.5 : 2\.5/);
-  assert.match(map, /zIndex: group\.selected \? 70 : 55/);
+  assert.match(map, /const locationClusters = gpsData\.locationClusters \|\| \[\];/);
+  assert.match(map, /const clusterMembershipByFixKey = useMemo/);
+  assert.match(map, /for \(const point of cluster\.points\) membership\.set\(fixKey\(point\), \{ clusterKey: cluster\.key, clusterIndex: index \+ 1 \}\);/);
+  assert.match(map, /const membership = clusterMembershipByFixKey\.get\(pointFixKey\);/);
+  assert.doesNotMatch(map, /const clusterKey = coordinateKey\(point\);/);
+  assert.match(map, /function clusterMarkerIcon\(google, count, selected, active\)/);
+  assert.match(map, /feature\.setProperty\('active'/);
+  assert.match(map, /clusterMarkerIcon\(google, Number\(feature\.getProperty\('count'\)\), Boolean\(feature\.getProperty\('selected'\)\), Boolean\(feature\.getProperty\('active'\)\)\)/);
+  assert.match(map, /for \(const cluster of visualClusters\)/);
+  assert.match(map, /clusterKey: cluster\.key/);
+  assert.match(map, /count: cluster\.count/);
+  assert.match(map, /clickable: true/);
+  assert.match(map, /title: feature\.getProperty\('title'\)/);
+  assert.match(map, /clusterLayer\.addListener\('click'/);
+  assert.match(map, /for \(const listener of listeners\) listener\.remove\?\.\(\);/);
   assert.match(map, /trailPoints=\{gpsData\.trailPoints\}/);
-  assert.match(map, /r=\{group\.selected \? 7 : 5\}/);
-  assert.match(map, /strokeWidth=\{group\.selected \? 3\.5 : 2\.5\}/);
+  assert.match(map, /locationClusters=\{visualClusters\}/);
+  assert.match(map, /role="group" aria-label=\{label\}/);
+  assert.match(map, /className=\{`route-map-cluster-marker/);
+  assert.match(map, /role="button"/);
+  assert.match(map, /tabIndex=\{0\}/);
+  assert.match(map, /onKeyDown=\{activate\}/);
+  assert.doesNotMatch(map, /preserveAspectRatio="none" aria-hidden="true"/);
   assert.match(map, /recordedPoints\.map\(point => \(\{ lat: point\.latitude, lng: point\.longitude \}\)\)/);
+  assert.match(map, /className="gps-fix-tray"/);
+  assert.match(map, /className="gps-fix-tray-list"/);
+  assert.match(map, /fixSummary: '\{fixes\} GPS fixes · \{locations\} map locations · \{mapped\} of \{jobs\} jobs mapped'/);
+  assert.match(map, /jobsWithoutFixCount/);
+  assert.match(map, /unlinkedFixCount/);
+  assert.match(map, /className="gps-location-detail"/);
+  assert.match(map, /className="gps-fix-detail-card"/);
+  for (const field of ['activity', 'reportId', 'jobTime', 'fixTime', 'coordinates', 'route', 'status']) {
+    assert.match(map, new RegExp(`t\\.${field}`));
+  }
+  assert.match(map, /className="gps-open-job-button"/);
+  assert.match(map, /onOpenJob\?\.\(activeReport\)/);
+  assert.match(map, /activeIsSelectedJob \? t\.currentJob : t\.openJob/);
+  assert.match(map, /preserveAspectRatio="xMidYMid meet"/);
+  assert.match(map, /reportableOperations\.map/);
+  assert.match(map, /scrollIntoView\(\{ block: 'nearest' \}\)/);
   assert.match(map, /t\.savedRoute/);
   assert.match(map, /t\.workPeriod/);
   assert.match(map, /t\.selectedJob/);
@@ -254,22 +326,32 @@ test('the GPS drawer and route map retain balanced proportions across responsive
   assertDeclaration(styles, '.gps-route-assignment', 'margin', '10px 18px 0');
   assertDeclaration(styles, '.gps-route-section', 'margin', '0');
   assertDeclaration(styles, '.gps-route-section', 'padding', '10px 18px 12px');
-  assertDeclaration(styles, '.gps-route-section', 'flex', '1 1 360px');
+  assertDeclaration(styles, '.gps-route-section', 'flex', 'none');
   assertDeclaration(styles, '.gps-route-missing', 'margin', '0');
   assertDeclaration(styles, '.gps-route-missing', 'padding', '18px');
-  assertDeclaration(styles, '.route-map', 'flex', '1');
+  assertDeclaration(styles, '.route-map', 'flex', 'none');
+  assertDeclaration(styles, '.route-map', 'display', 'block');
+  assertDeclaration(styles, '.route-map-body', 'height', 'clamp(220px,28dvh,280px)');
   assertDeclaration(styles, '.route-map-legend', 'flex-wrap', 'wrap');
   assertDeclaration(styles, '.gps-work-period-summary', 'display', 'flex');
   assertDeclaration(styles, '.route-map-control-button', 'height', '34px');
   assertDeclaration(styles, '.route-map-icon-button', 'width', '34px');
+  assertDeclaration(styles, '.gps-fix-tray-list', 'grid-template-columns', 'repeat(4,minmax(0,1fr))');
+  assertDeclaration(styles, '.gps-fix-tray', 'flex', 'none');
+  assertDeclaration(styles, '.gps-fix-tray-button', 'min-height', '44px');
+  assertDeclaration(styles, '.gps-fix-detail-card>dl', 'grid-template-columns', 'repeat(4,minmax(0,1fr))');
   assertDeclaration(styles, '.gps-samples-disclosure', 'min-height', '46px');
 
   const mobileStyles = mediaContents(styles, 'max-width:600px');
   assertDeclaration(mobileStyles, '.gps-route-assignment', 'margin', '9px 14px 0');
   assertDeclaration(mobileStyles, '.gps-route-section', 'padding', '9px 14px 10px');
   assertDeclaration(mobileStyles, '.gps-route-missing', 'padding', '14px');
-  assertDeclaration(mobileStyles, '.route-map', 'min-height', '210px');
+  assertDeclaration(mobileStyles, '.route-map', 'min-height', '0');
+  assertDeclaration(mobileStyles, '.route-map-body', 'height', 'clamp(190px,30dvh,230px)');
   assertDeclaration(mobileStyles, '.route-map-control-label', 'display', 'none');
+  assertDeclaration(mobileStyles, '.gps-fix-tray-list', 'grid-template-columns', 'repeat(2,minmax(0,1fr))');
+  assertDeclaration(mobileStyles, '.gps-location-stack>li>button', 'min-height', '44px');
+  assertDeclaration(mobileStyles, '.gps-fix-detail-card>dl', 'grid-template-columns', 'repeat(2,minmax(0,1fr))');
 
   const narrowStyles = mediaContents(styles, 'max-width:900px');
   assertDeclaration(narrowStyles, '.gps-drawer', 'width', '100%');

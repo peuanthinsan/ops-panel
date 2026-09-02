@@ -248,6 +248,7 @@ export default function FullReportDashboard({ lang }) {
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [selectedReport, setSelectedReport] = useState(null);
+  const closeSelectedReport = useCallback(() => setSelectedReport(null), []);
   const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
   const [timelineRouteAssignment, setTimelineRouteAssignment] = useState(null);
   const reportRequestSequence = useRef(0);
@@ -484,7 +485,7 @@ export default function FullReportDashboard({ lang }) {
           </div>
         </div> : null}
       </section>
-      {selectedReport ? <JobGpsDrawer report={selectedReport} lang={lang} onClose={() => setSelectedReport(null)} onReportUpdated={handleReportUpdated} onRouteAssigned={handleRouteAssigned} /> : null}
+      {selectedReport ? <JobGpsDrawer key={selectedReport.id} report={selectedReport} lang={lang} onClose={closeSelectedReport} onReportUpdated={handleReportUpdated} onRouteAssigned={handleRouteAssigned} onOpenReport={setSelectedReport} /> : null}
     </main>
   );
 }
