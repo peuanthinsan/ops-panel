@@ -158,3 +158,11 @@ test('the GPS drawer and route map retain balanced proportions across responsive
   const drawerWidths = rulesForSelector(styles, '.gps-drawer').filter(rule => rule.width);
   assert.equal(drawerWidths.at(-1)?.width, '100%', 'the final drawer width rule should keep <=900px layouts full-width');
 });
+
+test('the route list shows localized loading copy instead of the failure message', async () => {
+  const source = await readFile(fileURLToPath(new NodeUrl('../web/app/routes-dashboard.jsx', import.meta.url)), 'utf8');
+  assert.match(source, /loading \? <p role="status">\{t\.loading\}<\/p>/);
+  assert.doesNotMatch(source, /loading \? <p>\{t\.failed\}<\/p>/);
+  assert.match(source, /loading: 'Loading routes…'/);
+  assert.match(source, /loading: 'กำลังโหลดเส้นทาง…'/);
+});
