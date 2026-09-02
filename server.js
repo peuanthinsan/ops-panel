@@ -10,6 +10,8 @@ import { localReportFacets, queryLocalReports } from './lib/local-report-query.m
 import { fetchDataFmDriverIdentity, fetchDataFmGpsHistory } from './web/lib/server/data-fm-gps.mjs';
 import { DEFAULT_GPS_PAIR_TOLERANCE_MS, pairExternalGpsSources } from './web/lib/server/external-gps.mjs';
 import { evaluateRouteDeviation, normalizeRoutePath, parseRouteAnchors } from './web/lib/route-deviation.mjs';
+import { createServerJobId } from './web/lib/server/job-id.mjs';
+import { annotateWorkPeriods } from './web/lib/work-periods.mjs';
 
 const port = process.env.PORT || 4000;
 const maximumJsonBodyBytes = 64 * 1024;
@@ -46,6 +48,7 @@ const stored = loadState();
 const reports = Array.isArray(stored.reports) ? stored.reports : [...seedReports];
 const activeJobs = Array.isArray(stored.activeJobs) ? stored.activeJobs : [];
 const jobRoutes = Array.isArray(stored.jobRoutes) ? stored.jobRoutes : [];
+const workPeriodRoutes = Array.isArray(stored.workPeriodRoutes) ? stored.workPeriodRoutes : [];
 let routeDeviationSettings = stored.routeDeviationSettings || { distanceKm: 0.5, durationSeconds: 60 };
 const deviceBindings = Array.isArray(stored.deviceBindings) ? stored.deviceBindings : [];
 const bindingHistory = Array.isArray(stored.bindingHistory)
@@ -78,7 +81,7 @@ const dataFmEnvironmentSelected = Boolean(dataFmOptions.username || dataFmOption
 const saveState = () => {
   fs.mkdirSync(path.dirname(dataFile), { recursive: true });
   const temporaryFile = `${dataFile}.tmp`;
-  fs.writeFileSync(temporaryFile, JSON.stringify({ reports, activeJobs, jobRoutes, routeDeviationSettings, deviceBindings, bindingHistory, deviceConfig, driverIdentity, gpsSyncSamples, adminPasswordHash }, null, 2));
+  fs.writeFileSync(temporaryFile, JSON.stringify({ reports, activeJobs, jobRoutes, workPeriodRoutes, routeDeviationSettings, deviceBindings, bindingHistory, deviceConfig, driverIdentity, gpsSyncSamples, adminPasswordHash }, null, 2));
   fs.renameSync(temporaryFile, dataFile);
 };
 function openBindingHistory(binding, boundAt = new Date().toISOString()) {
@@ -387,6 +390,65 @@ function activeRouteName(value) {
   return jobRoutes.find(item => item.routeName.toLowerCase() === requested.toLowerCase())?.routeName || undefined;
 }
 
+function sameVehicle(left, right) {
+  return String(left || '').trim().toLowerCase() === String(right || '').trim().toLowerCase();
+}
+
+function workPeriodForReport(reportId) {
+  return annotateWorkPeriods(reports).find(report => report.id === reportId) || null;
+}
+
+function workPeriodForIncomingJob({ id, vehicleNumber, mode, startTime }) {
+  const probeId = `__work-period-route-${id || crypto.randomUUID()}`;
+  return annotateWorkPeriods([...reports, {
+    id: probeId,
+    vehicleNumber,
+    mode,
+    status: 'Active',
+    startTime,
+    endTime: startTime,
+  }]).find(report => report.id === probeId) || null;
+}
+
+function inheritedWorkPeriodRouteName({ id, vehicleNumber, mode, startTime }) {
+  const period = workPeriodForIncomingJob({ id, vehicleNumber, mode, startTime });
+  if (!period?.workPeriodId) return null;
+  return workPeriodRoutes.find(item => item.workPeriodId === period.workPeriodId && sameVehicle(item.vehicleNumber, vehicleNumber))?.routeName || null;
+}
+
+function assignRouteToWorkPeriod(reportId, routeName) {
+  const selected = workPeriodForReport(reportId);
+  if (!selected?.workPeriodId) return null;
+  const annotated = annotateWorkPeriods(reports);
+  const periodReports = annotated.filter(report => report.workPeriodId === selected.workPeriodId && sameVehicle(report.vehicleNumber, selected.vehicleNumber));
+  const reportIds = periodReports.map(report => report.id);
+  for (const report of reports) if (reportIds.includes(report.id)) report.routeName = routeName || null;
+
+  const periodStart = Date.parse(selected.workPeriodStartTime || selected.startTime);
+  const periodEnd = selected.workPeriodEndTime ? Date.parse(selected.workPeriodEndTime) : Number.POSITIVE_INFINITY;
+  let activeJobsUpdated = 0;
+  for (const job of activeJobs) {
+    const startedAt = Date.parse(job.startTime);
+    if (sameVehicle(job.vehicleNumber, selected.vehicleNumber)
+      && Number.isFinite(startedAt)
+      && startedAt >= periodStart
+      && startedAt <= periodEnd) {
+      job.routeName = routeName || null;
+      activeJobsUpdated += 1;
+    }
+  }
+
+  const assignmentIndex = workPeriodRoutes.findIndex(item => item.workPeriodId === selected.workPeriodId && sameVehicle(item.vehicleNumber, selected.vehicleNumber));
+  if (routeName) {
+    const assignment = { workPeriodId: selected.workPeriodId, vehicleNumber: selected.vehicleNumber, routeName, updatedAt: new Date().toISOString() };
+    if (assignmentIndex >= 0) workPeriodRoutes[assignmentIndex] = assignment;
+    else workPeriodRoutes.push(assignment);
+  } else if (assignmentIndex >= 0) {
+    workPeriodRoutes.splice(assignmentIndex, 1);
+  }
+  return { report: reports.find(report => report.id === reportId) || null, reportIds, activeJobsUpdated, workPeriodId: selected.workPeriodId };
+}
+
 const send = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': process.env.SONGDEE_CORS_ORIGIN || '*', 'Access-Control-Allow-Headers': 'Content-Type, x-admin-token, Authorization', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Cache-Control': 'no-store', 'Vary': 'Origin' }); res.end(JSON.stringify(body)); };
 class RequestBodyError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -486,7 +548,7 @@ const server = http.createServer(async (req, res) => {
     const index = jobRoutes.findIndex(item => item.id === routeId);
     if (index < 0) return send(res, 404, { error: 'Route not found' });
     if (req.method === 'DELETE') {
-      if ([...activeJobs, ...reports].some(job => String(job.routeName || '').toLowerCase() === jobRoutes[index].routeName.toLowerCase())) return send(res, 409, { error: 'This route is assigned to a job. Reassign saved jobs or finish active jobs before deleting it.' });
+      if ([...activeJobs, ...reports, ...workPeriodRoutes].some(job => String(job.routeName || '').toLowerCase() === jobRoutes[index].routeName.toLowerCase())) return send(res, 409, { error: 'This route is assigned to a job. Reassign saved jobs or finish active jobs before deleting it.' });
       jobRoutes.splice(index, 1); saveState(); return send(res, 200, { ok: true });
     }
     try {
@@ -496,6 +558,7 @@ const server = http.createServer(async (req, res) => {
       jobRoutes[index] = { ...jobRoutes[index], ...normalized, active: true, updatedAt: new Date().toISOString() };
       if (previousRouteName.toLowerCase() !== normalized.routeName.toLowerCase()) {
         for (const job of [...activeJobs, ...reports]) if (String(job.routeName || '').toLowerCase() === previousRouteName.toLowerCase()) job.routeName = normalized.routeName;
+        for (const assignment of workPeriodRoutes) if (String(assignment.routeName || '').toLowerCase() === previousRouteName.toLowerCase()) assignment.routeName = normalized.routeName;
       }
       saveState(); return send(res, 200, { route: jobRoutes[index] });
     } catch (error) { return sendBodyError(res, error); }
@@ -508,7 +571,14 @@ const server = http.createServer(async (req, res) => {
       if (!report) return send(res, 404, { error: 'Report not found' });
       const input = await readJsonBody(req); const routeName = activeRouteName(input.routeName);
       if (input.routeName && routeName === undefined) return send(res, 409, { error: 'The selected route is no longer available. Refresh routes and choose again.' });
-      report.routeName = routeName || null; saveState(); return send(res, 200, { report });
+      const scope = input.scope || 'job';
+      if (!['job', 'work_period'].includes(scope)) return send(res, 400, { error: 'scope must be job or work_period' });
+      if (scope === 'work_period') {
+        const assignment = assignRouteToWorkPeriod(report.id, routeName || null);
+        if (!assignment) return send(res, 409, { error: 'This job does not have a work period yet.' });
+        saveState(); return send(res, 200, { ...assignment, scope });
+      }
+      report.routeName = routeName || null; saveState(); return send(res, 200, { report, reportIds: [report.id], activeJobsUpdated: 0, scope });
     } catch (error) { return sendBodyError(res, error); }
   }
   if (req.url?.startsWith('/api/device-config') && req.method === 'GET') {
@@ -620,8 +690,10 @@ const server = http.createServer(async (req, res) => {
         const driverId = optionalText(input.driverId, 180);
         const completed = reports.find(item => item.id === id);
         const existing = activeJobs.find(item => item.id === id);
-        const routeName = completed?.routeName || existing?.routeName || activeRouteName(input.routeName);
-        if (input.routeName && routeName === undefined) return send(res, 409, { error: 'The selected route is no longer available. Refresh routes and choose again.' });
+        const requestedRouteName = activeRouteName(input.routeName);
+        if (input.routeName && requestedRouteName === undefined) return send(res, 409, { error: 'The selected route is no longer available. Refresh routes and choose again.' });
+        const inheritedRouteName = completed || existing ? null : inheritedWorkPeriodRouteName({ id, vehicleNumber, mode, startTime: new Date(startTimeMs).toISOString() });
+        const routeName = completed?.routeName || existing?.routeName || inheritedRouteName || requestedRouteName;
         if (!id || id.length > 180 || !/^[a-zA-Z0-9._:-]+$/.test(id)) return send(res, 400, { error: 'A valid id is required' });
         if (!vehicleNumber || !deviceId || !allowedModes.has(mode) || !Number.isFinite(startTimeMs)) return send(res, 400, { error: 'A valid vehicleNumber, deviceId, mode, and startTime are required' });
         if ((driverName?.length || 0) > 180 || (driverId?.length || 0) > 180) return send(res, 400, { error: 'driverName and driverId must be 180 characters or fewer' });
@@ -763,14 +835,17 @@ const server = http.createServer(async (req, res) => {
         const endTimeMs = Date.parse(String(input.endTime || ''));
         const driverName = optionalText(input.driverName, 180);
         const driverId = optionalText(input.driverId, 180);
-        const existing = requestedId ? reports.find(item => item.id === requestedId) : null;
-        const activeReportJob = activeJobs.find(item => item.id === requestedId);
-        const routeName = existing?.routeName || activeReportJob?.routeName || activeRouteName(input.routeName);
-        if (input.routeName && routeName === undefined) return send(res, 409, { error: 'The selected route is no longer available. Refresh routes and choose again.' });
         if (!vehicleNumber || !deviceId || !allowedModes.has(mode) || !Number.isFinite(startTimeMs) || !Number.isFinite(endTimeMs)) return send(res, 400, { error: 'A valid vehicleNumber, deviceId, mode, startTime, and endTime are required' });
         if ((driverName?.length || 0) > 180 || (driverId?.length || 0) > 180) return send(res, 400, { error: 'driverName and driverId must be 180 characters or fewer' });
         if (requestedId && (requestedId.length > 180 || !/^[a-zA-Z0-9._:-]+$/.test(requestedId))) return send(res, 400, { error: 'id must contain only letters, numbers, dots, underscores, colons, or hyphens' });
         if (endTimeMs < startTimeMs) return send(res, 400, { error: 'endTime must be after startTime' });
+        const reportId = requestedId || createServerJobId(deviceId, mode, startTimeMs);
+        const existing = reports.find(item => item.id === reportId) || null;
+        const activeReportJob = activeJobs.find(item => item.id === reportId);
+        const requestedRouteName = activeRouteName(input.routeName);
+        if (input.routeName && requestedRouteName === undefined) return send(res, 409, { error: 'The selected route is no longer available. Refresh routes and choose again.' });
+        const inheritedRouteName = existing || activeReportJob ? null : inheritedWorkPeriodRouteName({ id: reportId, vehicleNumber, mode, startTime: new Date(startTimeMs).toISOString() });
+        const routeName = existing?.routeName || activeReportJob?.routeName || inheritedRouteName || requestedRouteName;
         if (!wasBindingValidAt(deviceId, vehicleNumber, startTimeMs)) return send(res, 409, { error: 'Vehicle and device were not connected when this job started.' });
         const cancelled = input.status === 'Cancelled';
         const normalizedStartTime = new Date(startTimeMs).toISOString();
@@ -790,7 +865,7 @@ const server = http.createServer(async (req, res) => {
           return send(res, 200, { report: existing, deduplicated: true });
         }
         const report = {
-          id: requestedId || `OPS-${crypto.randomUUID()}`,
+          id: reportId,
           vehicleNumber,
           deviceId,
           driverName,

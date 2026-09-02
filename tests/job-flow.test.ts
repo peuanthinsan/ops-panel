@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createJobId, decideAction, idleJobSnapshot, isActionUnavailable, jobInitiatedAt, reportDriver, snapshotDriver } from '../lib/job-flow.ts';
+import { createServerJobId } from '../web/lib/server/job-id.mjs';
 
 test('an idle driver can select any mode', () => {
   const idle = idleJobSnapshot();
@@ -89,6 +90,10 @@ test('the report id shows the Bangkok date while its short SHA distinguishes exa
   assert.notEqual(firstDevice, nextMillisecond);
   assert.equal(
     createJobId('3936fdce325c1631', '9', 1_788_323_501_489),
+    'JOB-20260902-DB2D7A8C4E44',
+  );
+  assert.equal(
+    createServerJobId('3936fdce325c1631', 'Finish work', 1_788_323_501_489),
     'JOB-20260902-DB2D7A8C4E44',
   );
 });
