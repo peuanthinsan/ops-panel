@@ -19,6 +19,11 @@ type ReportView = {
   lastDeviceLatitude?: number | null;
   lastDeviceLongitude?: number | null;
   lastGpsCapturedAt?: string | null;
+  workPeriodId?: string | null;
+  workPeriodStartTime?: string | null;
+  workPeriodEndTime?: string | null;
+  workPeriodDate?: string | null;
+  workPeriodComplete?: boolean | null;
 };
 
 function dateValue(value?: string | null) {

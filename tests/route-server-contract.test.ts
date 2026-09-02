@@ -115,3 +115,87 @@ test('route rename, active-job deletion guard, completion retry, reassignment, a
   const deleted = await jsonRequest(baseUrl, `/api/admin/job-routes/${routeId}`, { method: 'DELETE', headers: adminHeaders });
   assert.equal(deleted.response.status, 200);
 });
+
+test('a work-period route applies to existing jobs and is inherited until Finish work', async t => {
+  const port = await freePort();
+  const fixtureDirectory = await mkdtemp(path.join(os.tmpdir(), 'songdee-work-period-route-'));
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: path.resolve(import.meta.dirname, '..'),
+    env: { ...process.env, PORT: String(port), SONGDEE_DATA_FILE: path.join(fixtureDirectory, 'data.json') },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  t.after(() => { if (child.exitCode == null) child.kill('SIGTERM'); });
+  const baseUrl = `http://127.0.0.1:${port}`;
+  await waitForHealth(baseUrl, child);
+
+  const login = await jsonRequest(baseUrl, '/api/admin/login', {
+    method: 'POST', body: JSON.stringify({ password: 'songdee-setup' }),
+  });
+  const adminHeaders = { 'x-admin-token': String(login.body.token) };
+  const route = await jsonRequest(baseUrl, '/api/admin/job-routes', {
+    method: 'POST', headers: adminHeaders, body: JSON.stringify({
+      routeName: 'N8',
+      googleMapsUrl: 'https://www.google.co.th/maps/dir/Start/Finish/data=!4m4!1d100.50!2d13.70!1d101.10!2d16.30',
+    }),
+  });
+  assert.equal(route.response.status, 201);
+
+  const binding = await jsonRequest(baseUrl, '/api/device-config', {
+    method: 'POST', body: JSON.stringify({ vehicleNumber: '69-8617', deviceId: 'work-period-device-001' }),
+  });
+  assert.equal(binding.response.status, 200);
+
+  const baseTime = Date.now() + 10_000;
+  const timestamp = (offsetMs: number) => new Date(baseTime + offsetMs).toISOString();
+  const existingReports = [
+    { id: 'OPS-work-period-load', mode: 'Load', startTime: timestamp(0), endTime: timestamp(60_000) },
+    { id: 'OPS-work-period-refuel', mode: 'Refuel', startTime: timestamp(90_000), endTime: timestamp(150_000) },
+  ];
+  for (const report of existingReports) {
+    const saved = await jsonRequest(baseUrl, '/api/reports', {
+      method: 'POST', body: JSON.stringify({ ...report, vehicleNumber: '69-8617', deviceId: 'work-period-device-001' }),
+    });
+    assert.equal(saved.response.status, 201);
+    assert.equal(saved.body.report.routeName, null);
+  }
+
+  const applied = await jsonRequest(baseUrl, '/api/admin/reports/OPS-work-period-refuel/route', {
+    method: 'PUT', headers: adminHeaders, body: JSON.stringify({ routeName: 'N8', scope: 'work_period' }),
+  });
+  assert.equal(applied.response.status, 200);
+  assert.equal(applied.body.scope, 'work_period');
+  assert.deepEqual(applied.body.reportIds.sort(), existingReports.map(report => report.id).sort());
+  assert.equal(applied.body.report.routeName, 'N8');
+
+  const started = await jsonRequest(baseUrl, '/api/job-starts', {
+    method: 'POST', body: JSON.stringify({
+      id: 'OPS-work-period-unload', vehicleNumber: '69-8617', deviceId: 'work-period-device-001', mode: 'Unload', startTime: timestamp(180_000),
+    }),
+  });
+  assert.equal(started.response.status, 201);
+  assert.equal(started.body.jobStart.routeName, 'N8');
+
+  const completed = await jsonRequest(baseUrl, '/api/reports', {
+    method: 'POST', body: JSON.stringify({
+      id: 'OPS-work-period-unload', vehicleNumber: '69-8617', deviceId: 'work-period-device-001', mode: 'Unload', startTime: timestamp(180_000), endTime: timestamp(240_000),
+    }),
+  });
+  assert.equal(completed.response.status, 201);
+  assert.equal(completed.body.report.routeName, 'N8');
+
+  const finished = await jsonRequest(baseUrl, '/api/reports', {
+    method: 'POST', body: JSON.stringify({
+      id: 'OPS-work-period-finish', vehicleNumber: '69-8617', deviceId: 'work-period-device-001', mode: 'Finish work', startTime: timestamp(270_000), endTime: timestamp(300_000),
+    }),
+  });
+  assert.equal(finished.response.status, 201);
+  assert.equal(finished.body.report.routeName, 'N8');
+
+  const nextPeriod = await jsonRequest(baseUrl, '/api/reports', {
+    method: 'POST', body: JSON.stringify({
+      id: 'OPS-next-period-load', vehicleNumber: '69-8617', deviceId: 'work-period-device-001', mode: 'Load', startTime: timestamp(330_000), endTime: timestamp(390_000),
+    }),
+  });
+  assert.equal(nextPeriod.response.status, 201);
+  assert.equal(nextPeriod.body.report.routeName, null);
+});

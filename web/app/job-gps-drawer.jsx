@@ -11,13 +11,13 @@ const copy = {
     title: 'GPS detail', close: 'Close', vehicle: 'Vehicle', driver: 'Driver', activity: 'Activity', time: 'Time',
     device: 'GPS points', last: 'Last GPS fix', captured: 'GPS fix time', coordinates: 'Coordinates', speedLabel: 'Speed', heading: 'Heading',
     loading: 'Loading GPS points…', failed: 'Could not load GPS detail.', empty: 'No GPS points are linked to this job yet.',
-    previous: 'Previous', next: 'Next', page: 'Page', of: 'of', print: 'Print job', speed: 'km/h', degrees: '°', routeMap: 'Route vs GPS map', openRoute: 'Open saved route', withinRoute: 'Within route', deviated: 'Route deviation', deviationBody: 'GPS stayed outside the route corridor for', deviationBegan: 'Deviation began', deviationLocation: 'GPS location', deviationDistance: 'Off route', deviationDuration: 'Confirmed duration', seconds: 'seconds', km: 'km', noRoute: 'No route is assigned to this job yet.', assignedRoute: 'Assigned route', noAssignedRoute: 'No route', savingRoute: 'Saving route…', routeSaveFailed: 'Could not update the assigned route.',
+    previous: 'Previous', next: 'Next', page: 'Page', of: 'of', print: 'Print job', speed: 'km/h', degrees: '°', routeMap: 'Route vs GPS map', openRoute: 'Open saved route', withinRoute: 'Within route', deviated: 'Route deviation', deviationBody: 'GPS stayed outside the route corridor for', deviationBegan: 'Deviation began', deviationLocation: 'GPS location', deviationDistance: 'Off route', deviationDuration: 'Confirmed duration', seconds: 'seconds', km: 'km', noRoute: 'No route is assigned to this job yet.', assignedRoute: 'Assigned route', noAssignedRoute: 'No route', savingRoute: 'Saving route…', routeSaveFailed: 'Could not update the assigned route.', routeScope: 'Apply route to', thisJob: 'This job only', workPeriod: 'Entire work period', workPeriodHint: 'Every job from the first job through Finish work, including jobs started later.', workPeriodSaved: 'Route applied to {count} jobs in this work period.',
   },
   th: {
     title: 'รายละเอียด GPS', close: 'ปิด', vehicle: 'รถ', driver: 'พขร.', activity: 'กิจกรรม', time: 'เวลา',
     device: 'จุด GPS', last: 'พิกัด GPS ล่าสุด', captured: 'เวลาพิกัด GPS', coordinates: 'พิกัด', speedLabel: 'ความเร็ว', heading: 'ทิศทาง',
     loading: 'กำลังโหลดจุด GPS…', failed: 'ไม่สามารถโหลดรายละเอียด GPS', empty: 'ยังไม่มีจุด GPS ที่เชื่อมกับงานนี้',
-    previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', print: 'พิมพ์งาน', speed: 'กม./ชม.', degrees: '°', routeMap: 'แผนที่เส้นทางเทียบกับ GPS', openRoute: 'เปิดเส้นทางที่บันทึก', withinRoute: 'อยู่ในเส้นทาง', deviated: 'ออกนอกเส้นทาง', deviationBody: 'GPS อยู่นอกแนวเส้นทางต่อเนื่องเป็นเวลา', deviationBegan: 'เริ่มออกนอกเส้นทาง', deviationLocation: 'ตำแหน่ง GPS', deviationDistance: 'ห่างจากเส้นทาง', deviationDuration: 'ระยะเวลาที่ยืนยัน', seconds: 'วินาที', km: 'กม.', noRoute: 'ยังไม่ได้กำหนดเส้นทางให้งานนี้', assignedRoute: 'เส้นทางที่กำหนด', noAssignedRoute: 'ไม่มีเส้นทาง', savingRoute: 'กำลังบันทึกเส้นทาง…', routeSaveFailed: 'ไม่สามารถอัปเดตเส้นทางที่กำหนดได้',
+    previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', print: 'พิมพ์งาน', speed: 'กม./ชม.', degrees: '°', routeMap: 'แผนที่เส้นทางเทียบกับ GPS', openRoute: 'เปิดเส้นทางที่บันทึก', withinRoute: 'อยู่ในเส้นทาง', deviated: 'ออกนอกเส้นทาง', deviationBody: 'GPS อยู่นอกแนวเส้นทางต่อเนื่องเป็นเวลา', deviationBegan: 'เริ่มออกนอกเส้นทาง', deviationLocation: 'ตำแหน่ง GPS', deviationDistance: 'ห่างจากเส้นทาง', deviationDuration: 'ระยะเวลาที่ยืนยัน', seconds: 'วินาที', km: 'กม.', noRoute: 'ยังไม่ได้กำหนดเส้นทางให้งานนี้', assignedRoute: 'เส้นทางที่กำหนด', noAssignedRoute: 'ไม่มีเส้นทาง', savingRoute: 'กำลังบันทึกเส้นทาง…', routeSaveFailed: 'ไม่สามารถอัปเดตเส้นทางที่กำหนดได้', routeScope: 'กำหนดเส้นทางให้', thisJob: 'เฉพาะงานนี้', workPeriod: 'ทั้งรอบงาน', workPeriodHint: 'ใช้กับทุกงานตั้งแต่งานแรกจนถึงจบงาน รวมถึงงานที่เริ่มภายหลัง', workPeriodSaved: 'กำหนดเส้นทางให้ {count} งานในรอบงานนี้แล้ว',
   },
 };
 
@@ -51,7 +51,7 @@ function distance(value, lang) {
   return Number.isFinite(kilometers) ? `${kilometers.toFixed(2)} ${lang === 'th' ? 'กม.' : 'km'}` : '—';
 }
 
-export default function JobGpsDrawer({ report, lang, onClose }) {
+export default function JobGpsDrawer({ report, lang, onClose, onRouteAssigned }) {
   const t = copy[lang];
   const closeRef = useRef(null);
   const [page, setPage] = useState(1);
@@ -61,6 +61,8 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
   const [error, setError] = useState('');
   const [routeBusy, setRouteBusy] = useState(false);
   const [routeError, setRouteError] = useState('');
+  const [routeScope, setRouteScope] = useState('work_period');
+  const [routeNotice, setRouteNotice] = useState('');
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -110,12 +112,16 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
     if (routeBusy) return;
     setRouteBusy(true);
     setRouteError('');
+    setRouteNotice('');
     try {
-      await adminFetch(`/api/admin/reports/${encodeURIComponent(report.id)}/route`, { method: 'PUT', body: JSON.stringify({ routeName: routeName || null }) });
+      const scope = routeScope;
+      const assignment = await adminFetch(`/api/admin/reports/${encodeURIComponent(report.id)}/route`, { method: 'PUT', body: JSON.stringify({ routeName: routeName || null, scope }) });
       const refreshed = await adminFetch(`/api/admin/reports/${encodeURIComponent(report.id)}/gps?page=${page}&pageSize=50`, { cacheOffline: false });
       setDetail(refreshed);
       if (refreshed.route) setMapSamples(await adminFetchReportGpsSamples(report.id));
       else setMapSamples([]);
+      if (scope === 'work_period') setRouteNotice(t.workPeriodSaved.replace('{count}', String(assignment.reportIds?.length || 0)));
+      onRouteAssigned?.(assignment);
     } catch { setRouteError(t.routeSaveFailed); }
     finally { setRouteBusy(false); }
   }
@@ -140,7 +146,16 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
           <div><dt>{t.activity}</dt><dd>{displayedReport.mode || '—'}</dd></div>
           <div><dt>{t.time}</dt><dd>{time(displayedReport.startTime, lang)}–{time(displayedReport.endTime, lang)}</dd></div>
         </dl>
-        <div className="gps-route-assignment"><RouteSelector busy={routeBusy} error={routeError} lang={lang} onSelect={assignRoute} value={displayedReport.routeName || ''} /></div>
+        <div className="gps-route-assignment">
+          <RouteSelector busy={routeBusy} error={routeError} lang={lang} onSelect={assignRoute} value={displayedReport.routeName || ''} />
+          <fieldset className="route-assignment-scope">
+            <legend>{t.routeScope}</legend>
+            <label><input checked={routeScope === 'work_period'} disabled={routeBusy} name="route-scope" onChange={() => setRouteScope('work_period')} type="radio" value="work_period" /><span>{t.workPeriod}</span></label>
+            <small>{t.workPeriodHint}</small>
+            <label><input checked={routeScope === 'job'} disabled={routeBusy} name="route-scope" onChange={() => setRouteScope('job')} type="radio" value="job" /><span>{t.thisJob}</span></label>
+          </fieldset>
+          {routeNotice ? <p className="route-assignment-notice" role="status">{routeNotice}</p> : null}
+        </div>
         <section className="gps-detail-section">
           <h2 id="gps-detail-title">{t.title}</h2>
           <dl className="gps-detail-summary">

@@ -139,6 +139,16 @@ test('production schema serializes active jobs against binding changes', async (
   assert.match(source, /route === 'admin\/device-config' && request\.method === 'DELETE'[\s\S]*active job before removing/);
 });
 
+test('production stores work-period route assignments and inherits them until Finish work', async () => {
+  const schema = await readFile(fileURLToPath(new NodeUrl('../db/schema.sql', import.meta.url)), 'utf8');
+  const source = await readFile(fileURLToPath(new NodeUrl('../web/lib/server/api.mjs', import.meta.url)), 'utf8');
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS work_period_routes/);
+  assert.match(schema, /work_period_id TEXT PRIMARY KEY/);
+  assert.match(source, /async function assignRouteToWorkPeriod\(reportId, routeName\)/);
+  assert.match(source, /scope === 'work_period'/);
+  assert.match(source, /async function inheritedWorkPeriodRouteName\(vehicleNumber, startTime\)/);
+});
+
 test('production binding history uses an exclusive unbound boundary', async () => {
   const source = await readFile(fileURLToPath(new NodeUrl('../web/lib/server/api.mjs', import.meta.url)), 'utf8');
   assert.match(source, /unbound_at IS NULL OR unbound_at > \$\{occurredAt\}::timestamptz/);

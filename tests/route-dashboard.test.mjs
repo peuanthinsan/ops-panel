@@ -104,6 +104,16 @@ test('the dashboard route assignment selector searches a bounded server result',
   assert.doesNotMatch(drawer, /<select id="gps-route-assignment"/);
 });
 
+test('the GPS drawer defaults a route assignment to the entire work period', async () => {
+  const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
+  const dashboard = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
+  assert.match(drawer, /useState\('work_period'\)/);
+  assert.match(drawer, /const scope = routeScope;/);
+  assert.match(drawer, /t\.workPeriodHint/);
+  assert.match(drawer, /t\.thisJob/);
+  assert.match(dashboard, /onRouteAssigned=\{\(\) => void loadReports\(\{ silent: true \}\)\}/);
+});
+
 test('confirmed route deviations expose an exact GPS event in the map, drawer, and timeline', async () => {
   const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
   const map = await readFile(fileURLToPath(new NodeUrl('../web/app/route-map.jsx', import.meta.url)), 'utf8');
