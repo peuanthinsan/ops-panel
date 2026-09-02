@@ -214,10 +214,16 @@ button:disabled{opacity:.48;cursor:default}
 .route-map-legend{display:flex;gap:14px;padding:8px 10px;color:#405068;font-size:10px;font-weight:700}
 .route-map-legend span{display:inline-flex;align-items:center;gap:5px}
 .route-legend-line{width:18px;border-top:3px solid #E31B23}
-.gps-legend-dot{width:8px;height:8px;border-radius:50%;background:#087CA7}
+.gps-legend-dot,.route-deviation-dot{width:8px;height:8px;border-radius:50%;background:#087CA7}
+.route-deviation-dot{width:10px;height:10px;background:#B92B3A;box-shadow:0 0 0 2px #fff,0 0 0 3px #B92B3A}
 .route-deviation-status{margin:10px 0 0;padding:8px 10px;border-radius:6px;font-size:11px;font-weight:650}
+.route-deviation-status p{margin:0}
 .route-deviation-status.within-route{background:#EDF8F3;color:#0E6F4A}
 .route-deviation-status.deviated{background:#FFF1F1;color:#9F1118}
+.route-deviation-events{display:grid;gap:7px;margin-top:9px}
+.route-deviation-events dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0;padding-top:8px;border-top:1px solid #F0C6CA}
+.route-deviation-events dt{color:#9D4A51;font-size:9px;font-weight:800}
+.route-deviation-events dd{margin:2px 0 0;color:#5E151B;font-size:11px;font-weight:750;font-variant-numeric:tabular-nums}
 .gps-route-missing{margin:0;padding:16px 22px 18px;border-top:1px solid #EEF0F2;color:#68727D;font-size:11px}
 .route-map-empty{margin:14px 0 0;color:#68727D;font-size:11px}
 @media(max-width:600px){.route-map-canvas,.route-map-fallback>svg{height:clamp(210px,36dvh,250px)}}
@@ -272,6 +278,7 @@ button:disabled{opacity:.48;cursor:default}
   .gps-route-assignment{margin:12px 14px 0}
   .gps-route-section{padding:14px 14px 16px}
   .gps-route-missing{padding:14px 14px 16px}
+  .route-deviation-events dl{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
 @media(max-width:480px){

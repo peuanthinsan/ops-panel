@@ -208,7 +208,19 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
   const timelinePage = useMemo(() => paginateReports(rows, page, pageSize), [rows, page]);
   const speedReports = useMemo(() => timelinePage.items.flatMap(row => row.reports), [timelinePage.items]);
   const speedSeries = useReportSpeedSeries(speedReports);
-  const alertsByRow = useMemo(() => new Map(timelinePage.items.map(row => [row, speedSeries.loading ? [] : deriveTimelineAlerts(row.reports, speedSeries.samplesByReportId)])), [timelinePage.items, speedSeries.loading, speedSeries.samplesByReportId]);
+  const alertsByRow = useMemo(() => new Map(timelinePage.items.map(row => {
+    if (speedSeries.loading) return [row, []];
+    const reportsWithRouteDeviations = row.reports.map(report => ({
+      ...report,
+      routeDeviation: speedSeries.routeDeviationByReportId[report.id] || null,
+    }));
+    const alerts = deriveTimelineAlerts(reportsWithRouteDeviations, speedSeries.samplesByReportId);
+    const positionedAlerts = alerts.flatMap(alert => {
+      const minute = (Date.parse(alert.capturedAt) - row.scaleStart) / 60_000;
+      return Number.isFinite(minute) ? [{ ...alert, minute }] : [];
+    });
+    return [row, positionedAlerts];
+  })), [timelinePage.items, speedSeries.loading, speedSeries.routeDeviationByReportId, speedSeries.samplesByReportId]);
   const statusSummary = [showCompleted ? t.completed : '', showCancelled ? t.cancelled : ''].filter(Boolean).join(' + ') || t.noneSelected;
   const emptyFilterMessage = !showCompleted && !showCancelled
     ? t.emptyNoStatus
@@ -319,7 +331,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
             onFocus={event => openTooltip(event, segment, false)}
             onBlur={() => setTooltip(current => current?.segment.id === segment.id ? null : current)}
             onClick={event => tooltip?.segment.id === segment.id && tooltip.pinned ? setTooltip(null) : openTooltip(event, segment, true)}
-          ><span className="sr-only">{segment.title}</span>{segment.finishWork ? <span className={`timeline-finish-marker ${segment.detail.status === t.cancelled ? 'cancelled' : ''}`} aria-hidden="true" /> : null}</button>)}<SpeedTimelineOverlay reports={row.reports} samplesByReportId={speedSeries.samplesByReportId} loading={speedSeries.loading} lang={lang} originTime={new Date(row.scaleStart).toISOString()} startMinute={0} endMinute={row.scaleDuration} /><TimelineAlertMarkers alerts={rowAlerts} lang={lang} /></div><TimelineAlertChips alerts={rowAlerts} lang={lang} /></div></div>; })}
+          ><span className="sr-only">{segment.title}</span>{segment.finishWork ? <span className={`timeline-finish-marker ${segment.detail.status === t.cancelled ? 'cancelled' : ''}`} aria-hidden="true" /> : null}</button>)}<SpeedTimelineOverlay reports={row.reports} samplesByReportId={speedSeries.samplesByReportId} loading={speedSeries.loading} lang={lang} originTime={new Date(row.scaleStart).toISOString()} startMinute={0} endMinute={row.scaleDuration} /><TimelineAlertMarkers alerts={rowAlerts} lang={lang} startMinute={0} endMinute={row.scaleDuration} /></div><TimelineAlertChips alerts={rowAlerts} lang={lang} /></div></div>; })}
         </div>
         {tooltip ? <aside className="timeline-detail-tooltip" id={tooltip.segment.tooltipId} role="tooltip" style={{ left: tooltip.left, top: tooltip.top, width: tooltip.width, transform: tooltip.above ? 'translateY(-100%)' : undefined }}>
           <div className="timeline-tooltip-heading"><strong>{tooltip.segment.detail.activity}</strong><span className={`status-badge status-${tooltip.segment.detail.status === t.cancelled ? 'cancelled' : 'completed'}`}>{tooltip.segment.detail.status}</span></div>

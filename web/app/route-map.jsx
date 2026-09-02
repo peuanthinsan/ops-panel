@@ -10,6 +10,7 @@ const copy = {
     routeUnavailable: 'Google could not calculate the driving path. Showing the saved route points.',
     savedRoute: 'Saved route',
     recordedGps: 'Recorded GPS',
+    deviation: 'Route deviation',
     noCoordinates: 'Route coordinates are not available in this Google Maps link.',
   },
   th: {
@@ -18,6 +19,7 @@ const copy = {
     routeUnavailable: 'Google ไม่สามารถคำนวณเส้นทางขับรถได้ กำลังแสดงจุดเส้นทางที่บันทึกไว้',
     savedRoute: 'เส้นทางที่บันทึก',
     recordedGps: 'GPS ที่บันทึก',
+    deviation: 'จุดออกนอกเส้นทาง',
     noCoordinates: 'ไม่พบพิกัดเส้นทางในลิงก์ Google Maps นี้',
   },
 };
@@ -48,8 +50,8 @@ function project(point, bounds, width, height) {
   return { x: 18 + x * 0.92, y: 18 + y * 0.92 };
 }
 
-function CoordinateFallback({ anchors, gps, label, message }) {
-  const points = [...anchors, ...gps];
+function CoordinateFallback({ anchors, gps, deviations = [], label, message }) {
+  const points = [...anchors, ...gps, ...deviations];
   if (anchors.length < 2 || points.length < 2) return <div className="route-map-empty">{label}: {message}</div>;
   const bounds = {
     minLat: Math.min(...points.map(point => point.latitude)), maxLat: Math.max(...points.map(point => point.latitude)),
@@ -65,6 +67,7 @@ function CoordinateFallback({ anchors, gps, label, message }) {
       <polyline points={line} fill="none" stroke="#e31b23" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" opacity=".22" />
       <polyline points={line} fill="none" stroke="#e31b23" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
       {gps.map((point, index) => { const projected = project(point, bounds, width, height); return <circle key={index} cx={projected.x} cy={projected.y} r="4.5" fill="#087ca7" stroke="#fff" strokeWidth="2" />; })}
+      {deviations.map((point, index) => { const projected = project(point, bounds, width, height); return <circle key={`deviation-${index}`} cx={projected.x} cy={projected.y} r="7" fill="#B92B3A" stroke="#fff" strokeWidth="2.5" />; })}
     </svg>
   </div>;
 }
@@ -80,11 +83,12 @@ function markerIcon(google, color, scale = 5) {
   };
 }
 
-export default function RouteMap({ anchors = [], samples = [], label = 'Route map', lang = 'en' }) {
+export default function RouteMap({ anchors = [], samples = [], deviationEvents = [], label = 'Route map', lang = 'en' }) {
   const t = copy[lang] || copy.en;
   const containerRef = useRef(null);
   const routePoints = useMemo(() => anchors.map(normalizePoint).filter(Boolean), [anchors]);
   const recordedPoints = useMemo(() => gpsPoints(samples), [samples]);
+  const deviationPoints = useMemo(() => deviationEvents.map(normalizePoint).filter(Boolean), [deviationEvents]);
   const [state, setState] = useState('loading');
 
   useEffect(() => {
@@ -133,6 +137,9 @@ export default function RouteMap({ anchors = [], samples = [], label = 'Route ma
         for (const point of samplePoints(gpsPath)) {
           pointLayer.add(new google.maps.Data.Feature({ geometry: new google.maps.Data.Point(point), properties: { color: '#087CA7', scale: 5 } }));
         }
+        for (const point of deviationPoints) {
+          pointLayer.add(new google.maps.Data.Feature({ geometry: new google.maps.Data.Point({ lat: point.latitude, lng: point.longitude }), properties: { color: '#B92B3A', scale: 9 } }));
+        }
         pointLayer.setStyle(feature => ({
           clickable: false,
           icon: markerIcon(google, feature.getProperty('color'), feature.getProperty('scale')),
@@ -141,7 +148,7 @@ export default function RouteMap({ anchors = [], samples = [], label = 'Route ma
         overlays.push(pointLayer);
 
         const bounds = new google.maps.LatLngBounds();
-        for (const point of [...routePath, ...gpsPath]) bounds.extend(point);
+        for (const point of [...routePath, ...gpsPath, ...deviationPoints.map(point => ({ lat: point.latitude, lng: point.longitude }))]) bounds.extend(point);
         map.fitBounds(bounds, 34);
         google.maps.event.addListenerOnce(map, 'idle', () => {
           if (Number(map?.getZoom()) > 17) map.setZoom(17);
@@ -161,17 +168,17 @@ export default function RouteMap({ anchors = [], samples = [], label = 'Route ma
       for (const overlay of overlays) overlay.setMap?.(null);
       if (map && window.google?.maps?.event) window.google.maps.event.clearInstanceListeners(map);
     };
-  }, [lang, recordedPoints, routePoints]);
+  }, [deviationPoints, lang, recordedPoints, routePoints]);
 
   if (state === 'empty') return <div className="route-map-empty">{label}: {t.noCoordinates}</div>;
   const fallback = state === 'unavailable';
   return <div className="route-map" role="region" aria-label={label}>
     <div className="route-map-body">
-      {!fallback ? <div ref={containerRef} className="route-map-canvas" /> : <CoordinateFallback anchors={routePoints} gps={recordedPoints} label={label} message={t.noCoordinates} />}
+      {!fallback ? <div ref={containerRef} className="route-map-canvas" /> : <CoordinateFallback anchors={routePoints} gps={recordedPoints} deviations={deviationPoints} label={label} message={t.noCoordinates} />}
       {state === 'loading' ? <div className="route-map-notice" role="status">{t.loading}</div> : null}
       {state === 'route-unavailable' ? <div className="route-map-notice warning" role="status">{t.routeUnavailable}</div> : null}
       {fallback ? <div className="route-map-notice warning" role="status">{t.unavailable}</div> : null}
     </div>
-    <div className="route-map-legend"><span><i className="route-legend-line" />{t.savedRoute}</span><span><i className="gps-legend-dot" />{t.recordedGps}</span></div>
+    <div className="route-map-legend"><span><i className="route-legend-line" />{t.savedRoute}</span><span><i className="gps-legend-dot" />{t.recordedGps}</span>{deviationPoints.length ? <span><i className="route-deviation-dot" />{t.deviation}</span> : null}</div>
   </div>;
 }

@@ -115,9 +115,12 @@ export function parseStoredActiveJob(raw: string | null): ActiveJob | null {
     const deviceId = trimmedText(value.deviceId);
     const selected = trimmedText(value.selected);
     const startedAt = Number(value.startedAt);
+    const hasInitiatedAt = value.initiatedAt !== undefined;
+    const initiatedAt = Number(value.initiatedAt);
     const awaitingMovement = value.awaitingMovement === true;
     if (!vehicleNumber || !deviceId || !/^[1-9]$/.test(selected)
       || !Number.isFinite(startedAt) || startedAt < 0
+      || (hasInitiatedAt && (!Number.isFinite(initiatedAt) || initiatedAt <= 0))
       || (!awaitingMovement && startedAt <= 0)) return null;
     const rawJobId = trimmedText(value.jobId) || undefined;
     const driverName = trimmedText(value.driverName) || null;
@@ -141,6 +144,7 @@ export function parseStoredActiveJob(raw: string | null): ActiveJob | null {
       vehicleNumber,
       deviceId,
       selected,
+      ...(hasInitiatedAt ? { initiatedAt: Math.trunc(initiatedAt) } : {}),
       startedAt,
       ...(awaitingMovement ? { awaitingMovement: true } : {}),
       driverName,

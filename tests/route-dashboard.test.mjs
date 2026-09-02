@@ -104,6 +104,18 @@ test('the dashboard route assignment selector searches a bounded server result',
   assert.doesNotMatch(drawer, /<select id="gps-route-assignment"/);
 });
 
+test('confirmed route deviations expose an exact GPS event in the map, drawer, and timeline', async () => {
+  const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
+  const map = await readFile(fileURLToPath(new NodeUrl('../web/app/route-map.jsx', import.meta.url)), 'utf8');
+  const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
+  assert.match(drawer, /deviationEvents=\{routeDeviation\?\.events \|\| \[\]\}/);
+  assert.match(drawer, /t\.deviationBegan/);
+  assert.match(drawer, /t\.deviationLocation/);
+  assert.match(map, /const deviationPoints = useMemo/);
+  assert.match(map, /color: '#B92B3A', scale: 9/);
+  assert.match(timeline, /routeDeviation: speedSeries\.routeDeviationByReportId\[report\.id\] \|\| null/);
+});
+
 test('the GPS drawer and route map retain balanced proportions across responsive widths', async () => {
   const styles = await readFile(fileURLToPath(new NodeUrl('../web/app/styles.css', import.meta.url)), 'utf8');
 

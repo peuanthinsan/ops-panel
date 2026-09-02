@@ -148,8 +148,9 @@ test('dashboard and daily print timelines expose event-timed alert arrows and de
   const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
   const markers = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-alerts.jsx', import.meta.url)), 'utf8');
   const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
-  assert.match(timeline, /deriveTimelineAlerts\(row\.reports, speedSeries\.samplesByReportId\)/);
-  assert.match(timeline, /<TimelineAlertMarkers alerts=\{rowAlerts\}/);
+  assert.match(timeline, /routeDeviation: speedSeries\.routeDeviationByReportId\[report\.id\] \|\| null/);
+  assert.match(timeline, /deriveTimelineAlerts\(reportsWithRouteDeviations, speedSeries\.samplesByReportId\)/);
+  assert.match(timeline, /<TimelineAlertMarkers alerts=\{rowAlerts\} lang=\{lang\} startMinute=\{0\} endMinute=\{row\.scaleDuration\}/);
   assert.match(timeline, /<TimelineAlertChips alerts=\{rowAlerts\}/);
   assert.match(timeline, /className="legend-alert-icon" weight="fill"/);
   assert.match(markers, /CaretDownIcon weight="fill"/);

@@ -101,6 +101,7 @@ export default function Index() {
   const [vehicleAdminError, setVehicleAdminError] = useState('');
   const [changingVehicle, setChangingVehicle] = useState(false);
   const pendingReportRef = useRef<JobReportInput | null>(null);
+  const activeJobInitiatedAtRef = useRef<number | null>(null);
   const confirmationTitleRef = useRef<Text | null>(null);
   const vehicleAdminTitleRef = useRef<Text | null>(null);
   const headerTitleRef = useRef<Text | null>(null);
@@ -209,7 +210,12 @@ export default function Index() {
     getActiveJob().then(storedJob => {
       if (!mounted) return;
       if (activeJobBelongsToBinding(storedJob, binding) && storedJob) {
-        const restoredJobId = storedJob.jobId ?? createJobId(storedJob.deviceId, storedJob.selected, storedJob.startedAt || serverNowMs());
+        const pendingStart = Date.parse(storedJob.pendingReport?.startTime || '');
+        const restoredInitiatedAt = storedJob.initiatedAt
+          ?? jobInitiatedAt(storedJob.jobId ?? null)
+          ?? (storedJob.startedAt || (Number.isFinite(pendingStart) ? pendingStart : Math.trunc(serverNowMs())));
+        const restoredJobId = storedJob.jobId ?? createJobId(storedJob.deviceId, storedJob.selected, restoredInitiatedAt);
+        activeJobInitiatedAtRef.current = restoredInitiatedAt;
         setSelected(storedJob.selected);
         setSelectedRouteName(storedJob.routeName || storedJob.pendingReport?.routeName || null);
         setActiveJobId(restoredJobId);
@@ -218,18 +224,23 @@ export default function Index() {
         updatePendingReport(storedJob.pendingReport ?? null);
         const restoredDriver = snapshotDriver({ driverName: storedJob.driverName, driverId: storedJob.driverId });
         setJobDriverIdentity(restoredDriver);
-        if (!storedJob.jobId) void persistActiveJob({ ...storedJob, jobId: restoredJobId }).catch(() => { /* Older active jobs remain usable if migration persistence fails. */ });
+        if (!storedJob.jobId || storedJob.initiatedAt !== restoredInitiatedAt) {
+          void persistActiveJob({ ...storedJob, jobId: restoredJobId, initiatedAt: restoredInitiatedAt }).catch(() => { /* Older active jobs remain usable if migration persistence fails. */ });
+        }
         if (storedJob.startedAt) void queueJobStartForSync({ id: restoredJobId, vehicleNumber: storedJob.vehicleNumber, deviceId: storedJob.deviceId, driverName: restoredDriver?.driverName ?? null, driverId: restoredDriver?.driverId ?? null, mode: actionLabel(storedJob.selected, 'en'), routeName: storedJob.routeName || storedJob.pendingReport?.routeName || null, startTime: new Date(storedJob.startedAt).toISOString() });
         setMessage(storedJob.pendingReport
           ? storedJob.pendingReport.status === 'Cancelled'
             ? (language === 'en' ? 'Cancellation restored — retry saving it' : 'กู้คืนการยกเลิกงาน — กรุณาลองบันทึกอีกครั้ง')
             : (language === 'en' ? 'Completed job restored — tap the active job to retry saving it' : 'กู้คืนงานที่จบแล้ว — กดกิจกรรมที่กำลังทำเพื่อลองบันทึกอีกครั้ง')
           : (language === 'en' ? 'Active job restored' : 'กู้คืนงานที่กำลังทำอยู่'));
-      } else if (storedJob) {
-        setActiveJobId(null);
-        setJobDriverIdentity(null);
-        updatePendingReport(null);
-        return clearActiveJob();
+      } else {
+        activeJobInitiatedAtRef.current = null;
+        if (storedJob) {
+          setActiveJobId(null);
+          setJobDriverIdentity(null);
+          updatePendingReport(null);
+          return clearActiveJob();
+        }
       }
     }).catch(() => { /* A missing local job should not block the control panel. */ })
       .finally(() => { if (mounted) setRecoveredBindingKey(bindingKey); });
@@ -255,6 +266,7 @@ export default function Index() {
           setSelected(null);
           setSelectedRouteName(null);
           setActiveJobId(null);
+          activeJobInitiatedAtRef.current = null;
           setStartedAt(null);
           setAwaitingMovement(false);
           updatePendingReport(null);
@@ -273,6 +285,7 @@ export default function Index() {
           setSelected(null);
           setSelectedRouteName(null);
           setActiveJobId(null);
+          activeJobInitiatedAtRef.current = null;
           setStartedAt(null);
           setAwaitingMovement(false);
           updatePendingReport(null);
@@ -449,17 +462,18 @@ export default function Index() {
     const startDetectedJob = async () => {
       if (starting || !active || pendingReportRef.current || !selected) return;
       starting = true;
-      const timestamp = serverNowMs();
+      const timestamp = Math.trunc(serverNowMs());
       const startedDriver = snapshotDriver(driverIdentity) ?? jobDriverIdentity;
-      const jobId = activeJobId ?? createJobId(binding.deviceId, selected, timestamp);
+      const jobId = createJobId(binding.deviceId, selected, timestamp);
       try {
-        await persistActiveJob({ jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, selected, routeName: selectedRouteName, startedAt: timestamp, driverName: startedDriver?.driverName ?? null, driverId: startedDriver?.driverId ?? null });
+        await persistActiveJob({ jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, selected, routeName: selectedRouteName, initiatedAt: timestamp, startedAt: timestamp, driverName: startedDriver?.driverName ?? null, driverId: startedDriver?.driverId ?? null });
       } catch {
         if (active) setMessage(language === 'en' ? 'Could not save the job start — retrying' : 'ไม่สามารถบันทึกเวลาเริ่มงานได้ — กำลังลองใหม่');
         starting = false;
         return;
       }
       if (!active) return;
+      activeJobInitiatedAtRef.current = timestamp;
       setStartedAt(timestamp);
       setActiveJobId(jobId);
       setJobDriverIdentity(startedDriver);
@@ -546,6 +560,7 @@ export default function Index() {
       setSelected(null);
       setSelectedRouteName(null);
       setActiveJobId(null);
+      activeJobInitiatedAtRef.current = null;
       setStartedAt(null);
       setAwaitingMovement(false);
       updatePendingReport(null);
@@ -593,10 +608,12 @@ export default function Index() {
     }
     if (decision.type === 'confirm_finish') { setConfirmType('finish'); return; }
     if (decision.type === 'confirm_day_end') {
+      activeJobInitiatedAtRef.current = null;
       setSelected(number);
       setConfirmType('day_end');
       return;
     }
+    activeJobInitiatedAtRef.current = null;
     setSelected(number);
     setConfirmType('start');
   }
@@ -609,6 +626,7 @@ export default function Index() {
     } catch {
       setSelected(null);
       setActiveJobId(null);
+      activeJobInitiatedAtRef.current = null;
       setStartedAt(null);
       setAwaitingMovement(false);
       updatePendingReport(null);
@@ -638,7 +656,7 @@ export default function Index() {
     try {
       setMessage(language === 'en' ? 'Checking vehicle movement…' : 'กำลังตรวจสอบการเคลื่อนที่ของรถ…');
       const pendingDriver = snapshotDriver(driverIdentity);
-      const jobId = activeJobId ?? createJobId(binding.deviceId, selected, serverNowMs());
+      const selectionTime = Math.trunc(serverNowMs());
       let waitForMovement = false;
       let waitMessage = language === 'en' ? 'Waiting for vehicle movement' : 'กำลังรอรถเริ่มเคลื่อนที่';
       try {
@@ -651,17 +669,21 @@ export default function Index() {
         waitForMovement = true;
       }
       if (waitForMovement) {
-        const stored = await persistNewActiveJob({ jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, selected, routeName: selectedRouteName, startedAt: 0, awaitingMovement: true, driverName: pendingDriver?.driverName ?? null, driverId: pendingDriver?.driverId ?? null });
+        const jobId = activeJobId ?? createJobId(binding.deviceId, selected, selectionTime);
+        const stored = await persistNewActiveJob({ jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, selected, routeName: selectedRouteName, initiatedAt: selectionTime, startedAt: 0, awaitingMovement: true, driverName: pendingDriver?.driverName ?? null, driverId: pendingDriver?.driverId ?? null });
         if (!stored) return;
+        activeJobInitiatedAtRef.current = selectionTime;
         setActiveJobId(jobId);
         setJobDriverIdentity(pendingDriver);
         setAwaitingMovement(true);
         setMessage(waitMessage);
         return;
       }
-      const timestamp = serverNowMs();
-      const stored = await persistNewActiveJob({ jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, selected, routeName: selectedRouteName, startedAt: timestamp, driverName: pendingDriver?.driverName ?? null, driverId: pendingDriver?.driverId ?? null });
+      const timestamp = Math.trunc(serverNowMs());
+      const jobId = activeJobId ?? createJobId(binding.deviceId, selected, timestamp);
+      const stored = await persistNewActiveJob({ jobId, vehicleNumber: binding.vehicleNumber, deviceId: binding.deviceId, selected, routeName: selectedRouteName, initiatedAt: timestamp, startedAt: timestamp, driverName: pendingDriver?.driverName ?? null, driverId: pendingDriver?.driverId ?? null });
       if (!stored) return;
+      activeJobInitiatedAtRef.current = timestamp;
       setActiveJobId(jobId);
       setJobDriverIdentity(pendingDriver);
       setStartedAt(timestamp);
@@ -696,6 +718,9 @@ export default function Index() {
         deviceId: binding.deviceId,
         selected,
         routeName: report.routeName || selectedRouteName,
+        initiatedAt: activeJobInitiatedAtRef.current
+          ?? startedAt
+          ?? (typeof completedStart === 'number' && Number.isFinite(completedStart) ? completedStart : Math.trunc(serverNowMs())),
         startedAt: startedAt ?? (typeof completedStart === 'number' && Number.isFinite(completedStart) ? completedStart : 0),
         ...(awaitingMovement && report.status === 'Cancelled' ? { awaitingMovement: true } : {}),
         driverName: report.driverName,
@@ -728,7 +753,7 @@ export default function Index() {
   async function confirmFinish() {
     const immediateDayEnd = confirmType === 'day_end' && selected === '9';
     if (savingJob || !binding || !selected || (!immediateDayEnd && !startedAt && !awaitingMovement)) return;
-    const fallbackStart = startedAt ?? jobInitiatedAt(activeJobId) ?? serverNowMs();
+    const fallbackStart = startedAt ?? activeJobInitiatedAtRef.current ?? jobInitiatedAt(activeJobId) ?? Math.trunc(serverNowMs());
     const reportId = activeJobId ?? createJobId(binding.deviceId, selected, fallbackStart);
     const finishingDay = selected === '9';
     let completedDayReport: SavedJob | null = null;
@@ -760,6 +785,7 @@ export default function Index() {
         confirmationTriggerNodeRef.current = findNodeHandle(headerTitleRef.current);
         setSelected(null);
         setActiveJobId(null);
+        activeJobInitiatedAtRef.current = null;
         setStartedAt(null);
         setAwaitingMovement(false);
         setJobDriverIdentity(null);
@@ -784,7 +810,7 @@ export default function Index() {
 
   async function confirmCancel() {
     if (savingJob || !binding || !selected) return;
-    const reportId = activeJobId ?? createJobId(binding.deviceId, selected, startedAt ?? serverNowMs());
+    const reportId = activeJobId ?? createJobId(binding.deviceId, selected, startedAt ?? activeJobInitiatedAtRef.current ?? Math.trunc(serverNowMs()));
     setSavingJob(true);
     try {
       const report = cancellationReportForIntent(pendingReport, () => {
@@ -809,6 +835,7 @@ export default function Index() {
         confirmationTriggerNodeRef.current = findNodeHandle(headerTitleRef.current);
         setSelected(null);
         setActiveJobId(null);
+        activeJobInitiatedAtRef.current = null;
         setStartedAt(null);
         setAwaitingMovement(false);
         setJobDriverIdentity(null);

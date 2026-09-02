@@ -63,8 +63,8 @@ test('a job keeps a deterministic retry-safe report id', () => {
   const first = createJobId('device-101', '1', 1_787_041_800_000);
   const retry = createJobId('device-101', '1', 1_787_041_800_000);
   assert.equal(first, retry);
-  assert.match(first, /^OPS-device-101-1-\d+$/);
-  assert.equal(jobInitiatedAt(first), 1_787_041_800_000);
+  assert.match(first, /^JOB-20260818-[0-9A-F]{12}$/);
+  assert.equal(jobInitiatedAt(first), null);
   assert.equal(jobInitiatedAt('OPS-legacy'), null);
 });
 
@@ -72,6 +72,30 @@ test('repeating the same job mode creates a separate record each time it is star
   const first = createJobId('device-101', '1', 1_787_041_800_000);
   const second = createJobId('device-101', '1', 1_787_042_100_000);
   assert.notEqual(first, second);
-  assert.equal(jobInitiatedAt(first), 1_787_041_800_000);
-  assert.equal(jobInitiatedAt(second), 1_787_042_100_000);
+  assert.equal(jobInitiatedAt(first), null);
+  assert.equal(jobInitiatedAt(second), null);
+});
+
+test('the report id shows the Bangkok date while its short SHA distinguishes exact times and jobs', () => {
+  const initiatedAt = 1_787_041_801_489;
+  const firstDevice = createJobId('device-101', '1', initiatedAt);
+  const secondDevice = createJobId('device-202', '1', initiatedAt);
+  const secondAction = createJobId('device-101', '2', initiatedAt);
+  const nextMillisecond = createJobId('device-101', '1', initiatedAt + 1);
+
+  assert.match(firstDevice, /^JOB-20260818-[0-9A-F]{12}$/);
+  assert.notEqual(firstDevice, secondDevice);
+  assert.notEqual(firstDevice, secondAction);
+  assert.notEqual(firstDevice, nextMillisecond);
+  assert.equal(
+    createJobId('3936fdce325c1631', '9', 1_788_323_501_489),
+    'JOB-20260902-DB2D7A8C4E44',
+  );
+});
+
+test('initiation time recovery remains compatible with existing report ids', () => {
+  assert.equal(jobInitiatedAt('OPS-device-101-1-1787041800489'), 1_787_041_800_489);
+  assert.equal(jobInitiatedAt('OPS-20260818-153001.489-ABCDEF123456'), 1_787_041_801_489);
+  assert.equal(jobInitiatedAt('JOB-20260231-ABCDEF123456'), null);
+  assert.equal(jobInitiatedAt('OPS-12345678-1234-1234567890123'), null);
 });

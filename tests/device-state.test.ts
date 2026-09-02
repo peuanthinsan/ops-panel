@@ -43,6 +43,21 @@ test('stored active jobs preserve the selected route through restart', () => {
   });
 });
 
+test('stored active jobs preserve an exact internal initiation time without requiring it from older records', () => {
+  assert.deepEqual(parseStoredActiveJob(JSON.stringify({
+    jobId: 'JOB-20260818-ABCDEF123456', vehicleNumber: 'V1', deviceId: 'D1', selected: '1',
+    initiatedAt: 1_787_041_801_489, startedAt: 0, awaitingMovement: true,
+  })), {
+    jobId: 'JOB-20260818-ABCDEF123456', vehicleNumber: 'V1', deviceId: 'D1', selected: '1',
+    initiatedAt: 1_787_041_801_489, startedAt: 0, awaitingMovement: true,
+    driverName: null, driverId: null,
+  });
+  assert.equal(parseStoredActiveJob(JSON.stringify({
+    jobId: 'JOB-20260818-ABCDEF123456', vehicleNumber: 'V1', deviceId: 'D1', selected: '1',
+    initiatedAt: 0, startedAt: 0, awaitingMovement: true,
+  })), null);
+});
+
 test('an active job preserves only the binding it started with during startup reconciliation', () => {
   const job = {
     jobId: 'OPS-1', vehicleNumber: '74-1286', deviceId: 'tablet-101', selected: '1', startedAt: 100,
