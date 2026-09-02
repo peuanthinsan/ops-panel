@@ -122,6 +122,9 @@ test('local and production fleet endpoints require explicit device correlation a
   const local = await readFile(fileURLToPath(new NodeUrl('../server.js', import.meta.url)), 'utf8');
   const production = await readFile(fileURLToPath(new NodeUrl('../web/lib/server/api.mjs', import.meta.url)), 'utf8');
   assert.doesNotMatch(local, /query\.get\('deviceId'\) \|\| deviceConfig\?\.deviceId/);
+  assert.match(local, /requestedId \|\| createServerJobId\(deviceId, mode, startTimeMs\)/);
+  assert.match(production, /requestedReportId \|\| createServerJobId\(deviceId, mode, start\.milliseconds\)/);
+  assert.doesNotMatch(`${local}\n${production}`, /`OPS-\$\{crypto\.randomUUID\(\)\}`/);
   assert.match(production, /deviceConfig: existing,[\s\S]{0,240}deduplicated: true/);
   assert.match(production, /'Active' AS status/);
 });

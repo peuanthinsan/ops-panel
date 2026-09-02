@@ -311,6 +311,20 @@ test('local API preserves bindings, paired GPS, active starts, and retry-safe co
   assert.equal(deduplicated.response.status, 200);
   assert.equal(deduplicated.body.deduplicated, true);
 
+  const generatedIdReport = {
+    ...report,
+    id: undefined,
+    deviceId: 'android-device-003',
+    mode: 'Finish work',
+  };
+  const generatedId = await jsonRequest(baseUrl, '/api/reports', { method: 'POST', body: JSON.stringify(generatedIdReport) });
+  assert.equal(generatedId.response.status, 201);
+  assert.match(generatedId.body.report.id, /^JOB-\d{8}-[0-9A-F]{12}$/);
+  const generatedIdRetry = await jsonRequest(baseUrl, '/api/reports', { method: 'POST', body: JSON.stringify(generatedIdReport) });
+  assert.equal(generatedIdRetry.response.status, 200);
+  assert.equal(generatedIdRetry.body.deduplicated, true);
+  assert.equal(generatedIdRetry.body.report.id, generatedId.body.report.id);
+
   const deviceHistory = await jsonRequest(baseUrl, '/api/device-jobs?deviceId=android-device-001&vehicleNumber=74-1286&page=1&pageSize=1&search=OPS-contract-001');
   assert.equal(deviceHistory.response.status, 200);
   assert.deepEqual(deviceHistory.body.jobs.map((item: { id: string }) => item.id), ['OPS-contract-001']);

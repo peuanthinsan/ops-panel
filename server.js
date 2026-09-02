@@ -10,6 +10,7 @@ import { localReportFacets, queryLocalReports } from './lib/local-report-query.m
 import { fetchDataFmDriverIdentity, fetchDataFmGpsHistory } from './web/lib/server/data-fm-gps.mjs';
 import { DEFAULT_GPS_PAIR_TOLERANCE_MS, pairExternalGpsSources } from './web/lib/server/external-gps.mjs';
 import { evaluateRouteDeviation, normalizeRoutePath, parseRouteAnchors } from './web/lib/route-deviation.mjs';
+import { createServerJobId } from './web/lib/server/job-id.mjs';
 
 const port = process.env.PORT || 4000;
 const maximumJsonBodyBytes = 64 * 1024;
@@ -763,14 +764,15 @@ const server = http.createServer(async (req, res) => {
         const endTimeMs = Date.parse(String(input.endTime || ''));
         const driverName = optionalText(input.driverName, 180);
         const driverId = optionalText(input.driverId, 180);
-        const existing = requestedId ? reports.find(item => item.id === requestedId) : null;
-        const activeReportJob = activeJobs.find(item => item.id === requestedId);
-        const routeName = existing?.routeName || activeReportJob?.routeName || activeRouteName(input.routeName);
-        if (input.routeName && routeName === undefined) return send(res, 409, { error: 'The selected route is no longer available. Refresh routes and choose again.' });
         if (!vehicleNumber || !deviceId || !allowedModes.has(mode) || !Number.isFinite(startTimeMs) || !Number.isFinite(endTimeMs)) return send(res, 400, { error: 'A valid vehicleNumber, deviceId, mode, startTime, and endTime are required' });
         if ((driverName?.length || 0) > 180 || (driverId?.length || 0) > 180) return send(res, 400, { error: 'driverName and driverId must be 180 characters or fewer' });
         if (requestedId && (requestedId.length > 180 || !/^[a-zA-Z0-9._:-]+$/.test(requestedId))) return send(res, 400, { error: 'id must contain only letters, numbers, dots, underscores, colons, or hyphens' });
         if (endTimeMs < startTimeMs) return send(res, 400, { error: 'endTime must be after startTime' });
+        const reportId = requestedId || createServerJobId(deviceId, mode, startTimeMs);
+        const existing = reports.find(item => item.id === reportId) || null;
+        const activeReportJob = activeJobs.find(item => item.id === reportId);
+        const routeName = existing?.routeName || activeReportJob?.routeName || activeRouteName(input.routeName);
+        if (input.routeName && routeName === undefined) return send(res, 409, { error: 'The selected route is no longer available. Refresh routes and choose again.' });
         if (!wasBindingValidAt(deviceId, vehicleNumber, startTimeMs)) return send(res, 409, { error: 'Vehicle and device were not connected when this job started.' });
         const cancelled = input.status === 'Cancelled';
         const normalizedStartTime = new Date(startTimeMs).toISOString();
@@ -790,7 +792,7 @@ const server = http.createServer(async (req, res) => {
           return send(res, 200, { report: existing, deduplicated: true });
         }
         const report = {
-          id: requestedId || `OPS-${crypto.randomUUID()}`,
+          id: reportId,
           vehicleNumber,
           deviceId,
           driverName,

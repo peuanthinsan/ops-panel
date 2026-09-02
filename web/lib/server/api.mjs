@@ -22,6 +22,7 @@ import { fetchDataFmDriverIdentity, fetchDataFmGpsHistory } from './data-fm-gps.
 import { fmsSyncNeedsRetry } from './fms-sync-state.mjs';
 import { DEFAULT_GPS_PAIR_TOLERANCE_MS, pairExternalGpsSources } from './external-gps.mjs';
 import { gpsPairingMetadata } from './gps-pairing.mjs';
+import { createServerJobId } from './job-id.mjs';
 import { evaluateRouteDeviation, normalizeRoutePath, parseRouteAnchors } from '../route-deviation.mjs';
 
 const allowedModes = new Set([
@@ -1852,7 +1853,7 @@ async function routeRequest(request, route) {
 
   if (route === 'reports' && method === 'POST') {
     const { input, raw } = await readJsonPayload(request);
-    const reportId = validClientId(input.id) || `OPS-${crypto.randomUUID()}`;
+    const requestedReportId = validClientId(input.id);
     const vehicleNumber = requiredText(input.vehicleNumber, 'vehicleNumber', 80);
     const deviceId = requiredText(input.deviceId, 'deviceId', 180);
     await authenticateDeviceRequest(request, deviceId, raw);
@@ -1861,6 +1862,7 @@ async function routeRequest(request, route) {
     if (!allowedModes.has(mode)) throw new ApiError(400, 'mode is not one of the supported operations');
     const start = requiredDate(input.startTime, 'startTime');
     const end = requiredDate(input.endTime, 'endTime');
+    const reportId = requestedReportId || createServerJobId(deviceId, mode, start.milliseconds);
     if (end.milliseconds < start.milliseconds) throw new ApiError(400, 'endTime must be after startTime');
     if (!await bindingWasValid(deviceId, vehicleNumber, start.iso)) {
       throw new ApiError(409, 'Vehicle and device were not connected when this job started.');
