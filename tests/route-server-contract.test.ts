@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -34,6 +34,75 @@ async function jsonRequest(baseUrl: string, route: string, init: RequestInit = {
   });
   return { response, body: await response.json() };
 }
+
+test('route options page through more than 1,000 ranked search results', async t => {
+  const port = await freePort();
+  const fixtureDirectory = await mkdtemp(path.join(os.tmpdir(), 'songdee-route-options-pagination-'));
+  const dataFile = path.join(fixtureDirectory, 'data.json');
+  const routes = Array.from({ length: 1_005 }, (_, index) => ({
+    id: `route-${String(index).padStart(4, '0')}`,
+    routeName: `Route ${String(index).padStart(4, '0')}`,
+    active: true,
+  }));
+  routes.push(
+    { id: 'route-hub-exact', routeName: 'Hub', active: true },
+    { id: 'route-hub-north', routeName: 'Hub North', active: true },
+    { id: 'route-hub-south', routeName: 'Hub South', active: true },
+    { id: 'route-hub-central', routeName: 'Central Hub', active: true },
+  );
+  await writeFile(dataFile, JSON.stringify({
+    jobRoutes: routes,
+    deviceBindings: [{ vehicleNumber: '74-1286', deviceId: 'route-pagination-device' }],
+  }));
+
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: path.resolve(import.meta.dirname, '..'),
+    env: { ...process.env, PORT: String(port), SONGDEE_DATA_FILE: dataFile },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  t.after(() => { if (child.exitCode == null) child.kill('SIGTERM'); });
+  const baseUrl = `http://127.0.0.1:${port}`;
+  await waitForHealth(baseUrl, child);
+
+  const login = await jsonRequest(baseUrl, '/api/admin/login', {
+    method: 'POST', body: JSON.stringify({ password: 'songdee-setup' }),
+  });
+  const adminHeaders = { 'x-admin-token': String(login.body.token) };
+
+  const deepPage = await jsonRequest(
+    baseUrl,
+    '/api/admin/job-route-options?q=Route&limit=10&offset=1000',
+    { headers: adminHeaders },
+  );
+  assert.equal(deepPage.response.status, 200);
+  assert.deepEqual(
+    deepPage.body.routes.map((route: { routeName: string }) => route.routeName),
+    ['Route 1000', 'Route 1001', 'Route 1002', 'Route 1003', 'Route 1004'],
+  );
+  assert.equal(deepPage.body.hasMore, false);
+
+  const rankedFirstPage = await jsonRequest(
+    baseUrl,
+    '/api/admin/job-route-options?q=hub&limit=2&offset=0',
+    { headers: adminHeaders },
+  );
+  assert.deepEqual(
+    rankedFirstPage.body.routes.map((route: { routeName: string }) => route.routeName),
+    ['Hub', 'Hub North'],
+  );
+  assert.equal(rankedFirstPage.body.hasMore, true);
+
+  const rankedNextPage = await jsonRequest(
+    baseUrl,
+    '/api/job-routes?deviceId=route-pagination-device&q=hub&limit=2&offset=2',
+  );
+  assert.equal(rankedNextPage.response.status, 200);
+  assert.deepEqual(
+    rankedNextPage.body.routes.map((route: { routeName: string }) => route.routeName),
+    ['Hub South', 'Central Hub'],
+  );
+  assert.equal(rankedNextPage.body.hasMore, false);
+});
 
 test('route rename, active-job deletion guard, completion retry, reassignment, and deletion form one safe lifecycle', async t => {
   const port = await freePort();

@@ -514,6 +514,7 @@ const server = http.createServer(async (req, res) => {
     const query = new URL(req.url, 'http://localhost').searchParams;
     const search = String(query.get('q') || '').trim().toLowerCase().slice(0, 120);
     const limit = Math.min(100, Math.max(1, Math.trunc(Number(query.get('limit'))) || 50));
+    const offset = Math.min(100_000, Math.max(0, Math.trunc(Number(query.get('offset'))) || 0));
     const matches = jobRoutes
       .filter(route => route.active !== false && (!search || route.routeName.toLowerCase().includes(search)))
       .sort((left, right) => {
@@ -521,7 +522,10 @@ const server = http.createServer(async (req, res) => {
         const rank = name => name === search ? 0 : name.startsWith(search) ? 1 : 2;
         return rank(leftName) - rank(rightName) || leftName.localeCompare(rightName) || left.routeName.localeCompare(right.routeName);
       });
-    return send(res, 200, { routes: matches.slice(0, limit).map(({ id, routeName }) => ({ id, routeName })), hasMore: matches.length > limit });
+    return send(res, 200, {
+      routes: matches.slice(offset, offset + limit).map(({ id, routeName }) => ({ id, routeName })),
+      hasMore: matches.length > offset + limit,
+    });
   }
   if (req.url === '/api/admin/job-routes' && req.method === 'POST') {
     if (!isAdmin(req)) return send(res, 401, { error: 'Admin login required' });
@@ -600,6 +604,7 @@ const server = http.createServer(async (req, res) => {
     if (!deviceBindings.some(binding => binding.deviceId === deviceId)) return send(res, 409, { error: 'Device binding does not match.', code: 'DEVICE_BINDING_MISMATCH' });
     const search = String(query.get('q') || '').trim().toLowerCase().slice(0, 120);
     const limit = Math.min(100, Math.max(1, Math.trunc(Number(query.get('limit'))) || 50));
+    const offset = Math.min(100_000, Math.max(0, Math.trunc(Number(query.get('offset'))) || 0));
     const matches = jobRoutes
       .filter(route => route.active !== false && (!search || route.routeName.toLowerCase().includes(search)))
       .sort((left, right) => {
@@ -607,7 +612,10 @@ const server = http.createServer(async (req, res) => {
         const rank = name => name === search ? 0 : name.startsWith(search) ? 1 : 2;
         return rank(leftName) - rank(rightName) || leftName.localeCompare(rightName) || left.routeName.localeCompare(right.routeName);
       });
-    return send(res, 200, { routes: matches.slice(0, limit).map(({ id, routeName }) => ({ id, routeName })), hasMore: matches.length > limit });
+    return send(res, 200, {
+      routes: matches.slice(offset, offset + limit).map(({ id, routeName }) => ({ id, routeName })),
+      hasMore: matches.length > offset + limit,
+    });
   }
   if (req.url === '/api/device-config' && req.method === 'POST') {
     try { const input = await readJsonBody(req); const vehicleNumber = validRequiredText(input.vehicleNumber, 80); const deviceId = validRequiredText(input.deviceId, 180); if (!vehicleNumber || !deviceId) return send(res, 400, { error: 'vehicleNumber and deviceId are required and must be within their size limits' }); const existingDevice = deviceBindings.find(item => item.deviceId === deviceId); if (existingDevice?.vehicleNumber === vehicleNumber) return send(res, 200, { deviceConfig: existingDevice, deduplicated: true }); if (existingDevice) return send(res, 409, { error: 'Device is already connected; change it from the admin dashboard.' }); deviceConfig = { vehicleNumber, deviceId }; deviceBindings.push(deviceConfig); openBindingHistory(deviceConfig); saveState(); return send(res, 200, { deviceConfig }); }

@@ -54,11 +54,6 @@ function assertDeclaration(source, selector, property, value) {
   );
 }
 
-function hasDeclaration(source, selector, property, value) {
-  const normalizedValue = value.replace(/\s+/g, '');
-  return rulesForSelector(source, selector).some(rule => rule[property] === normalizedValue);
-}
-
 test('route deviation thresholds accept ordinary hundredth-kilometre values and reset stale feedback', async () => {
   const source = await readFile(fileURLToPath(new NodeUrl('../web/app/routes-dashboard.jsx', import.meta.url)), 'utf8');
   assert.match(source, /min="0\.01" max="50" step="0\.01"/);
@@ -81,6 +76,18 @@ test('route maps prefer the current Routes API and retain a directions fallback 
   assert.doesNotMatch(map, /new google\.maps\.Marker/);
 });
 
+test('route maps replace Google default UI with proportional dashboard controls', async () => {
+  const map = await readFile(fileURLToPath(new NodeUrl('../web/app/route-map.jsx', import.meta.url)), 'utf8');
+  assert.match(map, /disableDefaultUI: true/);
+  for (const control of ['mapTypeControl', 'zoomControl', 'fullscreenControl', 'streetViewControl']) {
+    assert.match(map, new RegExp(`${control}: false`));
+  }
+  assert.match(map, /className="route-map-controls"/);
+  assert.match(map, /aria-pressed=\{mapType === 'roadmap'\}/);
+  assert.match(map, /onClick=\{\(\) => changeZoom\(1\)\}/);
+  assert.match(map, /onClick=\{fitRoute\}/);
+});
+
 test('Google Maps follows the selected dashboard language', async () => {
   const loader = await readFile(fileURLToPath(new NodeUrl('../web/lib/google-maps-loader.js', import.meta.url)), 'utf8');
   const map = await readFile(fileURLToPath(new NodeUrl('../web/app/route-map.jsx', import.meta.url)), 'utf8');
@@ -93,24 +100,32 @@ test('Google Maps follows the selected dashboard language', async () => {
   assert.match(page, /window\.location\.reload\(\)/);
 });
 
-test('the dashboard route assignment selector searches a bounded server result', async () => {
+test('the dashboard route assignment selector searches and pages a bounded server result', async () => {
   const selector = await readFile(fileURLToPath(new NodeUrl('../web/app/route-selector.jsx', import.meta.url)), 'utf8');
   const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
   assert.match(selector, /\/api\/admin\/job-route-options\?\$\{params\}/);
-  assert.match(selector, /limit: '50'/);
+  assert.match(selector, /const routePageSize = 50/);
+  assert.match(selector, /offset: String\(offset\)/);
+  assert.match(selector, /async function loadMoreRoutes\(\)/);
+  assert.match(selector, /t\.loadMore/);
   assert.match(selector, /role="combobox"/);
   assert.match(selector, /role="listbox"/);
   assert.match(drawer, /<RouteSelector/);
   assert.doesNotMatch(drawer, /<select id="gps-route-assignment"/);
 });
 
-test('the GPS drawer defaults a route assignment to the entire work period', async () => {
+test('the GPS drawer hides route editing by default and stages a job-scoped change before applying it', async () => {
   const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
   const dashboard = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
-  assert.match(drawer, /useState\('work_period'\)/);
+  assert.match(drawer, /useState\('job'\)/);
+  assert.match(drawer, /useState\(false\);\n\s+const \[draftRouteName/);
+  assert.match(drawer, /aria-expanded=\{routeEditorOpen\} aria-controls="route-assignment-editor"/);
+  assert.match(drawer, /routeEditorOpen \? <div className="route-assignment-editor"/);
+  assert.match(drawer, /onSelect=\{setDraftRouteName\}/);
   assert.match(drawer, /const scope = routeScope;/);
   assert.match(drawer, /t\.workPeriodHint/);
   assert.match(drawer, /t\.thisJob/);
+  assert.match(drawer, /onClick=\{assignRoute\}/);
   assert.match(dashboard, /onRouteAssigned=\{\(\) => void loadReports\(\{ silent: true \}\)\}/);
 });
 
@@ -129,29 +144,27 @@ test('confirmed route deviations expose an exact GPS event in the map, drawer, a
 test('the GPS drawer and route map retain balanced proportions across responsive widths', async () => {
   const styles = await readFile(fileURLToPath(new NodeUrl('../web/app/styles.css', import.meta.url)), 'utf8');
 
-  assertDeclaration(styles, '.gps-drawer', 'width', 'clamp(640px,48vw,760px)');
+  assertDeclaration(styles, '.gps-drawer', 'width', 'clamp(680px,50vw,820px)');
   assertDeclaration(styles, '.gps-drawer', 'height', '100dvh');
-  assertDeclaration(styles, '.gps-route-assignment', 'margin', '14px 22px 0');
+  assertDeclaration(styles, '.gps-drawer', 'grid-template-rows', '60px minmax(0,1fr) 58px');
+  assertDeclaration(styles, '.gps-drawer-scroll', 'display', 'flex');
+  assertDeclaration(styles, '.gps-route-assignment', 'margin', '10px 18px 0');
   assertDeclaration(styles, '.gps-route-section', 'margin', '0');
-  assertDeclaration(styles, '.gps-route-section', 'padding', '16px 22px 18px');
+  assertDeclaration(styles, '.gps-route-section', 'padding', '10px 18px 12px');
+  assertDeclaration(styles, '.gps-route-section', 'flex', '1 1 360px');
   assertDeclaration(styles, '.gps-route-missing', 'margin', '0');
-  assertDeclaration(styles, '.gps-route-missing', 'padding', '16px 22px 18px');
-  for (const selector of ['.route-map-canvas', '.route-map-fallback>svg']) {
-    assertDeclaration(styles, selector, 'height', 'clamp(230px,28dvh,280px)');
-  }
+  assertDeclaration(styles, '.gps-route-missing', 'padding', '18px');
+  assertDeclaration(styles, '.route-map', 'flex', '1');
+  assertDeclaration(styles, '.route-map-control-button', 'height', '34px');
+  assertDeclaration(styles, '.route-map-icon-button', 'width', '34px');
+  assertDeclaration(styles, '.gps-samples-disclosure', 'min-height', '46px');
 
   const mobileStyles = mediaContents(styles, 'max-width:600px');
-  assertDeclaration(mobileStyles, '.gps-route-assignment', 'margin', '12px 14px 0');
-  for (const selector of ['.gps-route-section', '.gps-route-missing']) {
-    assert.ok(
-      hasDeclaration(mobileStyles, selector, 'padding-inline', '14px')
-        || hasDeclaration(mobileStyles, selector, 'padding', '14px 14px 16px'),
-      `${selector} should retain 14px mobile inline gutters`,
-    );
-  }
-  for (const selector of ['.route-map-canvas', '.route-map-fallback>svg']) {
-    assertDeclaration(mobileStyles, selector, 'height', 'clamp(210px,36dvh,250px)');
-  }
+  assertDeclaration(mobileStyles, '.gps-route-assignment', 'margin', '9px 14px 0');
+  assertDeclaration(mobileStyles, '.gps-route-section', 'padding', '9px 14px 10px');
+  assertDeclaration(mobileStyles, '.gps-route-missing', 'padding', '14px');
+  assertDeclaration(mobileStyles, '.route-map', 'min-height', '210px');
+  assertDeclaration(mobileStyles, '.route-map-control-label', 'display', 'none');
 
   const narrowStyles = mediaContents(styles, 'max-width:900px');
   assertDeclaration(narrowStyles, '.gps-drawer', 'width', '100%');

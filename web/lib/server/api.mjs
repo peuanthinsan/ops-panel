@@ -1325,6 +1325,7 @@ async function listJobRoutes() {
 async function findJobRouteOptions(searchParams) {
   const query = String(searchParams.get('q') || '').trim().slice(0, 120);
   const limit = positivePageValue(searchParams.get('limit'), 50, 100);
+  const offset = positivePageValue(searchParams.get('offset'), 0, 100_000);
   const sql = getDatabase();
   const rows = query
     ? await sql`
@@ -1339,6 +1340,7 @@ async function findJobRouteOptions(searchParams) {
           END,
           lower(route_name), route_name
         LIMIT ${limit + 1}
+        OFFSET ${offset}
       `
     : await sql`
         SELECT id, route_name AS "routeName"
@@ -1346,6 +1348,7 @@ async function findJobRouteOptions(searchParams) {
         WHERE active = true
         ORDER BY lower(route_name), route_name
         LIMIT ${limit + 1}
+        OFFSET ${offset}
       `;
   return { routes: rows.slice(0, limit), hasMore: rows.length > limit };
 }
