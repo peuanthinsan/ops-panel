@@ -1370,6 +1370,101 @@ async function validatedRouteName(value, { allowEmpty = true } = {}) {
   return route.routeName;
 }
 
+async function workPeriodForReport(reportId) {
+  const sql = getDatabase();
+  const rows = await sql.query(`
+    WITH ${workPeriodReportsCte()}
+    SELECT
+      work_period_id AS "workPeriodId",
+      vehicle_number AS "vehicleNumber",
+      work_period_start_time AS "workPeriodStartTime",
+      work_period_end_time AS "workPeriodEndTime"
+    FROM work_period_reports
+    WHERE id = $1
+    LIMIT 1
+  `, [reportId]);
+  return rows[0] || null;
+}
+
+async function inheritedWorkPeriodRouteName(vehicleNumber, startTime) {
+  const sql = getDatabase();
+  const rows = await sql.query(`
+    WITH previous_finish AS (
+      SELECT end_time AS finished_at
+      FROM ops_reports
+      WHERE lower(vehicle_number) = lower($1)
+        AND mode = 'Finish work'
+        AND status <> 'Cancelled'
+        AND end_time <= $2::timestamptz
+      ORDER BY end_time DESC, id DESC
+      LIMIT 1
+    ), current_period AS (
+      SELECT report.id AS work_period_id
+      FROM ops_reports report
+      WHERE lower(report.vehicle_number) = lower($1)
+        AND report.start_time >= COALESCE((SELECT finished_at FROM previous_finish), '-infinity'::timestamptz)
+        AND report.start_time <= $2::timestamptz
+      ORDER BY report.start_time, report.end_time, report.id
+      LIMIT 1
+    )
+    SELECT assignment.route_name AS "routeName"
+    FROM current_period period
+    JOIN work_period_routes assignment ON assignment.work_period_id = period.work_period_id
+    WHERE lower(assignment.vehicle_number) = lower($1)
+    LIMIT 1
+  `, [vehicleNumber, startTime]);
+  return rows[0]?.routeName || null;
+}
+
+async function assignRouteToWorkPeriod(reportId, routeName) {
+  const period = await workPeriodForReport(reportId);
+  if (!period) throw new ApiError(404, 'Report not found');
+  const sql = getDatabase();
+  const [reportRows, activeRows] = await sql.transaction(transaction => {
+    const changes = [
+      transaction.query(`
+        WITH ${workPeriodReportsCte()}
+        UPDATE ops_reports target
+        SET route_name = $2
+        FROM work_period_reports period_report
+        WHERE period_report.id = $1
+          AND target.id IN (
+            SELECT id
+            FROM work_period_reports
+            WHERE work_period_id = period_report.work_period_id
+              AND lower(vehicle_number) = lower(period_report.vehicle_number)
+          )
+        RETURNING target.id
+      `, [reportId, routeName]),
+      transaction.query(`
+        UPDATE active_jobs
+        SET route_name = $1, updated_at = now()
+        WHERE lower(vehicle_number) = lower($2)
+          AND start_time >= $3::timestamptz
+          AND ($4::timestamptz IS NULL OR start_time <= $4::timestamptz)
+        RETURNING id
+      `, [routeName, period.vehicleNumber, period.workPeriodStartTime, period.workPeriodEndTime]),
+      routeName
+        ? transaction.query(`
+          INSERT INTO work_period_routes (work_period_id, vehicle_number, route_name)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (work_period_id) DO UPDATE SET
+            vehicle_number = EXCLUDED.vehicle_number,
+            route_name = EXCLUDED.route_name,
+            updated_at = now()
+        `, [period.workPeriodId, period.vehicleNumber, routeName])
+        : transaction.query('DELETE FROM work_period_routes WHERE work_period_id = $1', [period.workPeriodId]),
+    ];
+    return changes;
+  });
+  return {
+    report: await getReport(reportId),
+    reportIds: reportRows.map(report => report.id),
+    activeJobsUpdated: activeRows.length,
+    workPeriodId: period.workPeriodId,
+  };
+}
+
 async function saveJobRoute(input, id = null) {
   const routeName = requiredText(input.routeName, 'routeName', 120);
   const googleMapsUrl = requiredText(input.googleMapsUrl, 'googleMapsUrl', 2000);
@@ -1404,6 +1499,7 @@ async function saveJobRoute(input, id = null) {
       await sql.transaction(transaction => [
         transaction`UPDATE active_jobs SET route_name = ${routeName} WHERE lower(route_name) = lower(${previous.routeName})`,
         transaction`UPDATE ops_reports SET route_name = ${routeName} WHERE lower(route_name) = lower(${previous.routeName})`,
+        transaction`UPDATE work_period_routes SET route_name = ${routeName}, updated_at = now() WHERE lower(route_name) = lower(${previous.routeName})`,
       ]);
     }
     return rows[0];
@@ -1544,13 +1640,18 @@ async function routeRequest(request, route) {
     if (!reportId) throw new ApiError(400, 'A valid report id is required');
     const input = await readJson(request);
     const routeName = await validatedRouteName(input.routeName);
+    const scope = input.scope || 'job';
+    if (!['job', 'work_period'].includes(scope)) throw new ApiError(400, 'scope must be job or work_period');
+    if (scope === 'work_period') {
+      return json({ ...(await assignRouteToWorkPeriod(reportId, routeName)), scope });
+    }
     const sql = database();
     const rows = await sql.query(
       `UPDATE ops_reports SET route_name = $2 WHERE id = $1 RETURNING ${reportColumns()}`,
       [reportId, routeName],
     );
     if (!rows.length) throw new ApiError(404, 'Report not found');
-    return json({ report: rows[0] });
+    return json({ report: rows[0], reportIds: [reportId], activeJobsUpdated: 0, scope });
   }
 
   if (route === 'device-config' && method === 'GET') {
@@ -1646,7 +1747,9 @@ async function routeRequest(request, route) {
     const sql = database();
     const completed = await getReport(jobId);
     const existingJob = completed ? null : await getActiveJob(jobId);
-    const routeName = completed?.routeName || existingJob?.routeName || await validatedRouteName(input.routeName);
+    const submittedRouteName = await validatedRouteName(input.routeName);
+    const inheritedRouteName = completed || existingJob ? null : await inheritedWorkPeriodRouteName(vehicleNumber, start.iso);
+    const routeName = completed?.routeName || existingJob?.routeName || inheritedRouteName || submittedRouteName;
     const inputShape = { vehicleNumber, deviceId, driverName, driverId, mode, routeName, startTime: start.iso };
     if (completed) {
       if (!sameJobStart(completed, inputShape)) throw new ApiError(409, 'Job id is already used by different data.');
@@ -1753,6 +1856,7 @@ async function routeRequest(request, route) {
           AND (
             EXISTS (SELECT 1 FROM ops_reports report WHERE lower(report.route_name) = lower(route.route_name))
             OR EXISTS (SELECT 1 FROM active_jobs job WHERE lower(job.route_name) = lower(route.route_name))
+            OR EXISTS (SELECT 1 FROM work_period_routes assignment WHERE lower(assignment.route_name) = lower(route.route_name))
           )
       ) AS assigned
     `;
@@ -1872,7 +1976,9 @@ async function routeRequest(request, route) {
     const driverId = optionalText(input.driverId, 'driverId', 180);
     const existingReport = await getReport(reportId);
     const activeReportJob = await getActiveJob(reportId);
-    const routeName = existingReport?.routeName || activeReportJob?.routeName || await validatedRouteName(input.routeName);
+    const submittedRouteName = await validatedRouteName(input.routeName);
+    const inheritedRouteName = existingReport || activeReportJob ? null : await inheritedWorkPeriodRouteName(vehicleNumber, start.iso);
+    const routeName = existingReport?.routeName || activeReportJob?.routeName || inheritedRouteName || submittedRouteName;
     const sql = database();
     const rows = await sql.query(
       `INSERT INTO ops_reports (

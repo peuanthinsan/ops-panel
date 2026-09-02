@@ -1,7 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 
 let databaseClient;
-export const REQUIRED_DATABASE_SCHEMA_VERSION = '2026-08-31.1';
+export const REQUIRED_DATABASE_SCHEMA_VERSION = '2026-09-02.1';
 
 export class ConfigurationError extends Error {
   constructor(message) {
@@ -34,7 +34,8 @@ export async function checkDatabase() {
       to_regclass('public.active_jobs')::text AS "activeJobs",
       to_regclass('public.gps_sync_samples')::text AS "gpsSamples",
       to_regclass('public.job_gps_summaries')::text AS "jobGpsSummaries",
-      to_regclass('public.job_routes')::text AS "jobRoutes"
+      to_regclass('public.job_routes')::text AS "jobRoutes",
+      to_regclass('public.work_period_routes')::text AS "workPeriodRoutes"
   `;
   if (!schema || Object.values(schema).some((table) => !table)) {
     throw new ConfigurationError('Database schema is not initialized. Apply db/schema.sql.');
