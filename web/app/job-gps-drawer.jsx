@@ -1,17 +1,19 @@
 'use client';
 
 import { ArrowSquareOutIcon } from '@phosphor-icons/react/dist/csr/ArrowSquareOut';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
 import { ClipboardTextIcon } from '@phosphor-icons/react/dist/csr/ClipboardText';
 import { ListBulletsIcon } from '@phosphor-icons/react/dist/csr/ListBullets';
 import { MapTrifoldIcon } from '@phosphor-icons/react/dist/csr/MapTrifold';
+import { MapPinLineIcon } from '@phosphor-icons/react/dist/csr/MapPinLine';
 import { PencilSimpleIcon } from '@phosphor-icons/react/dist/csr/PencilSimple';
 import { PrinterIcon } from '@phosphor-icons/react/dist/csr/Printer';
 import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useEffect, useRef, useState } from 'react';
-import { formatReportCoordinate, formatReportDateTime } from '../lib/report-view';
+import { displayGpsLookupMessage, formatReportCoordinate, formatReportDateTime } from '../lib/report-view';
 import { adminFetch, adminFetchReportGpsSamples } from './dashboard-api';
 import RouteMap from './route-map';
 import RouteSelector from './route-selector';
@@ -20,13 +22,13 @@ const copy = {
   en: {
     title: 'GPS detail', close: 'Close', vehicle: 'Vehicle', driver: 'Driver', activity: 'Activity', time: 'Time',
     device: 'GPS points', last: 'Last GPS fix', captured: 'GPS fix time', coordinates: 'Coordinates', speedLabel: 'Speed', heading: 'Heading',
-    loading: 'Loading GPS points…', failed: 'Could not load GPS detail.', empty: 'No GPS points are linked to this job yet.',
+    loading: 'Loading GPS points…', loadingHint: 'Checking the saved GPS detail for this job.', failed: 'Could not load GPS detail.', failedHint: 'Showing the GPS count saved with the job.', empty: 'No GPS points are linked to this job yet.', lookupStatus: 'GPS lookup', gpsReady: 'GPS trail ready', gpsReadyHint: '{count} time-matched points are linked to this job.', gpsMissing: 'No GPS point yet', gpsMissingHint: 'Retry the time-based lookup without leaving this job.', gpsNotApplicable: 'GPS lookup not required', gpsNotApplicableHint: 'This cancelled job stays in the audit record without a GPS lookup.', lookupPending: 'Lookup in progress', retry: 'Retry GPS lookup', retrying: 'Looking up GPS…', retryFailed: 'Could not retry the GPS lookup.', retryComplete: 'GPS lookup completed.', retryNoData: 'Lookup completed, but no GPS points matched this job.', retryUnavailable: 'GPS lookup is not available for this job.', retryLookupFailed: 'The GPS provider could not complete this lookup.', retryFinished: 'GPS lookup finished.',
     previous: 'Previous', next: 'Next', page: 'Page', of: 'of', print: 'Print job', speed: 'km/h', degrees: '°', routeMap: 'Route vs GPS map', openRoute: 'Open saved route', withinRoute: 'Within route', deviated: 'Route deviation', deviationBody: 'GPS stayed outside the route corridor for', deviationBegan: 'Deviation began', deviationLocation: 'GPS location', deviationDistance: 'Off route', deviationDuration: 'Confirmed duration', seconds: 'seconds', km: 'km', noRoute: 'No route is assigned to this job yet.', assignedRoute: 'Assigned route', noAssignedRoute: 'No route', savingRoute: 'Saving route…', routeSaveFailed: 'Could not update the assigned route.', routeScope: 'Apply change to', thisJob: 'This job', thisJobHint: 'Only this saved job.', workPeriod: 'Work period', workPeriodHint: 'This job and every job in the same work period.', workPeriodSaved: 'Route applied to {count} jobs in this work period.', routeSaved: 'Route updated for this job.', routeRemoved: 'Route removed from this job.', editRoute: 'Edit route', closeRouteEditor: 'Close editor', cancel: 'Cancel', applyRoute: 'Apply route', showPoints: 'Show GPS points', hidePoints: 'Hide GPS points', recordedPoints: '{count} recorded points',
   },
   th: {
     title: 'รายละเอียด GPS', close: 'ปิด', vehicle: 'รถ', driver: 'พขร.', activity: 'กิจกรรม', time: 'เวลา',
     device: 'จุด GPS', last: 'พิกัด GPS ล่าสุด', captured: 'เวลาพิกัด GPS', coordinates: 'พิกัด', speedLabel: 'ความเร็ว', heading: 'ทิศทาง',
-    loading: 'กำลังโหลดจุด GPS…', failed: 'ไม่สามารถโหลดรายละเอียด GPS', empty: 'ยังไม่มีจุด GPS ที่เชื่อมกับงานนี้',
+    loading: 'กำลังโหลดจุด GPS…', loadingHint: 'กำลังตรวจสอบรายละเอียด GPS ที่บันทึกไว้สำหรับงานนี้', failed: 'ไม่สามารถโหลดรายละเอียด GPS', failedHint: 'กำลังแสดงจำนวนจุด GPS ที่บันทึกไว้กับงาน', empty: 'ยังไม่มีจุด GPS ที่เชื่อมกับงานนี้', lookupStatus: 'การค้นหา GPS', gpsReady: 'พร้อมดูเส้นทาง GPS', gpsReadyHint: 'พบจุด GPS ที่ตรงกับเวลางาน {count} จุด', gpsMissing: 'ยังไม่พบพิกัด GPS', gpsMissingHint: 'ค้นหาตามเวลาของงานนี้อีกครั้งได้โดยไม่ต้องออกจากหน้านี้', gpsNotApplicable: 'ไม่ต้องค้นหา GPS', gpsNotApplicableHint: 'งานที่ยกเลิกนี้ยังคงอยู่ในประวัติโดยไม่ต้องค้นหา GPS', lookupPending: 'กำลังค้นหาข้อมูล', retry: 'ค้นหา GPS อีกครั้ง', retrying: 'กำลังค้นหา GPS…', retryFailed: 'ไม่สามารถค้นหา GPS อีกครั้งได้', retryComplete: 'ค้นหาข้อมูล GPS แล้ว', retryNoData: 'ค้นหาแล้ว แต่ไม่พบจุด GPS ที่ตรงกับงานนี้', retryUnavailable: 'ไม่สามารถค้นหา GPS สำหรับงานนี้ได้', retryLookupFailed: 'ผู้ให้บริการ GPS ไม่สามารถค้นหาข้อมูลนี้ได้', retryFinished: 'ค้นหา GPS เสร็จแล้ว',
     previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', print: 'พิมพ์งาน', speed: 'กม./ชม.', degrees: '°', routeMap: 'แผนที่เส้นทางเทียบกับ GPS', openRoute: 'เปิดเส้นทางที่บันทึก', withinRoute: 'อยู่ในเส้นทาง', deviated: 'ออกนอกเส้นทาง', deviationBody: 'GPS อยู่นอกแนวเส้นทางต่อเนื่องเป็นเวลา', deviationBegan: 'เริ่มออกนอกเส้นทาง', deviationLocation: 'ตำแหน่ง GPS', deviationDistance: 'ห่างจากเส้นทาง', deviationDuration: 'ระยะเวลาที่ยืนยัน', seconds: 'วินาที', km: 'กม.', noRoute: 'ยังไม่ได้กำหนดเส้นทางให้งานนี้', assignedRoute: 'เส้นทางที่กำหนด', noAssignedRoute: 'ไม่มีเส้นทาง', savingRoute: 'กำลังบันทึกเส้นทาง…', routeSaveFailed: 'ไม่สามารถอัปเดตเส้นทางที่กำหนดได้', routeScope: 'ใช้การเปลี่ยนแปลงกับ', thisJob: 'งานนี้', thisJobHint: 'เฉพาะงานที่บันทึกนี้', workPeriod: 'รอบงาน', workPeriodHint: 'งานนี้และทุกงานในรอบงานเดียวกัน', workPeriodSaved: 'กำหนดเส้นทางให้ {count} งานในรอบงานนี้แล้ว', routeSaved: 'อัปเดตเส้นทางสำหรับงานนี้แล้ว', routeRemoved: 'นำเส้นทางออกจากงานนี้แล้ว', editRoute: 'แก้ไขเส้นทาง', closeRouteEditor: 'ปิดตัวแก้ไข', cancel: 'ยกเลิก', applyRoute: 'ใช้เส้นทาง', showPoints: 'แสดงจุด GPS', hidePoints: 'ซ่อนจุด GPS', recordedPoints: 'บันทึกแล้ว {count} จุด',
   },
 };
@@ -61,7 +63,29 @@ function distance(value, lang) {
   return Number.isFinite(kilometers) ? `${kilometers.toFixed(2)} ${lang === 'th' ? 'กม.' : 'km'}` : '—';
 }
 
-export default function JobGpsDrawer({ report, lang, onClose, onRouteAssigned }) {
+function pointCountValue(value) {
+  const count = Number(value);
+  return Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
+}
+
+function retryFeedbackFor(data, lang, t) {
+  const status = data.report?.gpsLookupStatus;
+  if (status === 'no_data') return { tone: 'neutral', text: t.retryNoData };
+  if (status === 'lookup_unavailable') return { tone: 'error', text: t.retryUnavailable };
+  if (status === 'lookup_failed') return { tone: 'error', text: t.retryLookupFailed };
+  if (status === 'not_applicable') return { tone: 'neutral', text: t.gpsNotApplicable };
+  if (['paired', 'partial', 'device_only'].includes(status) || data.gpsReconciliation?.gpsSync) {
+    const sourceMessage = displayGpsLookupMessage(
+      data.gpsReconciliation?.deviceSource?.message,
+      lang,
+      data.gpsReconciliation?.gpsSync ? 1 : pointCountValue(data.report?.deviceGpsSamples),
+    );
+    return { tone: 'success', text: lang === 'th' ? t.retryComplete : sourceMessage || t.retryComplete };
+  }
+  return { tone: 'neutral', text: t.retryFinished };
+}
+
+export default function JobGpsDrawer({ report, lang, onClose, onReportUpdated, onRouteAssigned }) {
   const t = copy[lang] || copy.en;
   const closeRef = useRef(null);
   const [page, setPage] = useState(1);
@@ -76,6 +100,8 @@ export default function JobGpsDrawer({ report, lang, onClose, onRouteAssigned })
   const [routeEditorOpen, setRouteEditorOpen] = useState(false);
   const [draftRouteName, setDraftRouteName] = useState(report.routeName || '');
   const [samplesOpen, setSamplesOpen] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryFeedback, setRetryFeedback] = useState(null);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -117,6 +143,7 @@ export default function JobGpsDrawer({ report, lang, onClose, onRouteAssigned })
     setRouteError('');
     setRouteNotice('');
     setSamplesOpen(false);
+    setRetryFeedback(null);
   }, [report.id, report.routeName]);
 
   useEffect(() => {
@@ -162,13 +189,67 @@ export default function JobGpsDrawer({ report, lang, onClose, onRouteAssigned })
     }
   }
 
-  const summary = detail?.gpsSummary || {};
-  const samples = Array.isArray(detail?.samples) ? detail.samples : [];
-  const pageInfo = detail?.pageInfo || { page: 1, totalPages: 1 };
-  const displayedReport = { ...report, ...(detail?.report || {}) };
-  const routeDeviation = detail?.routeDeviation;
+  async function retryLookup() {
+    if (retrying) return;
+    setRetrying(true);
+    setRetryFeedback(null);
+    setError('');
+    let data;
+    try {
+      data = await adminFetch('/api/admin/reports/retry', { method: 'POST', body: JSON.stringify({ reportId: report.id }) });
+    } catch {
+      setRetryFeedback({ tone: 'error', text: t.retryFailed });
+      setRetrying(false);
+      return;
+    }
+
+    const mutatedReport = { ...report, ...(data.report || {}) };
+    setDetail(current => current?.report?.id === report.id ? { ...current, report: { ...(current.report || {}), ...mutatedReport } } : current);
+    setRetryFeedback(retryFeedbackFor(data, lang, t));
+    onReportUpdated?.(mutatedReport);
+
+    try {
+      const refreshed = await adminFetch(`/api/admin/reports/${encodeURIComponent(report.id)}/gps?page=${page}&pageSize=50`, { cacheOffline: false });
+      setDetail(refreshed);
+      if (refreshed.route) setMapSamples(await adminFetchReportGpsSamples(report.id).catch(() => []));
+      else setMapSamples([]);
+    } catch {
+      setError(t.failed);
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  const activeDetail = detail?.report?.id === report.id ? detail : null;
+  const summary = activeDetail?.gpsSummary || {};
+  const samples = Array.isArray(activeDetail?.samples) ? activeDetail.samples : [];
+  const pageInfo = activeDetail?.pageInfo || { page: 1, totalPages: 1 };
+  const displayedReport = { ...report, ...(activeDetail?.report || {}) };
+  const routeDeviation = activeDetail?.routeDeviation;
   const currentRouteName = displayedReport.routeName || '';
-  const pointCount = Number(summary.deviceSamples || samples.length || 0);
+  const reportPointCount = pointCountValue(report.deviceGpsSamples);
+  const detailPointCount = pointCountValue(summary.deviceSamples ?? samples.length);
+  const pointCount = loading || error || retrying || !activeDetail ? reportPointCount : detailPointCount;
+  const lookupPending = displayedReport.gpsLookupStatus === 'pending';
+  const lookupNotApplicable = displayedReport.status === 'Cancelled' || displayedReport.gpsLookupStatus === 'not_applicable';
+  const retryAllowed = !lookupNotApplicable && (!displayedReport.driverName || !pointCount || ['pending', 'no_data', 'lookup_failed', 'lookup_unavailable'].includes(displayedReport.gpsLookupStatus));
+  const lookupBusy = !error && (loading || retrying || !activeDetail);
+  const lookupCardState = lookupBusy
+    ? 'is-loading'
+    : lookupNotApplicable && !pointCount
+      ? 'is-neutral'
+      : error || (!pointCount && retryAllowed) ? 'needs-attention' : 'is-ready';
+  const lookupTitle = lookupBusy
+    ? retrying ? t.retrying : t.loading
+    : error ? t.failed
+      : pointCount ? t.gpsReady
+        : lookupNotApplicable ? t.gpsNotApplicable
+          : lookupPending ? t.lookupPending : t.gpsMissing;
+  const lookupHint = lookupBusy
+    ? retrying ? t.lookupPending : t.loadingHint
+    : error ? t.failedHint
+      : pointCount ? t.gpsReadyHint.replace('{count}', String(pointCount))
+        : lookupNotApplicable ? t.gpsNotApplicableHint : t.gpsMissingHint;
 
   function toggleRouteEditor() {
     if (routeEditorOpen) {
@@ -198,6 +279,24 @@ export default function JobGpsDrawer({ report, lang, onClose, onRouteAssigned })
           <div><dt>{t.time}</dt><dd>{time(displayedReport.startTime, lang)}–{time(displayedReport.endTime, lang)}</dd></div>
         </dl>
 
+        <section className={`gps-lookup-card ${lookupCardState}`} aria-labelledby="gps-detail-title">
+          <span className="gps-lookup-icon" aria-hidden="true"><MapPinLineIcon size={22} weight="bold" /></span>
+          <div className="gps-lookup-copy">
+            <h2 id="gps-detail-title">{t.title}</h2>
+            <strong>{lookupTitle}</strong>
+            <p>{lookupHint}</p>
+          </div>
+          <dl className="gps-lookup-metrics">
+            <div><dt>{t.device}</dt><dd>{pointCount}</dd></div>
+            <div><dt>{t.last}</dt><dd>{summary.lastCapturedAt ? time(summary.lastCapturedAt, lang) : '—'}</dd></div>
+          </dl>
+          {retryAllowed ? <button className="gps-retry-button" type="button" aria-label={`${t.retry}: ${displayedReport.id}`} disabled={lookupBusy} onClick={retryLookup}><ArrowsClockwiseIcon className={retrying ? 'is-spinning' : undefined} size={17} weight="bold" aria-hidden="true" /><span>{retrying ? t.retrying : t.retry}</span></button> : null}
+          {retryFeedback ? <p className={`gps-lookup-feedback${retryFeedback.tone === 'neutral' ? '' : ` ${retryFeedback.tone}`}`} role={retryFeedback.tone === 'error' ? 'alert' : 'status'}>
+            {retryFeedback.tone === 'success' ? <CheckCircleIcon size={16} weight="fill" aria-hidden="true" /> : retryFeedback.tone === 'error' ? <WarningCircleIcon size={16} weight="fill" aria-hidden="true" /> : <MapPinLineIcon size={16} weight="fill" aria-hidden="true" />}
+            {retryFeedback.text}
+          </p> : null}
+        </section>
+
         <section className={`gps-route-assignment${routeEditorOpen ? ' editing' : ''}`} aria-labelledby="gps-route-assignment-label">
           <button className="route-assignment-summary" type="button" aria-expanded={routeEditorOpen} aria-controls="route-assignment-editor" onClick={toggleRouteEditor}>
             <span className="route-assignment-icon" aria-hidden="true"><MapTrifoldIcon size={19} weight="bold" /></span>
@@ -223,19 +322,11 @@ export default function JobGpsDrawer({ report, lang, onClose, onRouteAssigned })
           </div> : null}
         </section>
 
-        <section className="gps-detail-section" aria-labelledby="gps-detail-title">
-          <h2 id="gps-detail-title">{t.title}</h2>
-          <dl className="gps-detail-summary">
-            <div><dt>{t.device}</dt><dd>{pointCount}</dd></div>
-            <div><dt>{t.last}</dt><dd>{summary.lastCapturedAt ? time(summary.lastCapturedAt, lang) : '—'}</dd></div>
-          </dl>
-        </section>
-
-        {detail?.route ? <section className="gps-route-section">
-          <div className="gps-route-heading"><h2>{t.routeMap}</h2><a href={detail.route.googleMapsUrl} target="_blank" rel="noreferrer">{t.openRoute}<ArrowSquareOutIcon size={14} weight="bold" aria-hidden="true" /></a></div>
-          <RouteMap anchors={detail.route.anchors} samples={mapSamples.length ? mapSamples : samples} deviationEvents={routeDeviation?.events || []} label={t.routeMap} lang={lang} />
+        {activeDetail?.route ? <section className="gps-route-section">
+          <div className="gps-route-heading"><h2>{t.routeMap}</h2><a href={activeDetail.route.googleMapsUrl} target="_blank" rel="noreferrer">{t.openRoute}<ArrowSquareOutIcon size={14} weight="bold" aria-hidden="true" /></a></div>
+          <RouteMap anchors={activeDetail.route.anchors} samples={mapSamples.length ? mapSamples : samples} deviationEvents={routeDeviation?.events || []} label={t.routeMap} lang={lang} />
           {routeDeviation?.status === 'deviated' ? <details className="route-deviation-status deviated"><summary><span><WarningCircleIcon size={16} weight="fill" aria-hidden="true" /><strong>{t.deviated}</strong>{` · ${Math.round(routeDeviation.longestDurationSeconds)} ${t.seconds}`}</span><CaretDownIcon size={15} weight="bold" aria-hidden="true" /></summary><p>{`${t.deviationBody} ${Math.round(routeDeviation.longestDurationSeconds)} ${t.seconds}`}</p><div className="route-deviation-events">{(routeDeviation.events || []).map((event, index) => <dl key={`${event.startedAt}-${index}`}><div><dt>{t.deviationBegan}</dt><dd>{time(event.startedAt, lang)}</dd></div><div><dt>{t.deviationLocation}</dt><dd>{coordinate(event)}</dd></div><div><dt>{t.deviationDistance}</dt><dd>{distance(event.startDistanceKm, lang)}</dd></div><div><dt>{t.deviationDuration}</dt><dd>{Math.round(event.durationSeconds)} {t.seconds}</dd></div></dl>)}</div></details> : null}
-          {routeDeviation?.status === 'within_route' ? <p className="route-deviation-status within-route"><CheckCircleIcon size={16} weight="fill" aria-hidden="true" /><strong>{t.withinRoute}</strong></p> : null}
+          {routeDeviation?.status === 'within_route' && pointCount > 0 ? <p className="route-deviation-status within-route"><CheckCircleIcon size={16} weight="fill" aria-hidden="true" /><strong>{t.withinRoute}</strong></p> : null}
         </section> : <div className="gps-route-missing"><MapTrifoldIcon size={22} weight="bold" aria-hidden="true" /><p>{t.noRoute}</p></div>}
 
         <section className={`gps-samples-panel${samplesOpen ? ' open' : ''}`}>

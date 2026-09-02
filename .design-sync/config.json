@@ -45,7 +45,7 @@
   "dtsPropsFor": {
     "SearchableCombobox": "label: string; value: string | string[]; onChange: (next: string | string[]) => void; options: Array<string | { value: string; label: string }>; allLabel: string; lang: 'en' | 'th'; multiple?: boolean; getOptionLabel?: (option: string) => string; maxResults?: number;",
     "RouteSelector": "value?: string; busy?: boolean; error?: string; lang?: 'en' | 'th'; onSelect: (routeName: string) => void;",
-    "JobGpsDrawer": "report: { id: string; vehicleNumber?: string; driverName?: string; [key: string]: unknown }; lang: 'en' | 'th'; onClose: () => void;",
+    "JobGpsDrawer": "report: { id: string; vehicleNumber?: string; driverName?: string; [key: string]: unknown }; lang: 'en' | 'th'; onClose: () => void; onReportUpdated?: (report: Record<string, unknown>) => void; onRouteAssigned?: (assignment: Record<string, unknown>) => void;",
     "SpeedTimelineOverlay": "reports?: Array<{ id: string }>; samplesByReportId?: Record<string, Array<{ id?: string; capturedAt: string; deviceGps?: { speedMps?: number | string } }>>; loading?: boolean; lang?: 'en' | 'th'; startMinute?: number; endMinute?: number; originTime?: string; className?: string; interactive?: boolean;",
     "TimelineAlertMarkers": "alerts?: Array<{ id: string; reportId: string; type: 'speeding' | 'harsh-braking' | 'alert'; capturedAt: string; minute: number; speedKph?: number; decelerationMps2?: number; sourceLabel?: string }>; lang?: 'en' | 'th'; startMinute?: number; endMinute?: number; interactive?: boolean;",
     "TimelineAlertChips": "alerts?: Array<{ id: string; reportId: string; type: 'speeding' | 'harsh-braking' | 'alert'; capturedAt: string; minute: number; speedKph?: number; sourceLabel?: string }>; lang?: 'en' | 'th'; limit?: number | null; className?: string;",
@@ -54,7 +54,7 @@
     "FullReportDashboard": "lang: 'en' | 'th';",
     "RoutesDashboard": "lang: 'en' | 'th';",
     "SettingsDashboard": "lang: 'en' | 'th';",
-    "TimelineDashboard": "lang: 'en' | 'th'; embedded?: boolean; sourceReports?: Array<{ id: string; vehicleNumber?: string; driverName?: string; mode?: string; status?: string; startTime?: string; endTime?: string; workPeriodDate?: string; workPeriodStartTime?: string; locationName?: string; topSpeed?: number; [key: string]: unknown }> | null; sourceLoading?: boolean; sourceError?: string; sharedFilters?: Record<string, unknown> | null; onPrintWorkPeriod?: ((vehicle: string) => void) | null; printPeriodGuidance?: boolean;",
+    "TimelineDashboard": "lang: 'en' | 'th'; embedded?: boolean; sourceReports?: Array<{ id: string; vehicleNumber?: string; driverName?: string; mode?: string; status?: string; startTime?: string; endTime?: string; workPeriodDate?: string; workPeriodStartTime?: string; locationName?: string; topSpeed?: number; [key: string]: unknown }> | null; sourceLoading?: boolean; sourceError?: string; sharedFilters?: Record<string, unknown> | null; refreshKey?: number; onOpenReport?: ((report: Record<string, unknown>) => void) | null; onPrintWorkPeriod?: ((report: Record<string, unknown>) => void) | null; printPeriodGuidance?: boolean;",
     "LandscapePrintDashboard": "filters?: Record<string, unknown>; lang?: 'en' | 'th'; timelineOnly?: boolean; timelineFilters?: Record<string, unknown> | null;",
     "PortraitPrintDashboard": "date?: string; workPeriodId?: string; vehicle?: string; lang?: 'en' | 'th';",
     "DashboardError": "error: Error & { digest?: string }; reset: () => void;"

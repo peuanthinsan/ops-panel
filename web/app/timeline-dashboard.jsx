@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CaretDownIcon } from '@phosphor-icons/react/dist/csr/CaretDown';
+import { CrosshairSimpleIcon } from '@phosphor-icons/react/dist/csr/CrosshairSimple';
 import Image from 'next/image';
 import Link from 'next/link';
 import { formatReportDate, formatReportDuration, reportDateKey } from '../lib/report-view';
@@ -23,8 +24,8 @@ const emptySharedFilters = Object.freeze({});
 const timelineModes = reportableOperations.map(action => action[2]);
 const modeCopy = Object.fromEntries(reportableOperations.map(action => [action[2], { en: action[2], th: action[1] }]));
 const text = {
-  en: { eyebrow: 'DAILY OPERATIONS', title: 'Per-vehicle timeline', subtitle: 'See each work period continuously, including jobs after midnight.', date: 'Work started', search: 'Search vehicle or driver', printTimeline: 'Print timeline', filterJobs: 'Filter jobs', jobTypes: 'Job types', selectAll: 'Select all', clearAll: 'Clear', resetFilters: 'Reset filters', noneSelected: 'None', load: 'Load', unload: 'Unload', stop: 'Stop / wait', other: 'Break / other', speed: 'Speed (km/h)', alert: 'Alert', topSpeed: 'Top speed', gaps: 'Gaps are driving or no recorded job', vehicleDriver: 'Vehicle / driver', vehicleDriverDate: 'Vehicle / driver / work period', rowScale: 'Each row uses its own work-period scale', nextDay: '+1 day', loading: 'Loading timeline…', failed: 'Could not load reports.', empty: 'No saved jobs match this work-period range and search.', emptyCompleted: 'No completed jobs match this work-period range and search.', emptyCancelled: 'No cancelled jobs match this work-period range and search.', emptyNoStatus: 'Select at least one status to display timeline jobs.', emptyNoMode: 'Select at least one job type to display timeline jobs.', emptyTitle: 'No timeline activity yet', emptyBody: 'Completed and cancelled tablet jobs will be arranged by vehicle and work period.', manageFleet: 'Manage fleet', showing: 'Showing', of: 'of', page: 'Page', previous: 'Previous', next: 'Next', cancelled: 'Cancelled', completed: 'Completed', activity: 'Activity', status: 'Status', start: 'Start', end: 'End', duration: 'Duration', vehicle: 'Vehicle', driver: 'Driver', device: 'Device', gps: 'GPS points', location: 'Location', reportId: 'Report ID', unknown: 'Not available' },
-  th: { eyebrow: 'การปฏิบัติงานรายวัน', title: 'ไทม์ไลน์รายรถ', subtitle: 'ดูแต่ละรอบงานอย่างต่อเนื่อง รวมถึงงานหลังเที่ยงคืน', date: 'วันที่เริ่มรอบงาน', search: 'ค้นหารถหรือคนขับ', printTimeline: 'พิมพ์ไทม์ไลน์', filterJobs: 'กรองงาน', jobTypes: 'ประเภทงาน', selectAll: 'เลือกทั้งหมด', clearAll: 'ล้าง', resetFilters: 'รีเซ็ตตัวกรอง', noneSelected: 'ไม่ได้เลือก', load: 'ขึ้นสินค้า', unload: 'ลงสินค้า', stop: 'หยุด / รอ', other: 'พัก / อื่น ๆ', speed: 'ความเร็ว (กม./ชม.)', alert: 'การแจ้งเตือน', topSpeed: 'ความเร็วสูงสุด', gaps: 'ช่องว่างคือช่วงขับรถหรือไม่มีงานที่บันทึก', vehicleDriver: 'รถ / คนขับ', vehicleDriverDate: 'รถ / คนขับ / รอบงาน', rowScale: 'แต่ละแถวใช้สเกลตามรอบงาน', nextDay: '+1 วัน', loading: 'กำลังโหลดไทม์ไลน์…', failed: 'ไม่สามารถโหลดรายงานได้', empty: 'ไม่พบงานที่บันทึกตรงกับช่วงรอบงานและคำค้นหา', emptyCompleted: 'ไม่พบงานที่เสร็จตรงกับช่วงรอบงานและคำค้นหา', emptyCancelled: 'ไม่พบงานที่ยกเลิกตรงกับช่วงรอบงานและคำค้นหา', emptyNoStatus: 'เลือกอย่างน้อยหนึ่งสถานะเพื่อแสดงงานในไทม์ไลน์', emptyNoMode: 'เลือกอย่างน้อยหนึ่งประเภทงานเพื่อแสดงงานในไทม์ไลน์', emptyTitle: 'ยังไม่มีกิจกรรมในไทม์ไลน์', emptyBody: 'งานที่จบและงานที่ยกเลิกจากแท็บเล็ตจะแสดงตามรถและรอบงาน', manageFleet: 'จัดการรถ', showing: 'แสดง', of: 'จาก', page: 'หน้า', previous: 'ก่อนหน้า', next: 'ถัดไป', cancelled: 'ยกเลิก', completed: 'เสร็จสิ้น', activity: 'กิจกรรม', status: 'สถานะ', start: 'เริ่ม', end: 'จบ', duration: 'ระยะเวลา', vehicle: 'รถ', driver: 'พขร.', device: 'อุปกรณ์', gps: 'จุด GPS', location: 'ตำแหน่ง', reportId: 'รหัสรายงาน', unknown: 'ไม่มีข้อมูล' },
+  en: { eyebrow: 'DAILY OPERATIONS', title: 'Per-vehicle timeline', subtitle: 'See each work period continuously, including jobs after midnight.', inspectHint: 'Select a job band to open its GPS detail.', openGps: 'Open GPS job detail', date: 'Work started', search: 'Search vehicle or driver', printTimeline: 'Print timeline', filterJobs: 'Filter jobs', jobTypes: 'Job types', selectAll: 'Select all', clearAll: 'Clear', resetFilters: 'Reset filters', noneSelected: 'None', load: 'Load', unload: 'Unload', stop: 'Stop / wait', other: 'Break / other', speed: 'Speed (km/h)', alert: 'Alert', topSpeed: 'Top speed', gaps: 'Gaps are driving or no recorded job', vehicleDriver: 'Vehicle / driver', vehicleDriverDate: 'Vehicle / driver / work period', rowScale: 'Each row uses its own work-period scale', nextDay: '+1 day', loading: 'Loading timeline…', failed: 'Could not load reports.', empty: 'No saved jobs match this work-period range and search.', emptyCompleted: 'No completed jobs match this work-period range and search.', emptyCancelled: 'No cancelled jobs match this work-period range and search.', emptyNoStatus: 'Select at least one status to display timeline jobs.', emptyNoMode: 'Select at least one job type to display timeline jobs.', emptyTitle: 'No timeline activity yet', emptyBody: 'Completed and cancelled tablet jobs will be arranged by vehicle and work period.', manageFleet: 'Manage fleet', showing: 'Showing', of: 'of', page: 'Page', previous: 'Previous', next: 'Next', cancelled: 'Cancelled', completed: 'Completed', activity: 'Activity', status: 'Status', start: 'Start', end: 'End', duration: 'Duration', vehicle: 'Vehicle', driver: 'Driver', device: 'Device', gps: 'GPS points', location: 'Location', reportId: 'Report ID', unknown: 'Not available' },
+  th: { eyebrow: 'การปฏิบัติงานรายวัน', title: 'ไทม์ไลน์รายรถ', subtitle: 'ดูแต่ละรอบงานอย่างต่อเนื่อง รวมถึงงานหลังเที่ยงคืน', inspectHint: 'เลือกแถบงานเพื่อเปิดรายละเอียด GPS', openGps: 'เปิดรายละเอียด GPS ของงาน', date: 'วันที่เริ่มรอบงาน', search: 'ค้นหารถหรือคนขับ', printTimeline: 'พิมพ์ไทม์ไลน์', filterJobs: 'กรองงาน', jobTypes: 'ประเภทงาน', selectAll: 'เลือกทั้งหมด', clearAll: 'ล้าง', resetFilters: 'รีเซ็ตตัวกรอง', noneSelected: 'ไม่ได้เลือก', load: 'ขึ้นสินค้า', unload: 'ลงสินค้า', stop: 'หยุด / รอ', other: 'พัก / อื่น ๆ', speed: 'ความเร็ว (กม./ชม.)', alert: 'การแจ้งเตือน', topSpeed: 'ความเร็วสูงสุด', gaps: 'ช่องว่างคือช่วงขับรถหรือไม่มีงานที่บันทึก', vehicleDriver: 'รถ / คนขับ', vehicleDriverDate: 'รถ / คนขับ / รอบงาน', rowScale: 'แต่ละแถวใช้สเกลตามรอบงาน', nextDay: '+1 วัน', loading: 'กำลังโหลดไทม์ไลน์…', failed: 'ไม่สามารถโหลดรายงานได้', empty: 'ไม่พบงานที่บันทึกตรงกับช่วงรอบงานและคำค้นหา', emptyCompleted: 'ไม่พบงานที่เสร็จตรงกับช่วงรอบงานและคำค้นหา', emptyCancelled: 'ไม่พบงานที่ยกเลิกตรงกับช่วงรอบงานและคำค้นหา', emptyNoStatus: 'เลือกอย่างน้อยหนึ่งสถานะเพื่อแสดงงานในไทม์ไลน์', emptyNoMode: 'เลือกอย่างน้อยหนึ่งประเภทงานเพื่อแสดงงานในไทม์ไลน์', emptyTitle: 'ยังไม่มีกิจกรรมในไทม์ไลน์', emptyBody: 'งานที่จบและงานที่ยกเลิกจากแท็บเล็ตจะแสดงตามรถและรอบงาน', manageFleet: 'จัดการรถ', showing: 'แสดง', of: 'จาก', page: 'หน้า', previous: 'ก่อนหน้า', next: 'ถัดไป', cancelled: 'ยกเลิก', completed: 'เสร็จสิ้น', activity: 'กิจกรรม', status: 'สถานะ', start: 'เริ่ม', end: 'จบ', duration: 'ระยะเวลา', vehicle: 'รถ', driver: 'พขร.', device: 'อุปกรณ์', gps: 'จุด GPS', location: 'ตำแหน่ง', reportId: 'รหัสรายงาน', unknown: 'ไม่มีข้อมูล' },
 };
 const workPeriodStartedCopy = { en: 'Work period · started', th: 'รอบงาน · เริ่ม' };
 const printWorkReportCopy = { en: 'Print work report', th: 'พิมพ์รายงานรอบงาน' };
@@ -94,13 +95,14 @@ function timelineSegment(report, lang, labels, scaleStart, scaleEnd) {
     tooltipId: `timeline-tooltip-${String(report.id || `${report.vehicleNumber}-${report.startTime}`).replace(/[^a-zA-Z0-9_-]/g, '-')}`,
     title: `${modeLabel}${cancelled ? ` · ${labels.cancelled}` : ''}`,
     finishWork,
+    report,
     detail,
     accessibleLabel: `${labels.activity}: ${detail.activity}. ${labels.status}: ${detail.status}. ${labels.start}: ${detail.start}. ${labels.end}: ${detail.end}. ${labels.duration}: ${detail.duration}. ${labels.topSpeed}: ${detail.speed}. ${labels.vehicle}: ${detail.vehicle}. ${labels.driver}: ${detail.driver}. ${labels.device}: ${detail.device}. ${labels.gps}: ${detail.gps}. ${labels.location}: ${detail.location}. ${labels.reportId}: ${detail.reportId}.`,
     style: { left: `${left}%`, width: `${width}%`, backgroundColor: reportModeColor(report.mode), opacity: cancelled ? 0.42 : 1 },
   };
 }
 
-export default function TimelineDashboard({ lang, embedded = false, sourceReports = null, sourceLoading = false, sourceError = '', sharedFilters = null, onPrintWorkPeriod = null, printPeriodGuidance = false }) {
+export default function TimelineDashboard({ lang, embedded = false, sourceReports = null, sourceLoading = false, sourceError = '', sharedFilters = null, refreshKey = 0, onOpenReport = null, onPrintWorkPeriod = null, printPeriodGuidance = false }) {
   const t = text[lang];
   const [reports, setReports] = useState([]);
   const [date, setDate] = useState('');
@@ -113,6 +115,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
   const [error, setError] = useState('');
   const [tooltip, setTooltip] = useState(null);
   const timelineRequestSequence = useRef(0);
+  const lastRefreshKey = useRef(refreshKey);
   const initializedDate = useRef(false);
   const usesSourceReports = Array.isArray(sourceReports);
   const sharedQuery = embedded ? sharedFilters || emptySharedFilters : emptySharedFilters;
@@ -160,6 +163,12 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
     document.addEventListener('visibilitychange', refreshVisible);
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refreshVisible); };
   }, [loadReports, usesSourceReports]);
+
+  useEffect(() => {
+    if (usesSourceReports || refreshKey === lastRefreshKey.current) return;
+    lastRefreshKey.current = refreshKey;
+    void loadReports({ silent: true });
+  }, [loadReports, refreshKey, usesSourceReports]);
 
   useEffect(() => {
     if (!usesSourceReports || embedded) return;
@@ -289,6 +298,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
     <TimelineWorkspace className={embedded ? 'timeline-embedded-workspace' : 'main timeline-workspace'} id={embedded ? undefined : 'main-content'} tabIndex={embedded ? undefined : -1} aria-label={embedded ? t.title : undefined}>
       <div className={embedded ? 'section-heading timeline-embedded-heading' : 'page-header'}>
         <div>{embedded ? null : <div className="eyebrow">{t.eyebrow}</div>}<TimelineHeading>{t.title}</TimelineHeading><p>{t.subtitle}</p></div>
+        {embedded && onOpenReport ? <div className="timeline-inspect-hint"><CrosshairSimpleIcon size={17} weight="bold" aria-hidden="true" /><span>{t.inspectHint}</span></div> : null}
         {embedded ? null : <div className="timeline-header-actions"><label className="date-input"><span>{t.date}</span><input type="date" value={date} onChange={event => { initializedDate.current = true; setDate(event.target.value); }} /></label><button className="primary" type="button" disabled={!date || timelineLoading} onClick={printTimeline}>{t.printTimeline}</button></div>}
       </div>
       <section className="panel timeline-panel" aria-busy={timelineLoading}>
@@ -321,16 +331,20 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
           {timelinePage.items.map(row => { const rowAlerts = alertsByRow.get(row) || []; return <div className={`timeline-grid timeline-row ${rowAlerts.length ? 'timeline-row-has-alerts' : ''}`} key={`${row.date}-${row.actualDate}-${row.vehicle}`} role="group" aria-label={`${t.vehicle}: ${row.vehicle}. ${t.driver}: ${row.driver}. ${t.date}: ${formatReportDate(row.date, lang)}${row.dayOffset ? `, ${t.nextDay}` : ''}. ${rowAlerts.length} ${t.alert}.`}><div><strong>{row.vehicle}</strong><small>{row.driver}</small><small className="timeline-row-period">{workPeriodStartedCopy[lang]} {formatTimelineTime(row.periodStart, lang)}</small>{showRowDate || row.dayOffset ? <small className="timeline-row-date">{formatReportDate(row.actualDate, lang)}{row.dayOffset ? ` · +${row.dayOffset} ${lang === 'th' ? 'วัน' : row.dayOffset === 1 ? 'day' : 'days'}` : ''}</small> : null}{onPrintWorkPeriod ? <button className="timeline-print-button" type="button" onClick={() => onPrintWorkPeriod(row.reports[0])} disabled={!row.reports[0]?.vehicleNumber || !row.reports[0]?.workPeriodId}>{printWorkReportCopy[lang]}</button> : null}</div><div className="timeline-row-chart"><div className="timeline-row-scale" aria-hidden="true"><span>{formatTimelineTime(row.scaleStart, lang)}</span><span>{formatTimelineTime(row.scaleEnd, lang)}</span></div><div className="timeline-track timeline-speed-track" style={{ '--timeline-lane-count': row.laneCount }}>{row.segments.map(segment => <button
             key={segment.id}
             type="button"
-            className={`timeline-segment timeline-lane-${segment.lane || 0} ${segment.finishWork ? 'finish-work-marker' : ''}`}
+            className={`timeline-segment timeline-lane-${segment.lane || 0} ${segment.finishWork ? 'finish-work-marker' : ''} ${onOpenReport ? 'is-inspectable' : ''}`}
             style={{ ...segment.style, '--timeline-lane': segment.lane }}
-            aria-label={segment.accessibleLabel}
+            aria-label={`${segment.accessibleLabel}${onOpenReport ? ` ${t.openGps}.` : ''}`}
+            aria-haspopup={onOpenReport ? 'dialog' : undefined}
             aria-describedby={tooltip?.segment.id === segment.id ? segment.tooltipId : undefined}
             aria-expanded={tooltip?.segment.id === segment.id && tooltip.pinned}
             onMouseEnter={event => openTooltip(event, segment, false)}
             onMouseLeave={() => setTooltip(current => current?.segment.id === segment.id && !current.pinned ? null : current)}
             onFocus={event => openTooltip(event, segment, false)}
             onBlur={() => setTooltip(current => current?.segment.id === segment.id ? null : current)}
-            onClick={event => tooltip?.segment.id === segment.id && tooltip.pinned ? setTooltip(null) : openTooltip(event, segment, true)}
+            onClick={event => {
+              if (onOpenReport) { setTooltip(null); onOpenReport(segment.report); return; }
+              if (tooltip?.segment.id === segment.id && tooltip.pinned) setTooltip(null); else openTooltip(event, segment, true);
+            }}
           ><span className="sr-only">{segment.title}</span>{segment.finishWork ? <span className={`timeline-finish-marker ${segment.detail.status === t.cancelled ? 'cancelled' : ''}`} aria-hidden="true" /> : null}</button>)}<SpeedTimelineOverlay reports={row.reports} samplesByReportId={speedSeries.samplesByReportId} loading={speedSeries.loading} lang={lang} originTime={new Date(row.scaleStart).toISOString()} startMinute={0} endMinute={row.scaleDuration} /><TimelineAlertMarkers alerts={rowAlerts} lang={lang} startMinute={0} endMinute={row.scaleDuration} /></div><TimelineAlertChips alerts={rowAlerts} lang={lang} /></div></div>; })}
         </div>
         {tooltip ? <aside className="timeline-detail-tooltip" id={tooltip.segment.tooltipId} role="tooltip" style={{ left: tooltip.left, top: tooltip.top, width: tooltip.width, transform: tooltip.above ? 'translateY(-100%)' : undefined }}>
@@ -343,6 +357,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
             <div><dt>{t.gps}</dt><dd>{tooltip.segment.detail.gps}</dd></div><div><dt>{t.location}</dt><dd>{tooltip.segment.detail.location}</dd></div>
             <div className="tooltip-report-id"><dt>{t.reportId}</dt><dd>{tooltip.segment.detail.reportId}</dd></div>
           </dl>
+          {onOpenReport ? <p className="timeline-tooltip-action">{t.openGps}</p> : null}
         </aside> : null}
         {timelineLoading ? <p className="empty" role="status">{t.loading}</p> : null}
         {timelineError ? <p className="error" role="alert">{timelineError}</p> : null}

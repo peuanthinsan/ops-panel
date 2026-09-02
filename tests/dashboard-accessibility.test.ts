@@ -40,7 +40,6 @@ test('reports expose labeled filters and sort direction to assistive technology'
   assert.match(source, /className="table-wrap" tabIndex=\{0\}/);
   assert.match(source, /localizedDashboardReportError/);
   assert.match(source, /print: 'Print work report'/);
-  assert.match(source, /!report\.driverName \|\| !Number\(report\.deviceGpsSamples\)/);
   assert.match(source, /new URLSearchParams\(\{ workPeriodId: selectedPrintPeriodId, lang \}\)/);
   assert.match(source, /if \(!selectedPrintPeriodId \|\| vehicles\.length !== 1\) return/);
   assert.match(source, /params\.set\('vehicle', vehicles\[0\]\)/);
@@ -58,9 +57,11 @@ test('reports combine the timeline and saved jobs before opening the daily vehic
   const shell = await readFile(fileURLToPath(new NodeUrl('../web/app/page.jsx', import.meta.url)), 'utf8');
   const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
   const print = await readFile(fileURLToPath(new NodeUrl('../web/app/print/print-dashboard.jsx', import.meta.url)), 'utf8');
-  assert.match(dashboard, /<TimelineDashboard lang=\{lang\} embedded sharedFilters=\{sharedFilters\} \/>/);
+  assert.match(dashboard, /<TimelineDashboard[\s\S]*?\bembedded\b[\s\S]*?sharedFilters=\{sharedFilters\}[\s\S]*?refreshKey=\{timelineRefreshKey\}[\s\S]*?onOpenReport=\{setSelectedReport\}[\s\S]*?\/>/);
   assert.doesNotMatch(dashboard, /embedded sourceReports=\{visibleReports\}/);
-  assert.match(timeline, /embedded = false, sourceReports = null, sourceLoading = false, sourceError = '', sharedFilters = null/);
+  assert.match(timeline, /embedded = false, sourceReports = null, sourceLoading = false, sourceError = '', sharedFilters = null, refreshKey = 0, onOpenReport = null/);
+  assert.match(timeline, /if \(usesSourceReports \|\| refreshKey === lastRefreshKey\.current\) return;/);
+  assert.match(timeline, /void loadReports\(\{ silent: true \}\);/);
   assert.match(timeline, /const effectiveStartDate = embedded \? String\(sharedQuery\.startDate \|\| ''\) : date/);
   assert.match(timeline, /const effectiveEndDate = embedded \? String\(sharedQuery\.endDate \|\| ''\) : date/);
   assert.match(timeline, /embedded \? !reportMatchesFilters\(report, sharedQuery, lang\)/);
@@ -119,6 +120,15 @@ test('work-period report is anchor-selected, speed-enabled, and uses the officia
 test('job GPS detail is an accessible, cancellable GPS modal', async () => {
   const reports = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
   const source = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
+  const columns = reports.slice(reports.indexOf('const columns = ['), reports.indexOf('];', reports.indexOf('const columns = [')) + 2);
+  assert.match(columns, /\['gpsState', g\.lastPosition\]/);
+  assert.doesNotMatch(columns, /gpsCoverage|gpsFound/);
+  assert.doesNotMatch(reports, /className="gps-coverage-cell"/);
+  assert.doesNotMatch(reports, /<col className="col-coverage"/);
+  assert.match(reports, /aria-label=\{`\$\{labels\.viewGps\}: \$\{report\.id\}\. \$\{reportLocation\(report, fallback\)\}\. \$\{pointCount\} \$\{labels\.samples\}\. \$\{displayGps\(gpsValue\(report\), lang\)\}\.`\}/);
+  assert.match(reports, /onClick=\{\(\) => onOpen\(report\)\}/);
+  assert.match(reports, /<GpsSnapshotButton[\s\S]*?report=\{report\}[\s\S]*?labels=\{g\}[\s\S]*?onOpen=\{setSelectedReport\}[\s\S]*?\/>/);
+  assert.match(reports, /<JobGpsDrawer[\s\S]*?report=\{selectedReport\}[\s\S]*?onReportUpdated=\{handleReportUpdated\}[\s\S]*?\/>/);
   assert.match(source, /role="dialog" aria-modal="true" aria-labelledby="gps-detail-title"/);
   assert.match(source, /if \(event\.key === 'Escape'\)/);
   assert.match(source, /if \(event\.key !== 'Tab'\) return/);
@@ -127,18 +137,25 @@ test('job GPS detail is an accessible, cancellable GPS modal', async () => {
   assert.match(source, /จุด GPS/);
   assert.match(source, /new AbortController\(\)/);
   assert.match(source, /data-label=\{t\.coordinates\}/);
+  assert.match(source, /!displayedReport\.driverName \|\| !pointCount/);
+  assert.match(source, /adminFetch\('\/api\/admin\/reports\/retry'/);
+  assert.match(source, /aria-label=\{`\$\{t\.retry\}: \$\{displayedReport\.id\}`\}/);
+  assert.match(source, /onReportUpdated\?\.\(mutatedReport\);/);
   assert.doesNotMatch(source, /Howen|PairingTracks|fmsGps|pairStatus/);
   assert.doesNotMatch(reports, /GpsCoverageOverview|Howen FMS|coverageOverview/);
 });
 
 test('timeline segments expose detailed tooltips to pointer, keyboard, and touch users', async () => {
   const source = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
-  assert.match(source, /type="button"\s+className="timeline-segment"/);
-  assert.match(source, /aria-label=\{segment\.accessibleLabel\}/);
+  assert.match(source, /onOpenReport = null/);
+  assert.match(source, /type="button"\s+className=\{`timeline-segment/);
+  assert.match(source, /aria-label=\{`\$\{segment\.accessibleLabel\}\$\{onOpenReport/);
+  assert.match(source, /aria-haspopup=\{onOpenReport \? 'dialog' : undefined\}/);
   assert.match(source, /aria-describedby=/);
   assert.match(source, /onMouseEnter=/);
   assert.match(source, /onFocus=/);
-  assert.match(source, /onClick=/);
+  assert.match(source, /if \(onOpenReport\) \{ setTooltip\(null\); onOpenReport\(segment\.report\); return; \}/);
+  assert.match(source, /if \(tooltip\?\.segment\.id === segment\.id && tooltip\.pinned\) setTooltip\(null\); else openTooltip\(event, segment, true\);/);
   assert.match(source, /role="tooltip"/);
   assert.match(source, /event\.key === 'Escape'/);
   for (const detail of ['start', 'end', 'duration', 'speed', 'vehicle', 'driver', 'device', 'gps', 'location', 'reportId']) assert.match(source, new RegExp(`tooltip\\.segment\\.detail\\.${detail}`));

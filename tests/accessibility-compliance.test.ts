@@ -31,9 +31,11 @@ test('date picker uses truthful button semantics and announces complete dates', 
 
 test('repeated dashboard actions identify their report or tablet to screen readers', async () => {
   const reports = await source('../web/app/report-dashboard.jsx');
+  const drawer = await source('../web/app/job-gps-drawer.jsx');
   const fleet = await source('../web/app/fleet-dashboard.jsx');
-  assert.match(reports, /aria-label=\{`\$\{t\.retry\}: \$\{report\.id\}`\}/);
-  assert.match(reports, /aria-label=\{`\$\{g\.viewGps\}: \$\{report\.id\}`\}/);
+  assert.doesNotMatch(reports, /aria-label=\{`\$\{t\.retry\}: \$\{report\.id\}`\}/);
+  assert.match(reports, /aria-label=\{`\$\{labels\.viewGps\}: \$\{report\.id\}\. \$\{reportLocation\(report, fallback\)\}\. \$\{pointCount\} \$\{labels\.samples\}\. \$\{displayGps\(gpsValue\(report\), lang\)\}\.`\}/);
+  assert.match(drawer, /aria-label=\{`\$\{t\.retry\}: \$\{displayedReport\.id\}`\}/);
   assert.match(reports, /aria-label=\{`\$\{t\.printVehicle\}: \$\{report\.vehicleNumber\}`\}/);
   assert.match(reports, /aria-describedby="daily-print-vehicle-message"/);
   assert.match(fleet, /aria-label=\{`\$\{t\.resetAccess\}: \$\{binding\.deviceId\}`\}/);

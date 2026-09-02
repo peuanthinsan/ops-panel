@@ -129,6 +129,26 @@ test('the GPS drawer hides route editing by default and stages a job-scoped chan
   assert.match(dashboard, /onRouteAssigned=\{\(\) => void loadReports\(\{ silent: true \}\)\}/);
 });
 
+test('the GPS drawer keeps counts and retry feedback semantic when detail refreshes fail', async () => {
+  const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
+  assert.match(drawer, /const reportPointCount = pointCountValue\(report\.deviceGpsSamples\);/);
+  assert.match(drawer, /const pointCount = loading \|\| error \|\| retrying \|\| !activeDetail \? reportPointCount : detailPointCount;/);
+  assert.match(drawer, /const lookupNotApplicable = displayedReport\.status === 'Cancelled' \|\| displayedReport\.gpsLookupStatus === 'not_applicable';/);
+  assert.match(drawer, /lookupNotApplicable && !pointCount\s+\? 'is-neutral'/);
+  assert.match(drawer, /disabled=\{lookupBusy\}/);
+  assert.match(drawer, /status === 'no_data'\) return \{ tone: 'neutral'/);
+  assert.match(drawer, /status === 'lookup_unavailable'\) return \{ tone: 'error'/);
+  assert.match(drawer, /status === 'lookup_failed'\) return \{ tone: 'error'/);
+  assert.match(drawer, /data\.gpsReconciliation\?\.gpsSync \? 1 : pointCountValue\(data\.report\?\.deviceGpsSamples\)/);
+  assert.match(drawer, /routeDeviation\?\.status === 'within_route' && pointCount > 0/);
+
+  const mutationIndex = drawer.indexOf('const mutatedReport =');
+  const propagationIndex = drawer.indexOf('onReportUpdated?.(mutatedReport);', mutationIndex);
+  const refreshIndex = drawer.indexOf('const refreshed = await adminFetch', propagationIndex);
+  assert.ok(mutationIndex >= 0 && propagationIndex > mutationIndex && refreshIndex > propagationIndex,
+    'the successful retry mutation should propagate before the optional detail refresh');
+});
+
 test('confirmed route deviations expose an exact GPS event in the map, drawer, and timeline', async () => {
   const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
   const map = await readFile(fileURLToPath(new NodeUrl('../web/app/route-map.jsx', import.meta.url)), 'utf8');

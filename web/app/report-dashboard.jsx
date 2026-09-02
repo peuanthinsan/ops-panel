@@ -6,9 +6,7 @@ import Link from 'next/link';
 import {
   formatReportCoordinate,
   formatReportDate,
-  formatReportDateTime,
   formatReportDuration,
-  displayGpsLookupMessage,
   reportDateKey,
 } from '../lib/report-view';
 import { reportableOperations } from '../lib/actions';
@@ -18,6 +16,9 @@ import SearchableCombobox from './searchable-combobox';
 import JobGpsDrawer from './job-gps-drawer';
 import TimelineDashboard from './timeline-dashboard';
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
+import { ArrowRightIcon } from '@phosphor-icons/react/dist/csr/ArrowRight';
+import { MapPinLineIcon } from '@phosphor-icons/react/dist/csr/MapPinLine';
+import { PrinterIcon } from '@phosphor-icons/react/dist/csr/Printer';
 
 const reportPageSize = 100;
 const modes = reportableOperations.map(action => action[2]);
@@ -45,10 +46,10 @@ const gpsCopy = {
 };
 const gpsUiText = {
   en: {
-    subtitle: 'Review saved jobs, their timeline, and time-matched GPS records.', gpsMatched: 'GPS found', gpsMatchedSub: 'jobs with a GPS point', needsAttention: 'Needs attention', needsAttentionSub: 'jobs with no GPS point', gpsFound: 'GPS found', noData: 'No GPS data', viewGps: 'View GPS', gpsCoverage: 'GPS', lastPosition: 'Last position', samples: 'points',
+    subtitle: 'Review saved jobs, their timeline, and time-matched GPS records.', gpsMatched: 'GPS found', gpsMatchedSub: 'jobs with a GPS point', needsAttention: 'Needs attention', needsAttentionSub: 'jobs with no GPS point', gpsFound: 'GPS found', noData: 'No GPS data', viewGps: 'Open GPS detail', gpsSnapshot: 'GPS snapshot', lastPosition: 'Last position', samples: 'points',
   },
   th: {
-    subtitle: 'ตรวจสอบงานที่บันทึก ไทม์ไลน์ และข้อมูล GPS ที่ตรงตามเวลา', gpsMatched: 'พบข้อมูล GPS', gpsMatchedSub: 'งานที่พบพิกัด GPS', needsAttention: 'ต้องตรวจสอบ', needsAttentionSub: 'งานที่ไม่พบพิกัด GPS', gpsFound: 'พบข้อมูล GPS', noData: 'ไม่มีข้อมูล GPS', viewGps: 'ดู GPS', gpsCoverage: 'GPS', lastPosition: 'ตำแหน่งล่าสุด', samples: 'จุด',
+    subtitle: 'ตรวจสอบงานที่บันทึก ไทม์ไลน์ และข้อมูล GPS ที่ตรงตามเวลา', gpsMatched: 'พบข้อมูล GPS', gpsMatchedSub: 'งานที่พบพิกัด GPS', needsAttention: 'ต้องตรวจสอบ', needsAttentionSub: 'งานที่ไม่พบพิกัด GPS', gpsFound: 'พบข้อมูล GPS', noData: 'ไม่มีข้อมูล GPS', viewGps: 'เปิดรายละเอียด GPS', gpsSnapshot: 'ภาพรวม GPS', lastPosition: 'ตำแหน่งล่าสุด', samples: 'จุด',
   },
 };
 const text = {
@@ -67,7 +68,6 @@ function displayMode(mode, lang) { return translated(mode, modeCopy, lang); }
 function displayStatus(status, lang) { return translated(status, statusCopy, lang); }
 function displayGps(value, lang) { return translated(String(value || '').toLowerCase().includes('matched') ? 'GPS matched' : value, gpsCopy, lang); }
 function gpsValue(report) { return report.gpsLookupStatus || report.gps || ''; }
-function canRetry(report) { return report.status !== 'Cancelled' && (!report.driverName || !Number(report.deviceGpsSamples) || ['pending', 'no_data', 'lookup_failed', 'lookup_unavailable'].includes(report.gpsLookupStatus)); }
 function isLookupPending(report) { return report.gpsLookupStatus === 'pending'; }
 function statusSlug(value) { return String(value || '').toLowerCase().replaceAll(' ', '-').replaceAll('_', '-'); }
 function reportSpeed(report) {
@@ -81,6 +81,23 @@ function reportCoordinates(report) {
   return latitude && longitude ? `${latitude}, ${longitude}` : '';
 }
 function reportLocation(report, fallback) { return report.locationName || report.location || report.address || reportCoordinates(report) || fallback; }
+function GpsSnapshotButton({ report, lang, labels, fallback, onOpen }) {
+  const pointCount = Number(report.deviceGpsSamples) || 0;
+  const hasPoint = pointCount > 0;
+  return <button
+    type="button"
+    className={`gps-snapshot-button ${hasPoint ? 'has-points' : 'needs-attention'}`}
+    aria-label={`${labels.viewGps}: ${report.id}. ${reportLocation(report, fallback)}. ${pointCount} ${labels.samples}. ${displayGps(gpsValue(report), lang)}.`}
+    onClick={() => onOpen(report)}
+  >
+    <span className="gps-snapshot-icon" aria-hidden="true"><MapPinLineIcon size={18} weight="bold" /></span>
+    <span className="gps-snapshot-copy">
+      <strong>{reportLocation(report, fallback)}</strong>
+      <small><i aria-hidden="true" />{pointCount} {labels.samples} · {displayGps(gpsValue(report), lang)}</small>
+    </span>
+    <ArrowRightIcon className="gps-snapshot-arrow" size={16} weight="bold" aria-hidden="true" />
+  </button>;
+}
 function formatTime(value, lang) {
   const date = value ? new Date(value) : null;
   if (!date || !Number.isFinite(date.getTime())) return '—';
@@ -203,23 +220,8 @@ function DateRangePicker({ lang, t, startDate, endDate, onChange }) {
   </div>;
 }
 
-function gpsDetails(report, t, lang) {
-  const deviceSamples = Number(report.deviceGpsSamples) || 0;
-  return <small className="gps-sync">{deviceSamples} {t.deviceSamples}{report.lastGpsCapturedAt ? ` · ${formatReportDateTime(report.lastGpsCapturedAt, lang)}` : ''}</small>;
-}
-
-function reportCoverage(report) {
-  const device = Number(report.deviceGpsSamples) || 0;
-  return { state: device ? 'matched' : 'none', device };
-}
-
-function coverageLabel(report, g) {
-  const coverage = reportCoverage(report);
-  return coverage.state === 'matched' ? g.gpsFound : g.noData;
-}
-
 export default function FullReportDashboard({ lang }) {
-  const t = { ...text[lang], retry: lang === 'en' ? 'Retry lookup' : 'ค้นหาอีกครั้ง' };
+  const t = text[lang];
   const g = gpsUiText[lang];
   const [reports, setReports] = useState([]);
   const [summary, setSummary] = useState({ total: 0, activeVehicles: 0, fleetSize: 0, gpsMatched: 0, gpsNeedsAttention: 0 });
@@ -236,11 +238,10 @@ export default function FullReportDashboard({ lang }) {
   const [gpsStates, setGpsStates] = useState([]);
   const [sorts, setSorts] = useState([{ key: 'startTime', direction: 'desc' }]);
   const [loading, setLoading] = useState(true);
-  const [retryingId, setRetryingId] = useState('');
   const [error, setError] = useState('');
-  const [retryNotice, setRetryNotice] = useState('');
   const [page, setPage] = useState(1);
   const [selectedReport, setSelectedReport] = useState(null);
+  const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
   const reportRequestSequence = useRef(0);
   const facetsLoaded = useRef(false);
   const automaticGpsSyncRef = useRef(false);
@@ -291,22 +292,6 @@ export default function FullReportDashboard({ lang }) {
       if (requestId === reportRequestSequence.current && !silent) setLoading(false);
     }
   }, [sharedFilters, page, lang, t.failed]);
-
-  async function retryReport(reportId) {
-    if (retryingId) return;
-    setRetryingId(reportId);
-    setError('');
-    setRetryNotice('');
-    try {
-      const data = await adminFetch('/api/admin/reports/retry', { method: 'POST', body: JSON.stringify({ reportId }) });
-      setReports(items => items.map(item => item.id === reportId ? { ...item, ...data.report } : item));
-      const source = data.gpsReconciliation?.deviceSource;
-      setRetryNotice(displayGpsLookupMessage(source?.message, lang, data.gpsReconciliation?.gpsSync ? 1 : 0) || (lang === 'en' ? 'GPS lookup completed.' : 'ค้นหาข้อมูล GPS แล้ว'));
-      await loadReports({ silent: true });
-    } catch (errorValue) {
-      setError(localizedDashboardReportError(errorValue instanceof Error ? errorValue.message : '', lang, t.failed));
-    } finally { setRetryingId(''); }
-  }
 
   useEffect(() => {
     void loadReports();
@@ -365,6 +350,13 @@ export default function FullReportDashboard({ lang }) {
     const params = new URLSearchParams({ vehicle, workPeriodId, lang });
     window.location.assign(`/print/portrait?${params}`);
   }
+  function handleReportUpdated(updatedReport) {
+    if (!updatedReport?.id) return;
+    setReports(items => items.map(item => item.id === updatedReport.id ? { ...item, ...updatedReport } : item));
+    setSelectedReport(current => current?.id === updatedReport.id ? { ...current, ...updatedReport } : current);
+    setTimelineRefreshKey(value => value + 1);
+    void loadReports({ silent: true });
+  }
 
   const hasFilters = Boolean(search || vehicles.length || devices.length || drivers.length || activities.length || statuses.length || gpsStates.length || sorts.length > 1 || sortKey !== 'startTime' || sortDirection !== 'desc');
   const activeVehicles = Number(summary.activeVehicles || 0);
@@ -383,7 +375,7 @@ export default function FullReportDashboard({ lang }) {
       : `${t.printVehicleSelected}: ${vehicles[0]}`;
   const needsRowPrintSelection = vehicles.length === 1 && matchingPrintPeriodIds.length > 1;
   const columns = [
-    ['vehicleNumber', t.vehicle], ['mode', t.mode], ['startTime', t.date], ['startClock', t.start], ['endTime', t.end], ['duration', t.duration], ['topSpeed', t.topSpeed], ['gpsCoverage', g.gpsCoverage], ['gpsState', g.lastPosition],
+    ['vehicleNumber', t.vehicle], ['mode', t.mode], ['startTime', t.date], ['startClock', t.start], ['endTime', t.end], ['duration', t.duration], ['topSpeed', t.topSpeed], ['gpsState', g.lastPosition],
   ];
 
   return (
@@ -419,22 +411,21 @@ export default function FullReportDashboard({ lang }) {
         </div>
       </section>
 
-      <TimelineDashboard lang={lang} embedded sharedFilters={sharedFilters} onPrintWorkPeriod={printVehicle} printPeriodGuidance={needsRowPrintSelection} />
+      <TimelineDashboard lang={lang} embedded sharedFilters={sharedFilters} refreshKey={timelineRefreshKey} onOpenReport={setSelectedReport} onPrintWorkPeriod={printVehicle} printPeriodGuidance={needsRowPrintSelection} />
 
       <section className="panel report-panel" aria-busy={loading || search !== deferredSearch}>
         <div className="section-heading report-section-heading"><div><h2>{t.activity}</h2><p className="sort-hint">{t.sortHint}</p></div><span className="result-count" aria-live="polite">{t.showing} {pageInfo.start}–{pageInfo.end} {t.of} {pageInfo.total}</span></div>
         {error ? <p className="error" role="alert">{error}</p> : null}
-        {retryNotice ? <div className="inline-message success" role="status">{retryNotice}</div> : null}
         {loading && !reports.length ? <p className="loading-message" role="status">{t.loading}</p> : null}
         {visibleReports.length ? <div className="table-wrap" tabIndex={0} aria-label={lang === 'en' ? 'Scrollable saved jobs table' : 'ตารางงานที่บันทึก เลื่อนได้'}>
           <table className="reports-table">
             <caption className="sr-only">{t.activity}</caption>
-            <colgroup><col className="col-vehicle" /><col className="col-mode" /><col className="col-date" /><col className="col-time" /><col className="col-time" /><col className="col-duration" /><col className="col-speed" /><col className="col-coverage" /><col className="col-location" /><col className="col-actions" /></colgroup>
+            <colgroup><col className="col-vehicle" /><col className="col-mode" /><col className="col-date" /><col className="col-time" /><col className="col-time" /><col className="col-duration" /><col className="col-speed" /><col className="col-location" /></colgroup>
             <thead><tr>{columns.map(([key, label]) => {
               const sortIndex = sorts.findIndex(sort => sort.key === key);
               const columnSort = sortIndex >= 0 ? sorts[sortIndex] : null;
               return <th key={key} scope="col" aria-sort={sortKey === key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}><button className={`table-sort ${key === 'duration' ? 'table-sort-duration' : ''}`} type="button" title={t.sortHint} onClick={event => changeSort(key, event)}><span>{label}{columnSort ? ` ${columnSort.direction === 'asc' ? '↑' : '↓'}${sorts.length > 1 ? sortIndex + 1 : ''}` : ''}</span>{key === 'duration' ? <small>{t.durationFormat}</small> : null}</button></th>;
-            })}<th scope="col">{t.actions}</th></tr></thead>
+            })}</tr></thead>
             <tbody>{renderedReports.map(report => <tr key={report.id} className={`${report.status === 'Cancelled' ? 'row-cancelled' : isLookupPending(report) ? 'row-queued' : ''} ${selectedReport?.id === report.id ? 'row-selected' : ''} ${needsRowPrintSelection ? 'row-print-highlight' : ''}`}>
               <td className="vehicle-cell"><div className="vehicle-heading"><span className={`status-dot status-dot-${statusSlug(report.status)}`} role="img" aria-label={displayStatus(report.status, lang)} title={displayStatus(report.status, lang)} /><strong>{report.vehicleNumber || '—'}</strong></div><small className="secondary-line">{report.driverName || '—'}</small><small className="tertiary-line">{report.routeName ? `${lang === 'en' ? 'Route' : 'เส้นทาง'} ${report.routeName} · ` : ''}{report.id || report.deviceId || '—'}</small></td>
               <td>{displayMode(report.mode, lang)}</td>
@@ -443,17 +434,14 @@ export default function FullReportDashboard({ lang }) {
               <td className="report-time-cell">{formatTime(report.endTime, lang)}</td>
               <td className="report-duration-cell">{formatReportDuration(report.startTime, report.endTime, report.duration)}</td>
               <td className={reportSpeed(report) > 90 ? 'speed-alert' : undefined}>{reportSpeed(report) == null ? '—' : reportSpeed(report) === 0 ? t.stationary : `${reportSpeed(report)} ${t.speedUnit}`}</td>
-              <td className="gps-coverage-cell"><div className="gps-coverage-actions"><button type="button" className={`coverage-state coverage-${reportCoverage(report).state}`} aria-label={`${coverageLabel(report, g)}: ${report.id}`} onClick={() => setSelectedReport(report)}>{coverageLabel(report, g)}</button>{canRetry(report) ? <button className="view-gps-button gps-retry-link" type="button" aria-label={`${t.retry}: ${report.id}`} disabled={Boolean(retryingId)} onClick={() => retryReport(report.id)}>{retryingId === report.id ? t.retrying : t.retry}</button> : null}</div><small>{Number(report.deviceGpsSamples) || 0} {g.samples}</small></td>
-              <td className="location-cell"><span>{reportLocation(report, t.unknownLocation)}</span><small>{reportCoordinates(report) || displayGps(gpsValue(report), lang)}</small></td>
-              <td className="report-actions"><button className={`print-row-button ${needsRowPrintSelection ? 'row-print-button-highlight' : ''}`} type="button" aria-label={`${t.printVehicle}: ${report.vehicleNumber}`} disabled={!report.vehicleNumber || !report.workPeriodId} onClick={() => printVehicle(report)}>{t.printVehicle}</button></td>
+              <td className="location-cell gps-snapshot-cell"><div className="job-command-cell"><GpsSnapshotButton report={report} lang={lang} labels={g} fallback={t.unknownLocation} onOpen={setSelectedReport} /><button className="job-print-button" type="button" aria-label={`${t.printVehicle}: ${report.vehicleNumber}`} title={t.printVehicle} disabled={!report.vehicleNumber || !report.workPeriodId} onClick={() => printVehicle(report)}><PrinterIcon size={16} weight="bold" aria-hidden="true" /><span>{t.printVehicle}</span></button></div></td>
             </tr>)}</tbody>
           </table>
         </div> : null}
         {visibleReports.length ? <div className="report-cards" role="list" aria-label={lang === 'en' ? 'Saved jobs' : 'งานที่บันทึก'}>
           {renderedReports.map(report => <article className={`report-card ${report.status === 'Cancelled' ? 'row-cancelled' : isLookupPending(report) ? 'row-queued' : ''} ${selectedReport?.id === report.id ? 'row-selected' : ''} ${needsRowPrintSelection ? 'row-print-highlight' : ''}`} key={report.id} role="listitem" aria-label={`${t.report} ${report.id}`}>
             <div className="report-card-heading"><div><h3>{report.vehicleNumber || '—'}</h3><small>{report.routeName ? `${lang === 'en' ? 'Route' : 'เส้นทาง'} ${report.routeName} · ` : ''}{report.id}</small>{report.workPeriodDate && report.workPeriodDate !== reportDateKey(report.startTime) ? <small>{t.workStarted}: {formatReportDate(report.workPeriodDate, lang)}</small> : null}</div><span className={`status status-${statusSlug(report.status)}`}>{displayStatus(report.status, lang)}</span></div>
-            <dl><div><dt>{t.driver}</dt><dd>{report.driverName || '—'}{report.driverId ? <small className="secondary-line">{report.driverId}</small> : null}</dd></div><div><dt>{t.device}</dt><dd className="device-id">{report.deviceId || '—'}</dd></div><div><dt>{t.mode}</dt><dd>{displayMode(report.mode, lang)}</dd></div><div><dt>{t.date}</dt><dd>{report.startTime ? formatReportDate(reportDateKey(report.startTime), lang) : '—'}</dd></div><div><dt>{t.start} – {t.end}</dt><dd className="report-time-cell">{formatTime(report.startTime, lang)} – {formatTime(report.endTime, lang)}</dd></div><div><dt>{t.duration} <span className="duration-format-inline">({t.durationFormat})</span></dt><dd className="report-duration-cell">{formatReportDuration(report.startTime, report.endTime, report.duration)}</dd></div><div><dt>{t.topSpeed}</dt><dd className={reportSpeed(report) > 90 ? 'speed-alert' : undefined}>{reportSpeed(report) == null ? '—' : reportSpeed(report) === 0 ? t.stationary : `${reportSpeed(report)} ${t.speedUnit}`}</dd></div><div><dt>{g.gpsCoverage}</dt><dd><button type="button" className={`coverage-state coverage-${reportCoverage(report).state}`} aria-label={`${coverageLabel(report, g)}: ${report.id}`} onClick={() => setSelectedReport(report)}>{coverageLabel(report, g)}</button></dd></div><div className="card-location"><dt>{g.lastPosition}</dt><dd>{reportLocation(report, t.unknownLocation)}{gpsDetails(report, t, lang)}</dd></div></dl>
-            <div className="card-actions">{canRetry(report) ? <button className="retry-button" type="button" aria-label={`${t.retry}: ${report.id}`} disabled={Boolean(retryingId)} onClick={() => retryReport(report.id)}>{retryingId === report.id ? t.retrying : t.retry}</button> : null}<button className="view-gps-button" type="button" aria-label={`${g.viewGps}: ${report.id}`} onClick={() => setSelectedReport(report)}>{g.viewGps}</button><button className={`print-row-button ${needsRowPrintSelection ? 'row-print-button-highlight' : ''}`} type="button" aria-label={`${t.printVehicle}: ${report.vehicleNumber}`} disabled={!report.vehicleNumber || !report.workPeriodId} onClick={() => printVehicle(report)}>{t.printVehicle}</button></div>
+            <dl><div><dt>{t.driver}</dt><dd>{report.driverName || '—'}{report.driverId ? <small className="secondary-line">{report.driverId}</small> : null}</dd></div><div><dt>{t.device}</dt><dd className="device-id">{report.deviceId || '—'}</dd></div><div><dt>{t.mode}</dt><dd>{displayMode(report.mode, lang)}</dd></div><div><dt>{t.date}</dt><dd>{report.startTime ? formatReportDate(reportDateKey(report.startTime), lang) : '—'}</dd></div><div><dt>{t.start} – {t.end}</dt><dd className="report-time-cell">{formatTime(report.startTime, lang)} – {formatTime(report.endTime, lang)}</dd></div><div><dt>{t.duration} <span className="duration-format-inline">({t.durationFormat})</span></dt><dd className="report-duration-cell">{formatReportDuration(report.startTime, report.endTime, report.duration)}</dd></div><div><dt>{t.topSpeed}</dt><dd className={reportSpeed(report) > 90 ? 'speed-alert' : undefined}>{reportSpeed(report) == null ? '—' : reportSpeed(report) === 0 ? t.stationary : `${reportSpeed(report)} ${t.speedUnit}`}</dd></div><div className="card-location card-gps-snapshot"><dt>{g.gpsSnapshot}</dt><dd><div className="job-command-cell"><GpsSnapshotButton report={report} lang={lang} labels={g} fallback={t.unknownLocation} onOpen={setSelectedReport} /><button className="job-print-button" type="button" aria-label={`${t.printVehicle}: ${report.vehicleNumber}`} disabled={!report.vehicleNumber || !report.workPeriodId} onClick={() => printVehicle(report)}><PrinterIcon size={16} weight="bold" aria-hidden="true" /><span>{t.printVehicle}</span></button></div></dd></div></dl>
           </article>)}
         </div> : null}
         {pageInfo.totalPages > 1 ? <nav className="pagination" aria-label={lang === 'en' ? 'Saved jobs pages' : 'หน้ารายการงาน'}><button className="secondary" type="button" disabled={pageInfo.page <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}>{t.previous}</button><span>{t.page} {pageInfo.page} {t.of} {pageInfo.totalPages}</span><button className="secondary" type="button" disabled={pageInfo.page >= pageInfo.totalPages} onClick={() => setPage(value => Math.min(pageInfo.totalPages, value + 1))}>{t.next}</button></nav> : null}
@@ -467,7 +455,7 @@ export default function FullReportDashboard({ lang }) {
           </div>
         </div> : null}
       </section>
-      {selectedReport ? <JobGpsDrawer report={selectedReport} lang={lang} onClose={() => setSelectedReport(null)} onRouteAssigned={() => void loadReports({ silent: true })} /> : null}
+      {selectedReport ? <JobGpsDrawer report={selectedReport} lang={lang} onClose={() => setSelectedReport(null)} onReportUpdated={handleReportUpdated} onRouteAssigned={() => void loadReports({ silent: true })} /> : null}
     </main>
   );
 }
