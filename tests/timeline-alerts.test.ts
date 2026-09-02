@@ -43,3 +43,21 @@ test('stored alerts keep their event time and legacy flags fall back to the job 
     ['fallback', 'harsh-braking', 9 * 60 + 30],
   ]);
 });
+
+test('route deviations use the first confirmed off-route GPS point for the timeline marker', () => {
+  const alerts = deriveTimelineAlerts([{
+    id: 'route-job',
+    startTime: '2026-08-25T00:00:00.000Z',
+    routeDeviation: {
+      status: 'deviated',
+      firstDeviation: {
+        startedAt: '2026-08-25T01:23:45.000Z', latitude: 13.7663, longitude: 100.502, startDistanceKm: 1.234, durationSeconds: 180,
+      },
+    },
+  }]);
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].type, 'route-deviation');
+  assert.equal(alerts[0].capturedAt, '2026-08-25T01:23:45.000Z');
+  assert.equal(alerts[0].minute, 8 * 60 + 23 + (45 / 60));
+  assert.equal(timelineAlertLabel(alerts[0], 'en'), 'Route deviation (1.23 km) · 13.76630, 100.50200');
+});

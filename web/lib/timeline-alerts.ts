@@ -4,7 +4,7 @@ import { bangkokMinuteOfDay } from './timeline-position.ts';
 export const DEFAULT_SPEEDING_THRESHOLD_KPH = 90;
 export const DEFAULT_HARSH_BRAKING_THRESHOLD_MPS2 = 3;
 
-export type TimelineAlertType = 'speeding' | 'harsh-braking' | 'alert';
+export type TimelineAlertType = 'speeding' | 'harsh-braking' | 'route-deviation' | 'alert';
 
 export type TimelineAlert = {
   id: string;
@@ -14,6 +14,10 @@ export type TimelineAlert = {
   minute: number;
   speedKph?: number;
   decelerationMps2?: number;
+  distanceKm?: number;
+  latitude?: number;
+  longitude?: number;
+  durationSeconds?: number;
   sourceLabel?: string;
 };
 
@@ -33,6 +37,7 @@ type TimelineReport = {
   speeding?: boolean | null;
   speedingCount?: number | string | null;
   speedingAt?: string | null;
+  routeDeviation?: unknown;
 };
 
 type ExplicitAlert = Record<string, unknown>;
@@ -159,6 +164,36 @@ function harshBrakingAlerts(reportId: string, points: SpeedPoint[], threshold: n
   return alerts;
 }
 
+function routeDeviationAlerts(reportId: string, report: TimelineReport) {
+  const deviation = report.routeDeviation;
+  if (!deviation || typeof deviation !== 'object' || (deviation as { status?: unknown }).status !== 'deviated') return [];
+  const listed = Array.isArray((deviation as { events?: unknown[] }).events)
+    ? (deviation as { events: unknown[] }).events
+    : [(deviation as { firstDeviation?: unknown }).firstDeviation].filter(Boolean);
+  return listed.flatMap((event, index) => {
+    if (!event || typeof event !== 'object') return [];
+    const value = event as Record<string, unknown>;
+    const capturedAt = exactTimestamp(value.startedAt ?? value.capturedAt, report);
+    const minute = bangkokMinuteOfDay(capturedAt);
+    if (!capturedAt || minute == null) return [];
+    const latitude = numberValue(value.latitude);
+    const longitude = numberValue(value.longitude);
+    const distanceKm = numberValue(value.startDistanceKm ?? value.distanceKm);
+    const durationSeconds = numberValue(value.durationSeconds);
+    return [{
+      id: `${reportId}-route-deviation-${index}-${capturedAt}`,
+      reportId,
+      type: 'route-deviation' as const,
+      capturedAt,
+      minute,
+      ...(distanceKm == null ? {} : { distanceKm }),
+      ...(latitude == null ? {} : { latitude }),
+      ...(longitude == null ? {} : { longitude }),
+      ...(durationSeconds == null ? {} : { durationSeconds }),
+    }];
+  });
+}
+
 function fallbackAlert(
   reportId: string,
   report: TimelineReport,
@@ -209,6 +244,7 @@ export function deriveTimelineAlerts(
     const reportAlerts: TimelineAlert[] = [
       ...speedingAlerts(reportId, points, speedingThresholdKph, maximumSpeedingEpisodeGapSeconds),
       ...harshBrakingAlerts(reportId, points, harshBrakingThresholdMps2, maximumBrakingGapSeconds),
+      ...routeDeviationAlerts(reportId, report),
     ];
     const fallbacks = new Map<TimelineAlertType, ReturnType<typeof explicitAlertDetails>>();
 
@@ -275,5 +311,17 @@ export function timelineAlertLabel(alert: TimelineAlert, lang = 'en') {
     return lang === 'th' ? 'ความเร็วเกินกำหนด' : 'Speeding';
   }
   if (alert.type === 'harsh-braking') return lang === 'th' ? 'เบรกกะทันหัน' : 'Harsh braking';
+  if (alert.type === 'route-deviation') {
+    const distance = numberValue(alert.distanceKm);
+    const location = numberValue(alert.latitude) != null && numberValue(alert.longitude) != null
+      ? `${Number(alert.latitude).toFixed(5)}, ${Number(alert.longitude).toFixed(5)}`
+      : '';
+    const distanceLabel = distance == null
+      ? (lang === 'th' ? 'ออกนอกเส้นทาง' : 'Route deviation')
+      : lang === 'th'
+        ? `ออกนอกเส้นทาง (${Number(distance.toFixed(2)).toLocaleString('th-TH')} กม.)`
+        : `Route deviation (${Number(distance.toFixed(2)).toLocaleString('en-GB')} km)`;
+    return location ? `${distanceLabel} · ${location}` : distanceLabel;
+  }
   return alert.sourceLabel || (lang === 'th' ? 'การแจ้งเตือน' : 'Alert');
 }

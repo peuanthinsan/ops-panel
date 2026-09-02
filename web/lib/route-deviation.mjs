@@ -73,7 +73,7 @@ export function distanceToRoute(point, anchors) {
 
 export function evaluateRouteDeviation(samples, anchors, { distanceKm = 0.5, durationSeconds = 60 } = {}) {
   if (!Array.isArray(anchors) || anchors.length < 2) {
-    return { status: 'no_geometry', maxDistanceKm: 0, longestDurationSeconds: 0, samples: [], checkedSamples: 0, hasGeometry: false };
+    return { status: 'no_geometry', maxDistanceKm: 0, longestDurationSeconds: 0, events: [], firstDeviation: null, samples: [], checkedSamples: 0, hasGeometry: false };
   }
   const ordered = (Array.isArray(samples) ? samples : [])
     .map(sample => ({
@@ -88,32 +88,61 @@ export function evaluateRouteDeviation(samples, anchors, { distanceKm = 0.5, dur
   const thresholdKm = Number(distanceKm);
   const thresholdSeconds = Number(durationSeconds);
   let active = null;
-  let longest = null;
+  const events = [];
   const close = () => {
     if (!active) return;
     const duration = Math.max(0, (active.lastAt - active.firstAt) / 1000);
     const candidate = { ...active, durationSeconds: duration };
-    if (!longest || candidate.durationSeconds > longest.durationSeconds) longest = candidate;
+    if (candidate.durationSeconds >= thresholdSeconds) {
+      events.push({
+        startedAt: new Date(candidate.firstAt).toISOString(),
+        confirmedAt: new Date(candidate.confirmedAt ?? candidate.lastAt).toISOString(),
+        endedAt: new Date(candidate.lastAt).toISOString(),
+        latitude: candidate.latitude,
+        longitude: candidate.longitude,
+        startDistanceKm: candidate.startDistanceKm,
+        maxDistanceKm: candidate.maxDistanceKm,
+        durationSeconds: candidate.durationSeconds,
+        samples: candidate.samples,
+      });
+    }
     active = null;
   };
   for (const sample of ordered) {
     const offRoute = sample.distanceKm != null && sample.distanceKm > thresholdKm;
     if (!offRoute) { close(); continue; }
     if (active && (sample.capturedAt - active.lastAt) / 1000 > Math.max(120, thresholdSeconds * 2)) close();
-    if (!active) active = { firstAt: sample.capturedAt, lastAt: sample.capturedAt, maxDistanceKm: sample.distanceKm, samples: 1 };
+    if (!active) active = {
+      firstAt: sample.capturedAt,
+      lastAt: sample.capturedAt,
+      latitude: sample.latitude,
+      longitude: sample.longitude,
+      startDistanceKm: sample.distanceKm,
+      maxDistanceKm: sample.distanceKm,
+      samples: 1,
+      confirmedAt: thresholdSeconds <= 0 ? sample.capturedAt : null,
+    };
     else {
       active.lastAt = sample.capturedAt;
       active.maxDistanceKm = Math.max(active.maxDistanceKm, sample.distanceKm);
       active.samples += 1;
     }
+    if (active.confirmedAt == null && (active.lastAt - active.firstAt) / 1000 >= thresholdSeconds) {
+      active.confirmedAt = active.lastAt;
+    }
   }
   close();
+  const longest = events.reduce((current, event) => !current || event.durationSeconds > current.durationSeconds ? event : current, null);
   return {
-    status: longest && longest.durationSeconds >= thresholdSeconds ? 'deviated' : 'within_route',
+    status: events.length ? 'deviated' : 'within_route',
     maxDistanceKm: longest?.maxDistanceKm ?? 0,
     longestDurationSeconds: longest?.durationSeconds ?? 0,
+    events,
+    firstDeviation: events[0] || null,
     samples: ordered.map(sample => ({
       capturedAt: new Date(sample.capturedAt).toISOString(),
+      latitude: sample.latitude,
+      longitude: sample.longitude,
       distanceKm: sample.distanceKm,
       offRoute: sample.distanceKm != null && sample.distanceKm > thresholdKm,
     })),

@@ -57,5 +57,7 @@ test('the Android flow persists final payloads before delivery and blocks a moti
   assert.match(source, /persistPendingFinalReport\(report\)[\s\S]*saveOrQueueJob\(report\)/);
   assert.match(source, /pendingReportRef\.current = report[\s\S]*persistActiveJob\([\s\S]*pendingReport: report/);
   assert.match(source, /if \(starting \|\| !active \|\| pendingReportRef\.current \|\| !selected\) return;[\s\S]*motionStartsJob\(binding, motion\)/);
+  assert.match(source, /initiatedAt: activeJobInitiatedAtRef\.current[\s\S]*pendingReport: report/);
+  assert.match(source, /startedAt \?\? activeJobInitiatedAtRef\.current \?\? jobInitiatedAt\(activeJobId\) \?\? Math\.trunc\(serverNowMs\(\)\)/);
   assert.match(source, /if \(localStateFinalized\) \{[\s\S]*updatePendingReport\(null\)/);
 });

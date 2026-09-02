@@ -11,13 +11,13 @@ const copy = {
     title: 'GPS detail', close: 'Close', vehicle: 'Vehicle', driver: 'Driver', activity: 'Activity', time: 'Time',
     device: 'GPS points', last: 'Last GPS fix', captured: 'GPS fix time', coordinates: 'Coordinates', speedLabel: 'Speed', heading: 'Heading',
     loading: 'Loading GPS points…', failed: 'Could not load GPS detail.', empty: 'No GPS points are linked to this job yet.',
-    previous: 'Previous', next: 'Next', page: 'Page', of: 'of', print: 'Print job', speed: 'km/h', degrees: '°', routeMap: 'Route vs GPS map', openRoute: 'Open saved route', withinRoute: 'Within route', deviated: 'Route deviation', deviationBody: 'GPS stayed outside the route corridor for', seconds: 'seconds', noRoute: 'No route is assigned to this job yet.', assignedRoute: 'Assigned route', noAssignedRoute: 'No route', savingRoute: 'Saving route…', routeSaveFailed: 'Could not update the assigned route.',
+    previous: 'Previous', next: 'Next', page: 'Page', of: 'of', print: 'Print job', speed: 'km/h', degrees: '°', routeMap: 'Route vs GPS map', openRoute: 'Open saved route', withinRoute: 'Within route', deviated: 'Route deviation', deviationBody: 'GPS stayed outside the route corridor for', deviationBegan: 'Deviation began', deviationLocation: 'GPS location', deviationDistance: 'Off route', deviationDuration: 'Confirmed duration', seconds: 'seconds', km: 'km', noRoute: 'No route is assigned to this job yet.', assignedRoute: 'Assigned route', noAssignedRoute: 'No route', savingRoute: 'Saving route…', routeSaveFailed: 'Could not update the assigned route.',
   },
   th: {
     title: 'รายละเอียด GPS', close: 'ปิด', vehicle: 'รถ', driver: 'พขร.', activity: 'กิจกรรม', time: 'เวลา',
     device: 'จุด GPS', last: 'พิกัด GPS ล่าสุด', captured: 'เวลาพิกัด GPS', coordinates: 'พิกัด', speedLabel: 'ความเร็ว', heading: 'ทิศทาง',
     loading: 'กำลังโหลดจุด GPS…', failed: 'ไม่สามารถโหลดรายละเอียด GPS', empty: 'ยังไม่มีจุด GPS ที่เชื่อมกับงานนี้',
-    previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', print: 'พิมพ์งาน', speed: 'กม./ชม.', degrees: '°', routeMap: 'แผนที่เส้นทางเทียบกับ GPS', openRoute: 'เปิดเส้นทางที่บันทึก', withinRoute: 'อยู่ในเส้นทาง', deviated: 'ออกนอกเส้นทาง', deviationBody: 'GPS อยู่นอกแนวเส้นทางต่อเนื่องเป็นเวลา', seconds: 'วินาที', noRoute: 'ยังไม่ได้กำหนดเส้นทางให้งานนี้', assignedRoute: 'เส้นทางที่กำหนด', noAssignedRoute: 'ไม่มีเส้นทาง', savingRoute: 'กำลังบันทึกเส้นทาง…', routeSaveFailed: 'ไม่สามารถอัปเดตเส้นทางที่กำหนดได้',
+    previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', print: 'พิมพ์งาน', speed: 'กม./ชม.', degrees: '°', routeMap: 'แผนที่เส้นทางเทียบกับ GPS', openRoute: 'เปิดเส้นทางที่บันทึก', withinRoute: 'อยู่ในเส้นทาง', deviated: 'ออกนอกเส้นทาง', deviationBody: 'GPS อยู่นอกแนวเส้นทางต่อเนื่องเป็นเวลา', deviationBegan: 'เริ่มออกนอกเส้นทาง', deviationLocation: 'ตำแหน่ง GPS', deviationDistance: 'ห่างจากเส้นทาง', deviationDuration: 'ระยะเวลาที่ยืนยัน', seconds: 'วินาที', km: 'กม.', noRoute: 'ยังไม่ได้กำหนดเส้นทางให้งานนี้', assignedRoute: 'เส้นทางที่กำหนด', noAssignedRoute: 'ไม่มีเส้นทาง', savingRoute: 'กำลังบันทึกเส้นทาง…', routeSaveFailed: 'ไม่สามารถอัปเดตเส้นทางที่กำหนดได้',
   },
 };
 
@@ -44,6 +44,11 @@ function speed(point, t) {
 function heading(point, t) {
   const degrees = Number(point?.headingDegrees);
   return Number.isFinite(degrees) ? `${Math.round(degrees)}${t.degrees}` : '—';
+}
+
+function distance(value, lang) {
+  const kilometers = Number(value);
+  return Number.isFinite(kilometers) ? `${kilometers.toFixed(2)} ${lang === 'th' ? 'กม.' : 'km'}` : '—';
 }
 
 export default function JobGpsDrawer({ report, lang, onClose }) {
@@ -143,7 +148,7 @@ export default function JobGpsDrawer({ report, lang, onClose }) {
             <div><dt>{t.last}</dt><dd>{summary.lastCapturedAt ? time(summary.lastCapturedAt, lang) : '—'}</dd></div>
           </dl>
         </section>
-        {detail?.route ? <section className="gps-route-section"><div className="gps-route-heading"><h2>{t.routeMap}</h2><a href={detail.route.googleMapsUrl} target="_blank" rel="noreferrer">{t.openRoute}</a></div><RouteMap anchors={detail.route.anchors} samples={mapSamples.length ? mapSamples : samples} label={t.routeMap} lang={lang} />{routeDeviation?.status === 'deviated' ? <p className="route-deviation-status deviated"><strong>{t.deviated}</strong>{` · ${t.deviationBody} ${Math.round(routeDeviation.longestDurationSeconds)} ${t.seconds}`}</p> : null}{routeDeviation?.status === 'within_route' ? <p className="route-deviation-status within-route"><strong>{t.withinRoute}</strong></p> : null}</section> : <p className="gps-route-missing">{t.noRoute}</p>}
+        {detail?.route ? <section className="gps-route-section"><div className="gps-route-heading"><h2>{t.routeMap}</h2><a href={detail.route.googleMapsUrl} target="_blank" rel="noreferrer">{t.openRoute}</a></div><RouteMap anchors={detail.route.anchors} samples={mapSamples.length ? mapSamples : samples} deviationEvents={routeDeviation?.events || []} label={t.routeMap} lang={lang} />{routeDeviation?.status === 'deviated' ? <div className="route-deviation-status deviated"><p><strong>{t.deviated}</strong>{` · ${t.deviationBody} ${Math.round(routeDeviation.longestDurationSeconds)} ${t.seconds}`}</p><div className="route-deviation-events">{(routeDeviation.events || []).map((event, index) => <dl key={`${event.startedAt}-${index}`}><div><dt>{t.deviationBegan}</dt><dd>{time(event.startedAt, lang)}</dd></div><div><dt>{t.deviationLocation}</dt><dd>{coordinate(event)}</dd></div><div><dt>{t.deviationDistance}</dt><dd>{distance(event.startDistanceKm, lang)}</dd></div><div><dt>{t.deviationDuration}</dt><dd>{Math.round(event.durationSeconds)} {t.seconds}</dd></div></dl>)}</div></div> : null}{routeDeviation?.status === 'within_route' ? <p className="route-deviation-status within-route"><strong>{t.withinRoute}</strong></p> : null}</section> : <p className="gps-route-missing">{t.noRoute}</p>}
         {loading ? <p className="gps-detail-state" role="status">{t.loading}</p> : null}
         {error ? <p className="error gps-detail-state" role="alert">{error}</p> : null}
         {!loading && !error && !samples.length ? <p className="gps-detail-state">{t.empty}</p> : null}

@@ -1,0 +1,79 @@
+{
+  "pkg": "songdee-ops-panel",
+  "globalName": "SongdeeOps",
+  "shape": "package",
+  "entry": ".design-sync/entry.jsx",
+  "srcDir": "web/app",
+  "tsconfig": "web/tsconfig.json",
+  "cssEntry": "web/app/styles.css",
+  "extraFonts": [
+    "web/public/fonts/sarabun-400-latin.woff2",
+    "web/public/fonts/sarabun-400-thai.woff2",
+    "web/public/fonts/sarabun-500-latin.woff2",
+    "web/public/fonts/sarabun-500-thai.woff2",
+    "web/public/fonts/sarabun-600-latin.woff2",
+    "web/public/fonts/sarabun-600-thai.woff2",
+    "web/public/fonts/sarabun-700-latin.woff2",
+    "web/public/fonts/sarabun-700-thai.woff2",
+    "web/public/fonts/sarabun-800-latin.woff2",
+    "web/public/fonts/sarabun-800-thai.woff2"
+  ],
+  "guidelinesGlob": [
+    "design-qa-artifacts/gps-sync-redesign/design-spec.md",
+    "accessibility-audit.md"
+  ],
+  "componentSrcMap": {
+    "SearchableCombobox": "web/app/searchable-combobox.jsx",
+    "RouteSelector": "web/app/route-selector.jsx",
+    "JobGpsDrawer": "web/app/job-gps-drawer.jsx",
+    "SpeedTimelineOverlay": "web/app/speed-timeline.jsx",
+    "TimelineAlertMarkers": "web/app/timeline-alerts.jsx",
+    "TimelineAlertChips": "web/app/timeline-alerts.jsx",
+    "RouteMap": "web/app/route-map.jsx",
+    "FleetDashboard": "web/app/fleet-dashboard.jsx",
+    "FullReportDashboard": "web/app/report-dashboard.jsx",
+    "TimelineDashboard": "web/app/timeline-dashboard.jsx",
+    "RoutesDashboard": "web/app/routes-dashboard.jsx",
+    "SettingsDashboard": "web/app/settings-dashboard.jsx",
+    "LandscapePrintDashboard": "web/app/print/print-dashboard.jsx",
+    "PortraitPrintDashboard": "web/app/print/print-dashboard.jsx",
+    "DashboardError": "web/app/error.jsx"
+  },
+  "libOverrides": {
+    "css.mjs": "rewriteBundleFontFaces dead-check regex drops rewritten quoted urls (optional-quote backtracking)"
+  },
+  "dtsPropsFor": {
+    "SearchableCombobox": "label: string; value: string | string[]; onChange: (next: string | string[]) => void; options: Array<string | { value: string; label: string }>; allLabel: string; lang: 'en' | 'th'; multiple?: boolean; getOptionLabel?: (option: string) => string; maxResults?: number;",
+    "RouteSelector": "value?: string; busy?: boolean; error?: string; lang?: 'en' | 'th'; onSelect: (routeName: string) => void;",
+    "JobGpsDrawer": "report: { id: string; vehicleNumber?: string; driverName?: string; [key: string]: unknown }; lang: 'en' | 'th'; onClose: () => void;",
+    "SpeedTimelineOverlay": "reports?: Array<{ id: string }>; samplesByReportId?: Record<string, Array<{ id?: string; capturedAt: string; deviceGps?: { speedMps?: number | string } }>>; loading?: boolean; lang?: 'en' | 'th'; startMinute?: number; endMinute?: number; originTime?: string; className?: string; interactive?: boolean;",
+    "TimelineAlertMarkers": "alerts?: Array<{ id: string; reportId: string; type: 'speeding' | 'harsh-braking' | 'alert'; capturedAt: string; minute: number; speedKph?: number; decelerationMps2?: number; sourceLabel?: string }>; lang?: 'en' | 'th'; startMinute?: number; endMinute?: number; interactive?: boolean;",
+    "TimelineAlertChips": "alerts?: Array<{ id: string; reportId: string; type: 'speeding' | 'harsh-braking' | 'alert'; capturedAt: string; minute: number; speedKph?: number; sourceLabel?: string }>; lang?: 'en' | 'th'; limit?: number | null; className?: string;",
+    "RouteMap": "anchors?: Array<{ latitude?: number; longitude?: number; lat?: number; lng?: number }>; samples?: Array<{ deviceGps?: { latitude?: number; longitude?: number }; capturedAt?: string }>; label?: string; lang?: 'en' | 'th';",
+    "FleetDashboard": "lang: 'en' | 'th';",
+    "FullReportDashboard": "lang: 'en' | 'th';",
+    "RoutesDashboard": "lang: 'en' | 'th';",
+    "SettingsDashboard": "lang: 'en' | 'th';",
+    "TimelineDashboard": "lang: 'en' | 'th'; embedded?: boolean; sourceReports?: Array<{ id: string; vehicleNumber?: string; driverName?: string; mode?: string; status?: string; startTime?: string; endTime?: string; workPeriodDate?: string; workPeriodStartTime?: string; locationName?: string; topSpeed?: number; [key: string]: unknown }> | null; sourceLoading?: boolean; sourceError?: string; sharedFilters?: Record<string, unknown> | null; onPrintWorkPeriod?: ((vehicle: string) => void) | null; printPeriodGuidance?: boolean;",
+    "LandscapePrintDashboard": "filters?: Record<string, unknown>; lang?: 'en' | 'th'; timelineOnly?: boolean; timelineFilters?: Record<string, unknown> | null;",
+    "PortraitPrintDashboard": "date?: string; workPeriodId?: string; vehicle?: string; lang?: 'en' | 'th';",
+    "DashboardError": "error: Error & { digest?: string }; reset: () => void;"
+  },
+  "overrides": {
+    "FleetDashboard": {
+      "cardMode": "column"
+    },
+    "FullReportDashboard": {
+      "cardMode": "column"
+    },
+    "RoutesDashboard": {
+      "cardMode": "column"
+    },
+    "JobGpsDrawer": {
+      "cardMode": "single",
+      "primaryStory": "GpsDetailUnavailableThai"
+    }
+  },
+  "readmeHeader": ".design-sync/conventions.md",
+  "projectId": "d87fa06d-55ea-4e2e-837f-0b50dd134a71"
+}

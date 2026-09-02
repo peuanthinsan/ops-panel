@@ -97,16 +97,22 @@ export async function adminFetchAllReports(filters = {}) {
   return reports;
 }
 
-export async function adminFetchReportGpsSamples(reportId, { signal } = {}) {
+export async function adminFetchReportGpsData(reportId, { signal } = {}) {
   const samples = [];
   const pageSize = 200;
   let page = 1;
   let totalPages = 1;
+  let routeDeviation = null;
   do {
     const result = await adminFetch(`/api/admin/reports/${encodeURIComponent(reportId)}/gps?page=${page}&pageSize=${pageSize}`, { signal });
     samples.push(...(Array.isArray(result.samples) ? result.samples : []));
+    if (page === 1) routeDeviation = result.routeDeviation || null;
     totalPages = Math.max(1, Number(result.pageInfo?.totalPages || 1));
     page += 1;
   } while (page <= totalPages);
-  return samples;
+  return { samples, routeDeviation };
+}
+
+export async function adminFetchReportGpsSamples(reportId, options = {}) {
+  return (await adminFetchReportGpsData(reportId, options)).samples;
 }
