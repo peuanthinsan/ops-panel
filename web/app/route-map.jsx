@@ -135,6 +135,11 @@ function CoordinateFallback({ anchors, gpsGroups, trailPoints = [], locationClus
   const height = 260;
   const routeLine = anchors.map(point => { const projected = project(point, bounds, width, height); return `${projected.x},${projected.y}`; }).join(' ');
   const workPeriodLine = trailPoints.map(point => { const projected = project(point, bounds, width, height); return `${projected.x},${projected.y}`; }).join(' ');
+  // SVG uses painter's order instead of CSS z-index, so render the active stack last.
+  const renderedLocationClusters = [
+    ...locationClusters.filter(cluster => cluster.key !== activeClusterKey),
+    ...locationClusters.filter(cluster => cluster.key === activeClusterKey),
+  ];
   return <div className="route-map-fallback">
     <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" role="group" aria-label={label}>
       <title>{label}</title>
@@ -156,7 +161,7 @@ function CoordinateFallback({ anchors, gpsGroups, trailPoints = [], locationClus
           {group.selected && group.points.length > 1 ? <polyline points={line} fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" /> : null}
         </g>;
       })}
-      {locationClusters.map(cluster => {
+      {renderedLocationClusters.map(cluster => {
         const projected = project(cluster, bounds, width, height);
         const active = cluster.key === activeClusterKey;
         const radius = cluster.count > 1 ? 11 : 7;
@@ -485,7 +490,7 @@ export default function RouteMap({ anchors = [], samples = [], reports = [], dev
             cursor: 'pointer',
             icon: clusterMarkerIcon(google, Number(feature.getProperty('count')), Boolean(feature.getProperty('selected')), Boolean(feature.getProperty('active'))),
             title: feature.getProperty('title'),
-            zIndex: feature.getProperty('selected') ? 72 : 60,
+            zIndex: feature.getProperty('active') ? 1_000 : feature.getProperty('selected') ? 72 : 60,
           }));
           listeners.push(clusterLayer.addListener('click', event => {
             const clusterKey = String(event.feature.getProperty('clusterKey') || '');

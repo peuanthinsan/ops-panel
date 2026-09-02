@@ -278,6 +278,7 @@ test('the work-period map draws the raw trail and truthful clickable location st
   assert.match(map, /function clusterMarkerIcon\(google, count, selected, active\)/);
   assert.match(map, /feature\.setProperty\('active'/);
   assert.match(map, /clusterMarkerIcon\(google, Number\(feature\.getProperty\('count'\)\), Boolean\(feature\.getProperty\('selected'\)\), Boolean\(feature\.getProperty\('active'\)\)\)/);
+  assert.match(map, /zIndex: feature\.getProperty\('active'\) \? 1_000 : feature\.getProperty\('selected'\) \? 72 : 60/);
   assert.match(map, /for \(const cluster of visualClusters\)/);
   assert.match(map, /clusterKey: cluster\.key/);
   assert.match(map, /count: cluster\.count/);
@@ -287,6 +288,9 @@ test('the work-period map draws the raw trail and truthful clickable location st
   assert.match(map, /for \(const listener of listeners\) listener\.remove\?\.\(\);/);
   assert.match(map, /trailPoints=\{gpsData\.trailPoints\}/);
   assert.match(map, /locationClusters=\{visualClusters\}/);
+  assert.match(map, /const renderedLocationClusters = \[/);
+  assert.match(map, /\.\.\.locationClusters\.filter\(cluster => cluster\.key === activeClusterKey\)/);
+  assert.match(map, /renderedLocationClusters\.map\(cluster =>/);
   assert.match(map, /role="group" aria-label=\{label\}/);
   assert.match(map, /className=\{`route-map-cluster-marker/);
   assert.match(map, /role="button"/);
