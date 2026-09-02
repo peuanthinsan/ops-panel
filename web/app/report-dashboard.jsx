@@ -357,6 +357,19 @@ export default function FullReportDashboard({ lang }) {
     setTimelineRefreshKey(value => value + 1);
     void loadReports({ silent: true });
   }
+  function handleRouteAssigned(assignment) {
+    const affectedReportIds = new Set([
+      ...(Array.isArray(assignment?.reportIds) ? assignment.reportIds : []),
+      assignment?.report?.id,
+    ].filter(Boolean));
+    const routeName = assignment?.report?.routeName ?? null;
+    if (affectedReportIds.size) {
+      setReports(items => items.map(item => affectedReportIds.has(item.id) ? { ...item, routeName } : item));
+      setSelectedReport(current => current && affectedReportIds.has(current.id) ? { ...current, routeName } : current);
+    }
+    setTimelineRefreshKey(value => value + 1);
+    void loadReports({ silent: true });
+  }
 
   const hasFilters = Boolean(search || vehicles.length || devices.length || drivers.length || activities.length || statuses.length || gpsStates.length || sorts.length > 1 || sortKey !== 'startTime' || sortDirection !== 'desc');
   const activeVehicles = Number(summary.activeVehicles || 0);
@@ -455,7 +468,7 @@ export default function FullReportDashboard({ lang }) {
           </div>
         </div> : null}
       </section>
-      {selectedReport ? <JobGpsDrawer report={selectedReport} lang={lang} onClose={() => setSelectedReport(null)} onReportUpdated={handleReportUpdated} onRouteAssigned={() => void loadReports({ silent: true })} /> : null}
+      {selectedReport ? <JobGpsDrawer report={selectedReport} lang={lang} onClose={() => setSelectedReport(null)} onReportUpdated={handleReportUpdated} onRouteAssigned={handleRouteAssigned} /> : null}
     </main>
   );
 }

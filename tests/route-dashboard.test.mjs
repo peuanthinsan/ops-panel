@@ -114,7 +114,7 @@ test('the dashboard route assignment selector searches and pages a bounded serve
   assert.doesNotMatch(drawer, /<select id="gps-route-assignment"/);
 });
 
-test('the GPS drawer hides route editing by default and stages a job-scoped change before applying it', async () => {
+test('the GPS drawer hides route editing by default and propagates scoped assignments across the dashboard', async () => {
   const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
   const dashboard = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
   assert.match(drawer, /useState\('job'\)/);
@@ -126,7 +126,29 @@ test('the GPS drawer hides route editing by default and stages a job-scoped chan
   assert.match(drawer, /t\.workPeriodHint/);
   assert.match(drawer, /t\.thisJob/);
   assert.match(drawer, /onClick=\{assignRoute\}/);
-  assert.match(dashboard, /onRouteAssigned=\{\(\) => void loadReports\(\{ silent: true \}\)\}/);
+  const mutationIndex = drawer.indexOf('assignment = await adminFetch');
+  const propagationIndex = drawer.indexOf('onRouteAssigned?.(assignment);', mutationIndex);
+  const detailRefreshIndex = drawer.indexOf('const refreshed = await adminFetch', propagationIndex);
+  assert.ok(mutationIndex >= 0 && propagationIndex > mutationIndex && detailRefreshIndex > propagationIndex,
+    'a successful route mutation should propagate before the optional drawer detail refresh');
+  const handlerStart = dashboard.indexOf('function handleRouteAssigned(assignment) {');
+  const handlerEnd = dashboard.indexOf('\n  const hasFilters', handlerStart);
+  assert.ok(handlerStart >= 0 && handlerEnd > handlerStart, 'the report dashboard should define an assignment-aware route handler');
+  const routeAssignmentHandler = dashboard.slice(handlerStart, handlerEnd);
+  assert.match(routeAssignmentHandler, /assignment\?\.reportIds/);
+  assert.match(routeAssignmentHandler, /setReports\(items => items\.map\(/);
+  assert.match(routeAssignmentHandler, /setSelectedReport\(current =>/);
+  assert.match(routeAssignmentHandler, /setTimelineRefreshKey\(value => value \+ 1\)/);
+  assert.match(routeAssignmentHandler, /void loadReports\(\{ silent: true \}\)/);
+  assert.match(dashboard, /onRouteAssigned=\{handleRouteAssigned\}/);
+  assert.doesNotMatch(dashboard, /onRouteAssigned=\{\(\) => void loadReports\(\{ silent: true \}\)\}/);
+  const reportResetStart = drawer.indexOf('useEffect(() => {\n    setPage(1);');
+  const reportResetEnd = drawer.indexOf('\n\n  useEffect', reportResetStart);
+  const reportResetEffect = drawer.slice(reportResetStart, reportResetEnd);
+  assert.match(reportResetEffect, /\}, \[report\.id\]\);/);
+  assert.doesNotMatch(reportResetEffect, /setDraftRouteName|report\.routeName/,
+    'propagating the assigned route should not clear the success notice for the current report');
+  assert.match(drawer, /setDraftRouteName\(report\.routeName \|\| ''\);\n  \}, \[report\.routeName\]\);/);
 });
 
 test('the GPS drawer keeps counts and retry feedback semantic when detail refreshes fail', async () => {

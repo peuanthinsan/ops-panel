@@ -138,13 +138,16 @@ export default function JobGpsDrawer({ report, lang, onClose, onReportUpdated, o
   useEffect(() => {
     setPage(1);
     setRouteEditorOpen(false);
-    setDraftRouteName(report.routeName || '');
     setRouteScope('job');
     setRouteError('');
     setRouteNotice('');
     setSamplesOpen(false);
     setRetryFeedback(null);
-  }, [report.id, report.routeName]);
+  }, [report.id]);
+
+  useEffect(() => {
+    setDraftRouteName(report.routeName || '');
+  }, [report.routeName]);
 
   useEffect(() => {
     let active = true;
@@ -168,22 +171,37 @@ export default function JobGpsDrawer({ report, lang, onClose, onReportUpdated, o
     setRouteBusy(true);
     setRouteError('');
     setRouteNotice('');
+    const scope = routeScope;
+    const routeName = draftRouteName || null;
+    let assignment;
     try {
-      const scope = routeScope;
-      const routeName = draftRouteName || null;
-      const assignment = await adminFetch(`/api/admin/reports/${encodeURIComponent(report.id)}/route`, { method: 'PUT', body: JSON.stringify({ routeName, scope }) });
+      assignment = await adminFetch(`/api/admin/reports/${encodeURIComponent(report.id)}/route`, { method: 'PUT', body: JSON.stringify({ routeName, scope }) });
+    } catch {
+      setRouteError(t.routeSaveFailed);
+      setRouteBusy(false);
+      return;
+    }
+
+    const assignedReport = { ...report, ...(assignment.report || {}), routeName: assignment.report?.routeName ?? routeName };
+    setDetail(current => current?.report?.id === report.id
+      ? { ...current, report: { ...(current.report || {}), ...assignedReport } }
+      : current);
+    setDraftRouteName(assignedReport.routeName || '');
+    setRouteNotice(scope === 'work_period'
+      ? t.workPeriodSaved.replace('{count}', String(assignment.reportIds?.length || 0))
+      : routeName ? t.routeSaved : t.routeRemoved);
+    setRouteEditorOpen(false);
+    onRouteAssigned?.(assignment);
+
+    try {
       const refreshed = await adminFetch(`/api/admin/reports/${encodeURIComponent(report.id)}/gps?page=${page}&pageSize=50`, { cacheOffline: false });
       setDetail(refreshed);
       setDraftRouteName(refreshed.report?.routeName || '');
       if (refreshed.route) setMapSamples(await adminFetchReportGpsSamples(report.id));
       else setMapSamples([]);
-      setRouteNotice(scope === 'work_period'
-        ? t.workPeriodSaved.replace('{count}', String(assignment.reportIds?.length || 0))
-        : routeName ? t.routeSaved : t.routeRemoved);
-      setRouteEditorOpen(false);
-      onRouteAssigned?.(assignment);
     } catch {
-      setRouteError(t.routeSaveFailed);
+      // The route mutation already succeeded. Keep its optimistic state and
+      // reconcile the drawer again when the next report refresh completes.
     } finally {
       setRouteBusy(false);
     }

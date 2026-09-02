@@ -228,13 +228,23 @@ test('a work-period route applies to existing jobs and is inherited until Finish
     assert.equal(saved.body.report.routeName, null);
   }
 
-  const applied = await jsonRequest(baseUrl, '/api/admin/reports/OPS-work-period-refuel/route', {
+  const applied = await jsonRequest(baseUrl, '/api/admin/reports/OPS-work-period-load/route', {
     method: 'PUT', headers: adminHeaders, body: JSON.stringify({ routeName: 'N8', scope: 'work_period' }),
   });
   assert.equal(applied.response.status, 200);
   assert.equal(applied.body.scope, 'work_period');
   assert.deepEqual(applied.body.reportIds.sort(), existingReports.map(report => report.id).sort());
   assert.equal(applied.body.report.routeName, 'N8');
+
+  const refetched = await jsonRequest(baseUrl, '/api/reports?page=1&pageSize=100', { headers: adminHeaders });
+  assert.equal(refetched.response.status, 200);
+  const savedPeriodReports = refetched.body.reports
+    .filter((report: { id: string }) => existingReports.some(existing => existing.id === report.id))
+    .map((report: { id: string; routeName: string | null }) => ({ id: report.id, routeName: report.routeName }))
+    .sort((left: { id: string }, right: { id: string }) => left.id.localeCompare(right.id));
+  assert.deepEqual(savedPeriodReports, existingReports
+    .map(report => ({ id: report.id, routeName: 'N8' }))
+    .sort((left, right) => left.id.localeCompare(right.id)));
 
   const started = await jsonRequest(baseUrl, '/api/job-starts', {
     method: 'POST', body: JSON.stringify({
