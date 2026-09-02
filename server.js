@@ -691,7 +691,7 @@ const server = http.createServer(async (req, res) => {
         const completed = reports.find(item => item.id === id);
         const existing = activeJobs.find(item => item.id === id);
         const requestedRouteName = activeRouteName(input.routeName);
-        if (input.routeName && requestedRouteName === undefined) return send(res, 409, { error: 'The selected route is no longer available. Refresh routes and choose again.' });
+        if (input.routeName && requestedRouteName === undefined && !completed && !existing) return send(res, 409, { error: 'The selected route is no longer available. Refresh routes and choose again.' });
         const inheritedRouteName = completed || existing ? null : inheritedWorkPeriodRouteName({ id, vehicleNumber, mode, startTime: new Date(startTimeMs).toISOString() });
         const routeName = completed?.routeName || existing?.routeName || inheritedRouteName || requestedRouteName;
         if (!id || id.length > 180 || !/^[a-zA-Z0-9._:-]+$/.test(id)) return send(res, 400, { error: 'A valid id is required' });
@@ -843,7 +843,7 @@ const server = http.createServer(async (req, res) => {
         const existing = reports.find(item => item.id === reportId) || null;
         const activeReportJob = activeJobs.find(item => item.id === reportId);
         const requestedRouteName = activeRouteName(input.routeName);
-        if (input.routeName && requestedRouteName === undefined) return send(res, 409, { error: 'The selected route is no longer available. Refresh routes and choose again.' });
+        if (input.routeName && requestedRouteName === undefined && !existing && !activeReportJob) return send(res, 409, { error: 'The selected route is no longer available. Refresh routes and choose again.' });
         const inheritedRouteName = existing || activeReportJob ? null : inheritedWorkPeriodRouteName({ id: reportId, vehicleNumber, mode, startTime: new Date(startTimeMs).toISOString() });
         const routeName = existing?.routeName || activeReportJob?.routeName || inheritedRouteName || requestedRouteName;
         if (!wasBindingValidAt(deviceId, vehicleNumber, startTimeMs)) return send(res, 409, { error: 'Vehicle and device were not connected when this job started.' });

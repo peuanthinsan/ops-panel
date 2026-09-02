@@ -1747,7 +1747,7 @@ async function routeRequest(request, route) {
     const sql = database();
     const completed = await getReport(jobId);
     const existingJob = completed ? null : await getActiveJob(jobId);
-    const submittedRouteName = await validatedRouteName(input.routeName);
+    const submittedRouteName = completed || existingJob ? null : await validatedRouteName(input.routeName);
     const inheritedRouteName = completed || existingJob ? null : await inheritedWorkPeriodRouteName(vehicleNumber, start.iso);
     const routeName = completed?.routeName || existingJob?.routeName || inheritedRouteName || submittedRouteName;
     const inputShape = { vehicleNumber, deviceId, driverName, driverId, mode, routeName, startTime: start.iso };
@@ -1976,7 +1976,7 @@ async function routeRequest(request, route) {
     const driverId = optionalText(input.driverId, 'driverId', 180);
     const existingReport = await getReport(reportId);
     const activeReportJob = await getActiveJob(reportId);
-    const submittedRouteName = await validatedRouteName(input.routeName);
+    const submittedRouteName = existingReport || activeReportJob ? null : await validatedRouteName(input.routeName);
     const inheritedRouteName = existingReport || activeReportJob ? null : await inheritedWorkPeriodRouteName(vehicleNumber, start.iso);
     const routeName = existingReport?.routeName || activeReportJob?.routeName || inheritedRouteName || submittedRouteName;
     const sql = database();

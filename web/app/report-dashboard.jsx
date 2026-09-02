@@ -467,7 +467,7 @@ export default function FullReportDashboard({ lang }) {
           </div>
         </div> : null}
       </section>
-      {selectedReport ? <JobGpsDrawer report={selectedReport} lang={lang} onClose={() => setSelectedReport(null)} /> : null}
+      {selectedReport ? <JobGpsDrawer report={selectedReport} lang={lang} onClose={() => setSelectedReport(null)} onRouteAssigned={() => void loadReports({ silent: true })} /> : null}
     </main>
   );
 }
