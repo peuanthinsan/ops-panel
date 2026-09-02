@@ -81,6 +81,13 @@ function reportCoordinates(report) {
   return latitude && longitude ? `${latitude}, ${longitude}` : '';
 }
 function reportLocation(report, fallback) { return report.locationName || report.location || report.address || reportCoordinates(report) || fallback; }
+function applyOptimisticRouteAssignments(items, assignments) {
+  if (!assignments.size) return items;
+  return items.map(item => {
+    const reportId = String(item.id || '');
+    return assignments.has(reportId) ? { ...item, routeName: assignments.get(reportId) } : item;
+  });
+}
 function GpsSnapshotButton({ report, lang, labels, fallback, onOpen }) {
   const pointCount = Number(report.deviceGpsSamples) || 0;
   const hasPoint = pointCount > 0;
@@ -242,7 +249,9 @@ export default function FullReportDashboard({ lang }) {
   const [page, setPage] = useState(1);
   const [selectedReport, setSelectedReport] = useState(null);
   const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
+  const [timelineRouteAssignment, setTimelineRouteAssignment] = useState(null);
   const reportRequestSequence = useRef(0);
+  const optimisticRouteAssignments = useRef(new Map());
   const facetsLoaded = useRef(false);
   const automaticGpsSyncRef = useRef(false);
   const reportsRef = useRef(reports);
@@ -263,7 +272,7 @@ export default function FullReportDashboard({ lang }) {
     sort: sorts.map(sort => `${sort.key}:${sort.direction}`).join(','),
   }), [activities, deferredSearch, devices, drivers, endDate, gpsStates, sorts, startDate, statuses, vehicles]);
 
-  const loadReports = useCallback(async ({ silent = false } = {}) => {
+  const loadReports = useCallback(async ({ silent = false, networkOnly = false } = {}) => {
     const requestId = ++reportRequestSequence.current;
     if (!silent) setLoading(true);
     setError('');
@@ -273,12 +282,16 @@ export default function FullReportDashboard({ lang }) {
         const values = Array.isArray(value) ? value : [value];
         for (const item of values) if (String(item || '').trim()) params.append(key, String(item).trim());
       }
+      const requestOptions = networkOnly ? { cacheOffline: false, cache: 'no-store' } : {};
       const [data, facetData] = await Promise.all([
-        adminFetch(`/api/reports?${params}`),
-        facetsLoaded.current ? Promise.resolve(null) : adminFetch('/api/admin/reports/facets'),
+        adminFetch(`/api/reports?${params}`, requestOptions),
+        facetsLoaded.current ? Promise.resolve(null) : adminFetch('/api/admin/reports/facets', requestOptions),
       ]);
       if (requestId !== reportRequestSequence.current) return;
-      setReports(Array.isArray(data.reports) ? data.reports : []);
+      setReports(applyOptimisticRouteAssignments(
+        Array.isArray(data.reports) ? data.reports : [],
+        optimisticRouteAssignments.current,
+      ));
       setSummary(current => ({ ...current, ...(data.summary || {}) }));
       setPageInfo(current => ({ ...current, ...(data.pageInfo || {}) }));
       if (facetData?.facets) {
@@ -354,6 +367,7 @@ export default function FullReportDashboard({ lang }) {
     if (!updatedReport?.id) return;
     setReports(items => items.map(item => item.id === updatedReport.id ? { ...item, ...updatedReport } : item));
     setSelectedReport(current => current?.id === updatedReport.id ? { ...current, ...updatedReport } : current);
+    setTimelineRouteAssignment(null);
     setTimelineRefreshKey(value => value + 1);
     void loadReports({ silent: true });
   }
@@ -361,14 +375,16 @@ export default function FullReportDashboard({ lang }) {
     const affectedReportIds = new Set([
       ...(Array.isArray(assignment?.reportIds) ? assignment.reportIds : []),
       assignment?.report?.id,
-    ].filter(Boolean));
+    ].filter(Boolean).map(String));
     const routeName = assignment?.report?.routeName ?? null;
     if (affectedReportIds.size) {
-      setReports(items => items.map(item => affectedReportIds.has(item.id) ? { ...item, routeName } : item));
-      setSelectedReport(current => current && affectedReportIds.has(current.id) ? { ...current, routeName } : current);
+      for (const reportId of affectedReportIds) optimisticRouteAssignments.current.set(String(reportId), routeName);
+      setReports(items => items.map(item => affectedReportIds.has(String(item.id || '')) ? { ...item, routeName } : item));
+      setSelectedReport(current => current && affectedReportIds.has(String(current.id || '')) ? { ...current, routeName } : current);
     }
+    setTimelineRouteAssignment(assignment || null);
     setTimelineRefreshKey(value => value + 1);
-    void loadReports({ silent: true });
+    void loadReports({ silent: true, networkOnly: true });
   }
 
   const hasFilters = Boolean(search || vehicles.length || devices.length || drivers.length || activities.length || statuses.length || gpsStates.length || sorts.length > 1 || sortKey !== 'startTime' || sortDirection !== 'desc');
@@ -424,7 +440,7 @@ export default function FullReportDashboard({ lang }) {
         </div>
       </section>
 
-      <TimelineDashboard lang={lang} embedded sharedFilters={sharedFilters} refreshKey={timelineRefreshKey} onOpenReport={setSelectedReport} onPrintWorkPeriod={printVehicle} printPeriodGuidance={needsRowPrintSelection} />
+      <TimelineDashboard lang={lang} embedded sharedFilters={sharedFilters} refreshKey={timelineRefreshKey} routeAssignment={timelineRouteAssignment} onOpenReport={setSelectedReport} onPrintWorkPeriod={printVehicle} printPeriodGuidance={needsRowPrintSelection} />
 
       <section className="panel report-panel" aria-busy={loading || search !== deferredSearch}>
         <div className="section-heading report-section-heading"><div><h2>{t.activity}</h2><p className="sort-hint">{t.sortHint}</p></div><span className="result-count" aria-live="polite">{t.showing} {pageInfo.start}–{pageInfo.end} {t.of} {pageInfo.total}</span></div>

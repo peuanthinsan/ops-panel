@@ -1299,6 +1299,98 @@ async function getJobGpsDetail(request, reportId) {
   };
 }
 
+async function getWorkPeriodGpsDetail(request, reportId) {
+  const period = await workPeriodForReport(reportId);
+  if (!period) throw new ApiError(404, 'Report not found');
+  const query = new URL(request.url).searchParams;
+  const page = positivePageValue(query.get('page'), 1, 100_000);
+  const pageSize = positivePageValue(query.get('pageSize'), 100, 200);
+  const offset = (page - 1) * pageSize;
+  const sql = getDatabase();
+  const periodReports = await sql.query(`
+    WITH ${workPeriodReportsCte()}
+    SELECT
+      ${reportColumns()},
+      work_period_id AS "workPeriodId",
+      work_period_start_time AS "workPeriodStartTime",
+      work_period_end_time AS "workPeriodEndTime",
+      to_char(work_period_start_time AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') AS "workPeriodDate",
+      work_period_complete AS "workPeriodComplete"
+    FROM work_period_reports
+    WHERE work_period_id = $1
+      AND lower(vehicle_number) = lower($2)
+    ORDER BY start_time ASC, end_time ASC, id ASC
+  `, [period.workPeriodId, period.vehicleNumber]);
+  const reportIds = periodReports.map(report => report.id);
+  const membershipSql = `(
+    sample.job_id = ANY($1::text[])
+    OR (
+      sample.job_id IS NULL
+      AND lower(sample.vehicle_number) = lower($2)
+      AND sample.captured_at >= $3::timestamptz
+      AND ($4::timestamptz IS NULL OR sample.captured_at <= $4::timestamptz)
+    )
+  )`;
+  const [samples, countRows] = await sql.transaction(transaction => [
+    transaction.query(`
+      SELECT
+        sample.id,
+        sample.job_id AS "jobId",
+        sample.captured_at AS "capturedAt",
+        json_build_object(
+          'latitude', sample.device_latitude,
+          'longitude', sample.device_longitude,
+          'accuracy', sample.device_accuracy_m,
+          'speedMps', sample.device_speed_mps,
+          'headingDegrees', sample.device_heading_deg
+        ) AS "deviceGps",
+        CASE WHEN sample.fms_status = 'received' THEN json_build_object(
+          'capturedAt', sample.fms_captured_at,
+          'latitude', sample.fms_latitude,
+          'longitude', sample.fms_longitude,
+          'speedMps', sample.fms_speed_mps
+        ) ELSE NULL END AS "fmsGps",
+        sample.fms_status AS "fmsStatus",
+        sample.fms_message AS "fmsMessage",
+        sample.position_delta_m AS "positionDeltaM",
+        sample.time_delta_ms AS "timeDeltaMs",
+        sample.pair_status AS "pairStatus",
+        sample.synced_at AS "syncedAt"
+      FROM gps_sync_samples sample
+      WHERE ${membershipSql}
+      ORDER BY sample.captured_at ASC, sample.id ASC
+      LIMIT $5 OFFSET $6
+    `, [reportIds, period.vehicleNumber, period.workPeriodStartTime, period.workPeriodEndTime, pageSize, offset]),
+    transaction.query(`
+      SELECT count(*)::int AS total
+      FROM gps_sync_samples sample
+      WHERE ${membershipSql}
+    `, [reportIds, period.vehicleNumber, period.workPeriodStartTime, period.workPeriodEndTime]),
+  ]);
+  const total = Number(countRows[0]?.total || 0);
+  return {
+    workPeriod: {
+      workPeriodId: period.workPeriodId,
+      vehicleNumber: period.vehicleNumber,
+      startTime: period.workPeriodStartTime,
+      endTime: period.workPeriodEndTime,
+      complete: Boolean(period.workPeriodComplete),
+      anchorReportId: reportId,
+    },
+    reports: periodReports,
+    samples,
+    pageInfo: {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      start: samples.length ? offset + 1 : 0,
+      end: offset + samples.length,
+      hasNextPage: offset + samples.length < total,
+    },
+  };
+}
+
 async function getRouteSettings() {
   const sql = getDatabase();
   const rows = await sql`
@@ -1381,7 +1473,8 @@ async function workPeriodForReport(reportId) {
       work_period_id AS "workPeriodId",
       vehicle_number AS "vehicleNumber",
       work_period_start_time AS "workPeriodStartTime",
-      work_period_end_time AS "workPeriodEndTime"
+      work_period_end_time AS "workPeriodEndTime",
+      work_period_complete AS "workPeriodComplete"
     FROM work_period_reports
     WHERE id = $1
     LIMIT 1
@@ -1393,7 +1486,7 @@ async function inheritedWorkPeriodRouteName(vehicleNumber, startTime) {
   const sql = getDatabase();
   const rows = await sql.query(`
     WITH previous_finish AS (
-      SELECT end_time AS finished_at
+      SELECT id AS finish_report_id, end_time AS finished_at
       FROM ops_reports
       WHERE lower(vehicle_number) = lower($1)
         AND mode = 'Finish work'
@@ -1406,6 +1499,7 @@ async function inheritedWorkPeriodRouteName(vehicleNumber, startTime) {
       FROM ops_reports report
       WHERE lower(report.vehicle_number) = lower($1)
         AND report.start_time >= COALESCE((SELECT finished_at FROM previous_finish), '-infinity'::timestamptz)
+        AND report.id IS DISTINCT FROM (SELECT finish_report_id FROM previous_finish)
         AND report.start_time <= $2::timestamptz
       ORDER BY report.start_time, report.end_time, report.id
       LIMIT 1
@@ -1626,6 +1720,14 @@ async function routeRequest(request, route) {
   if (route === 'admin/reports/facets' && method === 'GET') {
     await requireAdmin(request);
     return json({ facets: await getReportFacets() });
+  }
+
+  const workPeriodGpsMatch = route.match(/^admin\/reports\/([^/]+)\/work-period-gps$/);
+  if (workPeriodGpsMatch && method === 'GET') {
+    await requireAdmin(request);
+    const reportId = validClientId(decodeURIComponent(workPeriodGpsMatch[1]));
+    if (!reportId) throw new ApiError(400, 'A valid report id is required');
+    return json(await getWorkPeriodGpsDetail(request, reportId));
   }
 
   const gpsDetailMatch = route.match(/^admin\/reports\/([^/]+)\/gps$/);

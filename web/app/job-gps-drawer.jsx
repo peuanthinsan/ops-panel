@@ -14,7 +14,7 @@ import { WarningCircleIcon } from '@phosphor-icons/react/dist/csr/WarningCircle'
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 import { useEffect, useRef, useState } from 'react';
 import { displayGpsLookupMessage, formatReportCoordinate, formatReportDateTime } from '../lib/report-view';
-import { adminFetch, adminFetchReportGpsSamples } from './dashboard-api';
+import { adminFetch, adminFetchWorkPeriodGpsData } from './dashboard-api';
 import RouteMap from './route-map';
 import RouteSelector from './route-selector';
 
@@ -23,13 +23,13 @@ const copy = {
     title: 'GPS detail', close: 'Close', vehicle: 'Vehicle', driver: 'Driver', activity: 'Activity', time: 'Time',
     device: 'GPS points', last: 'Last GPS fix', captured: 'GPS fix time', coordinates: 'Coordinates', speedLabel: 'Speed', heading: 'Heading',
     loading: 'Loading GPS points…', loadingHint: 'Checking the saved GPS detail for this job.', failed: 'Could not load GPS detail.', failedHint: 'Showing the GPS count saved with the job.', empty: 'No GPS points are linked to this job yet.', lookupStatus: 'GPS lookup', gpsReady: 'GPS trail ready', gpsReadyHint: '{count} time-matched points are linked to this job.', gpsMissing: 'No GPS point yet', gpsMissingHint: 'Retry the time-based lookup without leaving this job.', gpsNotApplicable: 'GPS lookup not required', gpsNotApplicableHint: 'This cancelled job stays in the audit record without a GPS lookup.', lookupPending: 'Lookup in progress', retry: 'Retry GPS lookup', retrying: 'Looking up GPS…', retryFailed: 'Could not retry the GPS lookup.', retryComplete: 'GPS lookup completed.', retryNoData: 'Lookup completed, but no GPS points matched this job.', retryUnavailable: 'GPS lookup is not available for this job.', retryLookupFailed: 'The GPS provider could not complete this lookup.', retryFinished: 'GPS lookup finished.',
-    previous: 'Previous', next: 'Next', page: 'Page', of: 'of', print: 'Print job', speed: 'km/h', degrees: '°', routeMap: 'Route vs GPS map', openRoute: 'Open saved route', withinRoute: 'Within route', deviated: 'Route deviation', deviationBody: 'GPS stayed outside the route corridor for', deviationBegan: 'Deviation began', deviationLocation: 'GPS location', deviationDistance: 'Off route', deviationDuration: 'Confirmed duration', seconds: 'seconds', km: 'km', noRoute: 'No route is assigned to this job yet.', assignedRoute: 'Assigned route', noAssignedRoute: 'No route', savingRoute: 'Saving route…', routeSaveFailed: 'Could not update the assigned route.', routeScope: 'Apply change to', thisJob: 'This job', thisJobHint: 'Only this saved job.', workPeriod: 'Work period', workPeriodHint: 'This job and every job in the same work period.', workPeriodSaved: 'Route applied to {count} jobs in this work period.', routeSaved: 'Route updated for this job.', routeRemoved: 'Route removed from this job.', editRoute: 'Edit route', closeRouteEditor: 'Close editor', cancel: 'Cancel', applyRoute: 'Apply route', showPoints: 'Show GPS points', hidePoints: 'Hide GPS points', recordedPoints: '{count} recorded points',
+    previous: 'Previous', next: 'Next', page: 'Page', of: 'of', print: 'Print job', speed: 'km/h', degrees: '°', routeMap: 'Work period GPS map', openRoute: 'Open saved route', withinRoute: 'Within route', deviated: 'Route deviation', deviationBody: 'GPS stayed outside the route corridor for', deviationBegan: 'Deviation began', deviationLocation: 'GPS location', deviationDistance: 'Off route', deviationDuration: 'Confirmed duration', seconds: 'seconds', km: 'km', noMapPoints: 'No GPS points are available in this work period yet.', assignedRoute: 'Assigned route', noAssignedRoute: 'No route', savingRoute: 'Saving route…', routeSaveFailed: 'Could not update the assigned route.', routeScope: 'Apply change to', thisJob: 'This job', thisJobHint: 'Only this saved job.', workPeriod: 'Work period', workPeriodHint: 'This job and every job in the same work period.', workPeriodSaved: 'Route applied to {count} jobs in this work period.', routeSaved: 'Route updated for this job.', routeRemoved: 'Route removed from this job.', editRoute: 'Edit route', closeRouteEditor: 'Close editor', cancel: 'Cancel', applyRoute: 'Apply route', showPoints: 'Show GPS points', hidePoints: 'Hide GPS points', recordedPoints: '{count} recorded points', periodMapLoading: 'Loading every GPS point in this work period…', periodMapLoaded: '{jobs} jobs · {points} GPS points · {selected} from this job', periodMapFailed: 'Could not load the complete work period. Showing the GPS points currently available for this job.',
   },
   th: {
     title: 'รายละเอียด GPS', close: 'ปิด', vehicle: 'รถ', driver: 'พขร.', activity: 'กิจกรรม', time: 'เวลา',
     device: 'จุด GPS', last: 'พิกัด GPS ล่าสุด', captured: 'เวลาพิกัด GPS', coordinates: 'พิกัด', speedLabel: 'ความเร็ว', heading: 'ทิศทาง',
     loading: 'กำลังโหลดจุด GPS…', loadingHint: 'กำลังตรวจสอบรายละเอียด GPS ที่บันทึกไว้สำหรับงานนี้', failed: 'ไม่สามารถโหลดรายละเอียด GPS', failedHint: 'กำลังแสดงจำนวนจุด GPS ที่บันทึกไว้กับงาน', empty: 'ยังไม่มีจุด GPS ที่เชื่อมกับงานนี้', lookupStatus: 'การค้นหา GPS', gpsReady: 'พร้อมดูเส้นทาง GPS', gpsReadyHint: 'พบจุด GPS ที่ตรงกับเวลางาน {count} จุด', gpsMissing: 'ยังไม่พบพิกัด GPS', gpsMissingHint: 'ค้นหาตามเวลาของงานนี้อีกครั้งได้โดยไม่ต้องออกจากหน้านี้', gpsNotApplicable: 'ไม่ต้องค้นหา GPS', gpsNotApplicableHint: 'งานที่ยกเลิกนี้ยังคงอยู่ในประวัติโดยไม่ต้องค้นหา GPS', lookupPending: 'กำลังค้นหาข้อมูล', retry: 'ค้นหา GPS อีกครั้ง', retrying: 'กำลังค้นหา GPS…', retryFailed: 'ไม่สามารถค้นหา GPS อีกครั้งได้', retryComplete: 'ค้นหาข้อมูล GPS แล้ว', retryNoData: 'ค้นหาแล้ว แต่ไม่พบจุด GPS ที่ตรงกับงานนี้', retryUnavailable: 'ไม่สามารถค้นหา GPS สำหรับงานนี้ได้', retryLookupFailed: 'ผู้ให้บริการ GPS ไม่สามารถค้นหาข้อมูลนี้ได้', retryFinished: 'ค้นหา GPS เสร็จแล้ว',
-    previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', print: 'พิมพ์งาน', speed: 'กม./ชม.', degrees: '°', routeMap: 'แผนที่เส้นทางเทียบกับ GPS', openRoute: 'เปิดเส้นทางที่บันทึก', withinRoute: 'อยู่ในเส้นทาง', deviated: 'ออกนอกเส้นทาง', deviationBody: 'GPS อยู่นอกแนวเส้นทางต่อเนื่องเป็นเวลา', deviationBegan: 'เริ่มออกนอกเส้นทาง', deviationLocation: 'ตำแหน่ง GPS', deviationDistance: 'ห่างจากเส้นทาง', deviationDuration: 'ระยะเวลาที่ยืนยัน', seconds: 'วินาที', km: 'กม.', noRoute: 'ยังไม่ได้กำหนดเส้นทางให้งานนี้', assignedRoute: 'เส้นทางที่กำหนด', noAssignedRoute: 'ไม่มีเส้นทาง', savingRoute: 'กำลังบันทึกเส้นทาง…', routeSaveFailed: 'ไม่สามารถอัปเดตเส้นทางที่กำหนดได้', routeScope: 'ใช้การเปลี่ยนแปลงกับ', thisJob: 'งานนี้', thisJobHint: 'เฉพาะงานที่บันทึกนี้', workPeriod: 'รอบงาน', workPeriodHint: 'งานนี้และทุกงานในรอบงานเดียวกัน', workPeriodSaved: 'กำหนดเส้นทางให้ {count} งานในรอบงานนี้แล้ว', routeSaved: 'อัปเดตเส้นทางสำหรับงานนี้แล้ว', routeRemoved: 'นำเส้นทางออกจากงานนี้แล้ว', editRoute: 'แก้ไขเส้นทาง', closeRouteEditor: 'ปิดตัวแก้ไข', cancel: 'ยกเลิก', applyRoute: 'ใช้เส้นทาง', showPoints: 'แสดงจุด GPS', hidePoints: 'ซ่อนจุด GPS', recordedPoints: 'บันทึกแล้ว {count} จุด',
+    previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', print: 'พิมพ์งาน', speed: 'กม./ชม.', degrees: '°', routeMap: 'แผนที่ GPS ของรอบงาน', openRoute: 'เปิดเส้นทางที่บันทึก', withinRoute: 'อยู่ในเส้นทาง', deviated: 'ออกนอกเส้นทาง', deviationBody: 'GPS อยู่นอกแนวเส้นทางต่อเนื่องเป็นเวลา', deviationBegan: 'เริ่มออกนอกเส้นทาง', deviationLocation: 'ตำแหน่ง GPS', deviationDistance: 'ห่างจากเส้นทาง', deviationDuration: 'ระยะเวลาที่ยืนยัน', seconds: 'วินาที', km: 'กม.', noMapPoints: 'ยังไม่มีจุด GPS ในรอบงานนี้', assignedRoute: 'เส้นทางที่กำหนด', noAssignedRoute: 'ไม่มีเส้นทาง', savingRoute: 'กำลังบันทึกเส้นทาง…', routeSaveFailed: 'ไม่สามารถอัปเดตเส้นทางที่กำหนดได้', routeScope: 'ใช้การเปลี่ยนแปลงกับ', thisJob: 'งานนี้', thisJobHint: 'เฉพาะงานที่บันทึกนี้', workPeriod: 'รอบงาน', workPeriodHint: 'งานนี้และทุกงานในรอบงานเดียวกัน', workPeriodSaved: 'กำหนดเส้นทางให้ {count} งานในรอบงานนี้แล้ว', routeSaved: 'อัปเดตเส้นทางสำหรับงานนี้แล้ว', routeRemoved: 'นำเส้นทางออกจากงานนี้แล้ว', editRoute: 'แก้ไขเส้นทาง', closeRouteEditor: 'ปิดตัวแก้ไข', cancel: 'ยกเลิก', applyRoute: 'ใช้เส้นทาง', showPoints: 'แสดงจุด GPS', hidePoints: 'ซ่อนจุด GPS', recordedPoints: 'บันทึกแล้ว {count} จุด', periodMapLoading: 'กำลังโหลดจุด GPS ทั้งหมดในรอบงาน…', periodMapLoaded: '{jobs} งาน · {points} จุด GPS · {selected} จุดจากงานนี้', periodMapFailed: 'ไม่สามารถโหลดรอบงานทั้งหมด กำลังแสดงจุด GPS ของงานนี้ที่โหลดได้',
   },
 };
 
@@ -90,7 +90,10 @@ export default function JobGpsDrawer({ report, lang, onClose, onReportUpdated, o
   const closeRef = useRef(null);
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState(null);
-  const [mapSamples, setMapSamples] = useState([]);
+  const [workPeriodGps, setWorkPeriodGps] = useState(null);
+  const [workPeriodGpsLoading, setWorkPeriodGpsLoading] = useState(true);
+  const [workPeriodGpsError, setWorkPeriodGpsError] = useState('');
+  const [workPeriodGpsRefreshKey, setWorkPeriodGpsRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [routeBusy, setRouteBusy] = useState(false);
@@ -158,13 +161,26 @@ export default function JobGpsDrawer({ report, lang, onClose, onReportUpdated, o
       .then(data => {
         if (!active) return;
         setDetail(data);
-        if (data.route) adminFetchReportGpsSamples(report.id, { signal: controller.signal }).then(all => active && setMapSamples(all)).catch(() => {});
-        else setMapSamples([]);
       })
       .catch(errorValue => { if (active && errorValue?.name !== 'AbortError') setError(t.failed); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; controller.abort(); };
   }, [page, report.id, t.failed]);
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    setWorkPeriodGps(null);
+    setWorkPeriodGpsLoading(true);
+    setWorkPeriodGpsError('');
+    adminFetchWorkPeriodGpsData(report.id, { signal: controller.signal })
+      .then(data => { if (active) setWorkPeriodGps(data); })
+      .catch(errorValue => {
+        if (active && errorValue?.name !== 'AbortError') setWorkPeriodGpsError(t.periodMapFailed);
+      })
+      .finally(() => { if (active) setWorkPeriodGpsLoading(false); });
+    return () => { active = false; controller.abort(); };
+  }, [report.id, t.periodMapFailed, workPeriodGpsRefreshKey]);
 
   async function assignRoute() {
     if (routeBusy) return;
@@ -197,8 +213,6 @@ export default function JobGpsDrawer({ report, lang, onClose, onReportUpdated, o
       const refreshed = await adminFetch(`/api/admin/reports/${encodeURIComponent(report.id)}/gps?page=${page}&pageSize=50`, { cacheOffline: false });
       setDetail(refreshed);
       setDraftRouteName(refreshed.report?.routeName || '');
-      if (refreshed.route) setMapSamples(await adminFetchReportGpsSamples(report.id));
-      else setMapSamples([]);
     } catch {
       // The route mutation already succeeded. Keep its optimistic state and
       // reconcile the drawer again when the next report refresh completes.
@@ -225,12 +239,11 @@ export default function JobGpsDrawer({ report, lang, onClose, onReportUpdated, o
     setDetail(current => current?.report?.id === report.id ? { ...current, report: { ...(current.report || {}), ...mutatedReport } } : current);
     setRetryFeedback(retryFeedbackFor(data, lang, t));
     onReportUpdated?.(mutatedReport);
+    setWorkPeriodGpsRefreshKey(value => value + 1);
 
     try {
       const refreshed = await adminFetch(`/api/admin/reports/${encodeURIComponent(report.id)}/gps?page=${page}&pageSize=50`, { cacheOffline: false });
       setDetail(refreshed);
-      if (refreshed.route) setMapSamples(await adminFetchReportGpsSamples(report.id).catch(() => []));
-      else setMapSamples([]);
     } catch {
       setError(t.failed);
     } finally {
@@ -248,6 +261,17 @@ export default function JobGpsDrawer({ report, lang, onClose, onReportUpdated, o
   const reportPointCount = pointCountValue(report.deviceGpsSamples);
   const detailPointCount = pointCountValue(summary.deviceSamples ?? samples.length);
   const pointCount = loading || error || retrying || !activeDetail ? reportPointCount : detailPointCount;
+  const workPeriodSamples = Array.isArray(workPeriodGps?.samples) ? workPeriodGps.samples : [];
+  const workPeriodReports = Array.isArray(workPeriodGps?.reports) ? workPeriodGps.reports : [];
+  const mapSamples = workPeriodGps ? workPeriodSamples : samples;
+  const selectedJobId = String(displayedReport.id || report.id);
+  const selectedMapPointCount = mapSamples.filter(sample => String(sample?.jobId || '') === selectedJobId).length;
+  const mapJobCount = workPeriodGps ? workPeriodReports.length : 1;
+  const hasMapCoordinates = Boolean(activeDetail?.route?.anchors?.length || mapSamples.length);
+  const periodMapSummary = t.periodMapLoaded
+    .replace('{jobs}', String(mapJobCount))
+    .replace('{points}', String(mapSamples.length))
+    .replace('{selected}', String(selectedMapPointCount));
   const lookupPending = displayedReport.gpsLookupStatus === 'pending';
   const lookupNotApplicable = displayedReport.status === 'Cancelled' || displayedReport.gpsLookupStatus === 'not_applicable';
   const retryAllowed = !lookupNotApplicable && (!displayedReport.driverName || !pointCount || ['pending', 'no_data', 'lookup_failed', 'lookup_unavailable'].includes(displayedReport.gpsLookupStatus));
@@ -340,12 +364,16 @@ export default function JobGpsDrawer({ report, lang, onClose, onReportUpdated, o
           </div> : null}
         </section>
 
-        {activeDetail?.route ? <section className="gps-route-section">
-          <div className="gps-route-heading"><h2>{t.routeMap}</h2><a href={activeDetail.route.googleMapsUrl} target="_blank" rel="noreferrer">{t.openRoute}<ArrowSquareOutIcon size={14} weight="bold" aria-hidden="true" /></a></div>
-          <RouteMap anchors={activeDetail.route.anchors} samples={mapSamples.length ? mapSamples : samples} deviationEvents={routeDeviation?.events || []} label={t.routeMap} lang={lang} />
+        <section className="gps-route-section">
+          <div className="gps-route-heading"><h2>{t.routeMap}</h2>{activeDetail?.route ? <a href={activeDetail.route.googleMapsUrl} target="_blank" rel="noreferrer">{t.openRoute}<ArrowSquareOutIcon size={14} weight="bold" aria-hidden="true" /></a> : null}</div>
+          <p className={`gps-work-period-summary${workPeriodGpsLoading ? ' is-loading' : workPeriodGpsError ? ' is-error' : ''}`} role={workPeriodGpsError ? 'alert' : 'status'}>
+            <MapPinLineIcon size={15} weight="fill" aria-hidden="true" />
+            {workPeriodGpsLoading ? t.periodMapLoading : workPeriodGpsError || periodMapSummary}
+          </p>
+          {hasMapCoordinates ? <RouteMap anchors={activeDetail?.route?.anchors || []} samples={mapSamples} deviationEvents={routeDeviation?.events || []} selectedJobId={selectedJobId} workPeriodJobCount={mapJobCount} label={t.routeMap} lang={lang} /> : <div className={`gps-route-missing${workPeriodGpsLoading ? ' is-loading' : ''}`}><MapTrifoldIcon size={22} weight="bold" aria-hidden="true" /><p>{workPeriodGpsLoading ? t.periodMapLoading : workPeriodGpsError || t.noMapPoints}</p></div>}
           {routeDeviation?.status === 'deviated' ? <details className="route-deviation-status deviated"><summary><span><WarningCircleIcon size={16} weight="fill" aria-hidden="true" /><strong>{t.deviated}</strong>{` · ${Math.round(routeDeviation.longestDurationSeconds)} ${t.seconds}`}</span><CaretDownIcon size={15} weight="bold" aria-hidden="true" /></summary><p>{`${t.deviationBody} ${Math.round(routeDeviation.longestDurationSeconds)} ${t.seconds}`}</p><div className="route-deviation-events">{(routeDeviation.events || []).map((event, index) => <dl key={`${event.startedAt}-${index}`}><div><dt>{t.deviationBegan}</dt><dd>{time(event.startedAt, lang)}</dd></div><div><dt>{t.deviationLocation}</dt><dd>{coordinate(event)}</dd></div><div><dt>{t.deviationDistance}</dt><dd>{distance(event.startDistanceKm, lang)}</dd></div><div><dt>{t.deviationDuration}</dt><dd>{Math.round(event.durationSeconds)} {t.seconds}</dd></div></dl>)}</div></details> : null}
           {routeDeviation?.status === 'within_route' && pointCount > 0 ? <p className="route-deviation-status within-route"><CheckCircleIcon size={16} weight="fill" aria-hidden="true" /><strong>{t.withinRoute}</strong></p> : null}
-        </section> : <div className="gps-route-missing"><MapTrifoldIcon size={22} weight="bold" aria-hidden="true" /><p>{t.noRoute}</p></div>}
+        </section>
 
         <section className={`gps-samples-panel${samplesOpen ? ' open' : ''}`}>
           <button className="gps-samples-disclosure" type="button" aria-expanded={samplesOpen} aria-controls="gps-samples-content" onClick={() => setSamplesOpen(current => !current)}>

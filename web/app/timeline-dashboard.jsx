@@ -31,6 +31,37 @@ const workPeriodStartedCopy = { en: 'Work period · started', th: 'รอบง�
 const printWorkReportCopy = { en: 'Print work report', th: 'พิมพ์รายงานรอบงาน' };
 const printPeriodGuidanceCopy = { en: 'Each timeline row is one work period. Print the row you need.', th: 'แต่ละแถวในไทม์ไลน์คือหนึ่งรอบงาน ให้พิมพ์แถวที่ต้องการ' };
 
+function applyOptimisticRouteAssignments(items, assignments) {
+  if (!assignments.size) return items;
+  return items.map(item => {
+    const reportId = String(item.id || '');
+    return assignments.has(reportId) ? { ...item, routeName: assignments.get(reportId) } : item;
+  });
+}
+
+async function adminFetchAllReportsNetworkOnly(filters = {}) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    const values = Array.isArray(value) ? value : [value];
+    for (const item of values) {
+      const filterValue = String(item || '').trim();
+      if (filterValue) params.append(key, filterValue);
+    }
+  }
+  params.set('pageSize', '100');
+  const reports = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    params.set('page', String(page));
+    const result = await adminFetch(`/api/reports?${params}`, { cacheOffline: false, cache: 'no-store' });
+    reports.push(...(Array.isArray(result.reports) ? result.reports : []));
+    totalPages = Math.max(1, Number(result.pageInfo?.totalPages || 1));
+    page += 1;
+  } while (page <= totalPages);
+  return reports;
+}
+
 function calendarDayOffset(startDay, actualDay) {
   const start = Date.parse(`${startDay}T00:00:00Z`);
   const actual = Date.parse(`${actualDay}T00:00:00Z`);
@@ -102,7 +133,7 @@ function timelineSegment(report, lang, labels, scaleStart, scaleEnd) {
   };
 }
 
-export default function TimelineDashboard({ lang, embedded = false, sourceReports = null, sourceLoading = false, sourceError = '', sharedFilters = null, refreshKey = 0, onOpenReport = null, onPrintWorkPeriod = null, printPeriodGuidance = false }) {
+export default function TimelineDashboard({ lang, embedded = false, sourceReports = null, sourceLoading = false, sourceError = '', sharedFilters = null, refreshKey = 0, routeAssignment = null, onOpenReport = null, onPrintWorkPeriod = null, printPeriodGuidance = false }) {
   const t = text[lang];
   const [reports, setReports] = useState([]);
   const [date, setDate] = useState('');
@@ -115,6 +146,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
   const [error, setError] = useState('');
   const [tooltip, setTooltip] = useState(null);
   const timelineRequestSequence = useRef(0);
+  const optimisticRouteAssignments = useRef(new Map());
   const lastRefreshKey = useRef(refreshKey);
   const initializedDate = useRef(false);
   const usesSourceReports = Array.isArray(sourceReports);
@@ -126,7 +158,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
   const timelineLoading = usesSourceReports ? sourceLoading : loading;
   const timelineError = usesSourceReports ? sourceError : error;
 
-  const loadReports = useCallback(async ({ silent = false } = {}) => {
+  const loadReports = useCallback(async ({ silent = false, networkOnly = false } = {}) => {
     if (usesSourceReports) return;
     const requestId = ++timelineRequestSequence.current;
     if (!silent) setLoading(true);
@@ -135,14 +167,16 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
       let targetStartDate = effectiveStartDate;
       let targetEndDate = effectiveEndDate;
       if (!embedded && !targetStartDate) {
-        const latest = await adminFetch('/api/reports?page=1&pageSize=1');
+        const latest = await adminFetch('/api/reports?page=1&pageSize=1', networkOnly ? { cacheOffline: false, cache: 'no-store' } : {});
         targetStartDate = latest.reports?.[0]?.workPeriodDate || reportDateKey(latest.reports?.[0]?.workPeriodStartTime || latest.reports?.[0]?.startTime) || reportDateKey(new Date().toISOString());
         targetEndDate = targetStartDate;
       }
       const requestFilters = embedded ? sharedQuery : { startDate: targetStartDate, endDate: targetEndDate };
-      const nextReports = await adminFetchAllReports(requestFilters);
+      const nextReports = networkOnly
+        ? await adminFetchAllReportsNetworkOnly(requestFilters)
+        : await adminFetchAllReports(requestFilters);
       if (requestId !== timelineRequestSequence.current) return;
-      setReports(nextReports);
+      setReports(applyOptimisticRouteAssignments(nextReports, optimisticRouteAssignments.current));
       if (!initializedDate.current && !embedded) {
         setDate(targetStartDate);
         initializedDate.current = true;
@@ -167,8 +201,17 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
   useEffect(() => {
     if (usesSourceReports || refreshKey === lastRefreshKey.current) return;
     lastRefreshKey.current = refreshKey;
-    void loadReports({ silent: true });
-  }, [loadReports, refreshKey, usesSourceReports]);
+    const affectedReportIds = new Set([
+      ...(Array.isArray(routeAssignment?.reportIds) ? routeAssignment.reportIds : []),
+      routeAssignment?.report?.id,
+    ].filter(Boolean).map(String));
+    if (affectedReportIds.size) {
+      const routeName = routeAssignment?.report?.routeName ?? null;
+      for (const reportId of affectedReportIds) optimisticRouteAssignments.current.set(reportId, routeName);
+      setReports(items => applyOptimisticRouteAssignments(items, optimisticRouteAssignments.current));
+    }
+    void loadReports({ silent: true, networkOnly: affectedReportIds.size > 0 });
+  }, [loadReports, refreshKey, routeAssignment, usesSourceReports]);
 
   useEffect(() => {
     if (!usesSourceReports || embedded) return;
@@ -192,7 +235,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
       const searchable = `${report.vehicleNumber || ''} ${report.driverName || ''} ${report.driverId || ''}`.toLowerCase();
       if (query && !searchable.includes(query)) continue;
       const key = `${report.workPeriodId || day}\u0000${actualDay}\u0000${report.vehicleNumber || '—'}`;
-      if (!grouped.has(key)) grouped.set(key, { date: day, actualDate: actualDay, dayOffset: calendarDayOffset(day, actualDay), periodStart: Date.parse(report.workPeriodStartTime || report.startTime) || 0, vehicle: report.vehicleNumber || '—', driver: report.driverName || '—', order: reportIndex, reports: [] });
+      if (!grouped.has(key)) grouped.set(key, { groupKey: key, date: day, actualDate: actualDay, dayOffset: calendarDayOffset(day, actualDay), periodStart: Date.parse(report.workPeriodStartTime || report.startTime) || 0, vehicle: report.vehicleNumber || '—', driver: report.driverName || '—', order: reportIndex, reports: [] });
       grouped.get(key).reports.push(report);
     }
     return [...grouped.values()].map(row => {
@@ -328,7 +371,7 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
         {printPeriodGuidance ? <div className="timeline-period-guidance" role="note"><strong>{lang === 'en' ? 'Choose a timeline row below' : 'เลือกแถวไทม์ไลน์ด้านล่าง'}</strong><span>{printPeriodGuidanceCopy[lang]}</span></div> : null}
         <div className={`timeline-scroll ${printPeriodGuidance ? 'print-period-guidance-active' : ''}`} id="timeline-results" tabIndex={0} aria-label={lang === 'en' ? 'Scrollable vehicle activity timeline' : 'ไทม์ไลน์กิจกรรมรถ เลื่อนได้'}>
           <div className="timeline-grid timeline-axis"><span>{showRowDate ? t.vehicleDriverDate : t.vehicleDriver}</span><div className="timeline-axis-scale-note">{t.rowScale}</div></div>
-          {timelinePage.items.map(row => { const rowAlerts = alertsByRow.get(row) || []; return <div className={`timeline-grid timeline-row ${rowAlerts.length ? 'timeline-row-has-alerts' : ''}`} key={`${row.date}-${row.actualDate}-${row.vehicle}`} role="group" aria-label={`${t.vehicle}: ${row.vehicle}. ${t.driver}: ${row.driver}. ${t.date}: ${formatReportDate(row.date, lang)}${row.dayOffset ? `, ${t.nextDay}` : ''}. ${rowAlerts.length} ${t.alert}.`}><div><strong>{row.vehicle}</strong><small>{row.driver}</small><small className="timeline-row-period">{workPeriodStartedCopy[lang]} {formatTimelineTime(row.periodStart, lang)}</small>{showRowDate || row.dayOffset ? <small className="timeline-row-date">{formatReportDate(row.actualDate, lang)}{row.dayOffset ? ` · +${row.dayOffset} ${lang === 'th' ? 'วัน' : row.dayOffset === 1 ? 'day' : 'days'}` : ''}</small> : null}{onPrintWorkPeriod ? <button className="timeline-print-button" type="button" onClick={() => onPrintWorkPeriod(row.reports[0])} disabled={!row.reports[0]?.vehicleNumber || !row.reports[0]?.workPeriodId}>{printWorkReportCopy[lang]}</button> : null}</div><div className="timeline-row-chart"><div className="timeline-row-scale" aria-hidden="true"><span>{formatTimelineTime(row.scaleStart, lang)}</span><span>{formatTimelineTime(row.scaleEnd, lang)}</span></div><div className="timeline-track timeline-speed-track" style={{ '--timeline-lane-count': row.laneCount }}>{row.segments.map(segment => <button
+          {timelinePage.items.map(row => { const rowAlerts = alertsByRow.get(row) || []; return <div className={`timeline-grid timeline-row ${rowAlerts.length ? 'timeline-row-has-alerts' : ''}`} key={row.groupKey} role="group" aria-label={`${t.vehicle}: ${row.vehicle}. ${t.driver}: ${row.driver}. ${t.date}: ${formatReportDate(row.date, lang)}${row.dayOffset ? `, ${t.nextDay}` : ''}. ${rowAlerts.length} ${t.alert}.`}><div><strong>{row.vehicle}</strong><small>{row.driver}</small><small className="timeline-row-period">{workPeriodStartedCopy[lang]} {formatTimelineTime(row.periodStart, lang)}</small>{showRowDate || row.dayOffset ? <small className="timeline-row-date">{formatReportDate(row.actualDate, lang)}{row.dayOffset ? ` · +${row.dayOffset} ${lang === 'th' ? 'วัน' : row.dayOffset === 1 ? 'day' : 'days'}` : ''}</small> : null}{onPrintWorkPeriod ? <button className="timeline-print-button" type="button" onClick={() => onPrintWorkPeriod(row.reports[0])} disabled={!row.reports[0]?.vehicleNumber || !row.reports[0]?.workPeriodId}>{printWorkReportCopy[lang]}</button> : null}</div><div className="timeline-row-chart"><div className="timeline-row-scale" aria-hidden="true"><span>{formatTimelineTime(row.scaleStart, lang)}</span><span>{formatTimelineTime(row.scaleEnd, lang)}</span></div><div className="timeline-track timeline-speed-track" style={{ '--timeline-lane-count': row.laneCount }}>{row.segments.map(segment => <button
             key={segment.id}
             type="button"
             className={`timeline-segment timeline-lane-${segment.lane || 0} ${segment.finishWork ? 'finish-work-marker' : ''} ${onOpenReport ? 'is-inspectable' : ''}`}

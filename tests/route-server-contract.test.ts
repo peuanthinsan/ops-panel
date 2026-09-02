@@ -278,3 +278,122 @@ test('a work-period route applies to existing jobs and is inherited until Finish
   assert.equal(nextPeriod.response.status, 201);
   assert.equal(nextPeriod.body.report.routeName, null);
 });
+
+test('work-period GPS is authorized, paginated, and bounded by the anchor report period', async t => {
+  const port = await freePort();
+  const fixtureDirectory = await mkdtemp(path.join(os.tmpdir(), 'songdee-work-period-gps-'));
+  const dataFile = path.join(fixtureDirectory, 'data.json');
+  const vehicleNumber = '69-8617';
+  const deviceId = 'work-period-gps-device';
+  const report = (id: string, mode: string, startTime: string, endTime: string) => ({
+    id,
+    vehicleNumber,
+    deviceId,
+    mode,
+    startTime,
+    endTime,
+    duration: '10:00',
+    gps: 'GPS matched',
+    status: 'Completed',
+  });
+  const reports = [
+    report('OPS-period-load', 'Load', '2026-08-31T03:11:39.000Z', '2026-08-31T03:21:39.000Z'),
+    report('OPS-period-unload', 'Unload', '2026-08-31T03:31:39.000Z', '2026-08-31T03:41:39.000Z'),
+    report('OPS-period-finish', 'Finish work', '2026-08-31T03:51:39.000Z', '2026-08-31T04:01:39.000Z'),
+    report('OPS-next-load', 'Load', '2026-08-31T04:11:39.000Z', '2026-08-31T04:21:39.000Z'),
+  ];
+  const sample = (id: string, jobId: string | null, capturedAt: string, latitude: number) => ({
+    id,
+    jobId,
+    vehicleNumber,
+    deviceId,
+    capturedAt,
+    deviceGps: { latitude, longitude: 100.5, accuracy: 4, speedMps: 3, headingDegrees: 90 },
+    fmsStatus: 'not_configured',
+    fmsMessage: 'FMS is not configured.',
+    pairStatus: 'device_only',
+    syncedAt: capturedAt,
+  });
+  await writeFile(dataFile, JSON.stringify({
+    reports,
+    gpsSyncSamples: [
+      sample('GPS-load-1', 'OPS-period-load', '2026-08-31T03:12:39.000Z', 13.71),
+      sample('GPS-load-2', 'OPS-period-load', '2026-08-31T03:13:39.000Z', 13.72),
+      sample('GPS-unlinked', null, '2026-08-31T03:25:39.000Z', 13.73),
+      sample('GPS-unload-1', 'OPS-period-unload', '2026-08-31T03:32:39.000Z', 13.74),
+      sample('GPS-finish-1', 'OPS-period-finish', '2026-08-31T03:52:39.000Z', 13.75),
+      sample('GPS-next-period', 'OPS-next-load', '2026-08-31T04:12:39.000Z', 13.76),
+      { ...sample('GPS-other-vehicle', null, '2026-08-31T03:26:39.000Z', 13.77), vehicleNumber: 'OTHER' },
+    ],
+  }));
+
+  const child = spawn(process.execPath, ['server.js'], {
+    cwd: path.resolve(import.meta.dirname, '..'),
+    env: { ...process.env, PORT: String(port), SONGDEE_DATA_FILE: dataFile },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  t.after(() => { if (child.exitCode == null) child.kill('SIGTERM'); });
+  const baseUrl = `http://127.0.0.1:${port}`;
+  await waitForHealth(baseUrl, child);
+
+  const unauthorized = await jsonRequest(baseUrl, '/api/admin/reports/OPS-period-unload/work-period-gps?page=1&pageSize=2');
+  assert.equal(unauthorized.response.status, 401);
+
+  const login = await jsonRequest(baseUrl, '/api/admin/login', {
+    method: 'POST', body: JSON.stringify({ password: 'songdee-setup' }),
+  });
+  const adminHeaders = { 'x-admin-token': String(login.body.token) };
+  const selectedJobOnly = await jsonRequest(
+    baseUrl,
+    '/api/admin/reports/OPS-period-unload/gps?page=1&pageSize=100',
+    { headers: adminHeaders },
+  );
+  assert.equal(selectedJobOnly.response.status, 200);
+  assert.deepEqual(selectedJobOnly.body.samples.map((item: { id: string }) => item.id), ['GPS-unload-1']);
+
+  const pages = [];
+  for (let page = 1; page <= 3; page += 1) {
+    const result = await jsonRequest(
+      baseUrl,
+      `/api/admin/reports/OPS-period-unload/work-period-gps?page=${page}&pageSize=2`,
+      { headers: adminHeaders },
+    );
+    assert.equal(result.response.status, 200);
+    pages.push(result.body);
+  }
+
+  assert.deepEqual(pages[0].workPeriod, {
+    workPeriodId: 'OPS-period-load',
+    vehicleNumber,
+    startTime: '2026-08-31T03:11:39.000Z',
+    endTime: '2026-08-31T04:01:39.000Z',
+    complete: true,
+    anchorReportId: 'OPS-period-unload',
+  });
+  assert.deepEqual(pages[0].reports.map((item: { id: string }) => item.id), [
+    'OPS-period-load',
+    'OPS-period-unload',
+    'OPS-period-finish',
+  ]);
+  assert.deepEqual(pages.map(page => page.pageInfo), [
+    { page: 1, pageSize: 2, total: 5, totalPages: 3, start: 1, end: 2, hasNextPage: true },
+    { page: 2, pageSize: 2, total: 5, totalPages: 3, start: 3, end: 4, hasNextPage: true },
+    { page: 3, pageSize: 2, total: 5, totalPages: 3, start: 5, end: 5, hasNextPage: false },
+  ]);
+  const periodSamples = pages.flatMap(page => page.samples);
+  assert.deepEqual(periodSamples.map((item: { id: string }) => item.id), [
+    'GPS-load-1',
+    'GPS-load-2',
+    'GPS-unlinked',
+    'GPS-unload-1',
+    'GPS-finish-1',
+  ]);
+  assert.deepEqual(periodSamples.map((item: { jobId: string | null }) => item.jobId), [
+    'OPS-period-load',
+    'OPS-period-load',
+    null,
+    'OPS-period-unload',
+    'OPS-period-finish',
+  ]);
+  assert.ok(periodSamples.every((item: { id: string }) => item.id !== 'GPS-next-period' && item.id !== 'GPS-other-vehicle'));
+});

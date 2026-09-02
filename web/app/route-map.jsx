@@ -9,16 +9,19 @@ import { MapTrifoldIcon } from '@phosphor-icons/react/dist/csr/MapTrifold';
 import { MinusIcon } from '@phosphor-icons/react/dist/csr/Minus';
 import { PlusIcon } from '@phosphor-icons/react/dist/csr/Plus';
 import { computeGoogleDrivingRoute, loadGoogleMaps } from '../lib/google-maps-loader';
+import { groupGpsSamplesByJob } from '../lib/route-map-data.mjs';
 
 const copy = {
   en: {
     loading: 'Loading Google Maps…',
-    unavailable: 'Google Maps is unavailable. Showing the saved route coordinates instead.',
+    unavailable: 'Google Maps is unavailable. Showing the saved route and GPS coordinates instead.',
     routeUnavailable: 'Google could not calculate the driving path. Showing the saved route points.',
     savedRoute: 'Saved route',
-    recordedGps: 'Recorded GPS',
-    deviation: 'Route deviation',
-    noCoordinates: 'Route coordinates are not available in this Google Maps link.',
+    workPeriod: 'Work period',
+    selectedJob: 'Selected job',
+    deviation: 'Selected-job deviation',
+    point: 'point', points: 'points', job: 'job', jobs: 'jobs', event: 'event', events: 'events',
+    noCoordinates: 'No saved-route or work-period GPS coordinates are available.',
     mapControls: 'Map controls',
     mapStyle: 'Map style',
     roadmap: 'Map',
@@ -28,18 +31,20 @@ const copy = {
     viewControls: 'Map view',
     zoomIn: 'Zoom in',
     zoomOut: 'Zoom out',
-    fitRoute: 'Fit entire route',
+    fitRoute: 'Fit work period',
     enterFullscreen: 'View map fullscreen',
     exitFullscreen: 'Exit fullscreen map',
   },
   th: {
     loading: 'กำลังโหลด Google Maps…',
-    unavailable: 'ไม่สามารถโหลด Google Maps ได้ กำลังแสดงพิกัดเส้นทางที่บันทึกไว้แทน',
+    unavailable: 'ไม่สามารถโหลด Google Maps ได้ กำลังแสดงพิกัดเส้นทางและ GPS แทน',
     routeUnavailable: 'Google ไม่สามารถคำนวณเส้นทางขับรถได้ กำลังแสดงจุดเส้นทางที่บันทึกไว้',
     savedRoute: 'เส้นทางที่บันทึก',
-    recordedGps: 'GPS ที่บันทึก',
-    deviation: 'จุดออกนอกเส้นทาง',
-    noCoordinates: 'ไม่พบพิกัดเส้นทางในลิงก์ Google Maps นี้',
+    workPeriod: 'รอบงาน',
+    selectedJob: 'งานที่เลือก',
+    deviation: 'จุดออกนอกเส้นทางของงานที่เลือก',
+    point: 'จุด', points: 'จุด', job: 'งาน', jobs: 'งาน', event: 'เหตุการณ์', events: 'เหตุการณ์',
+    noCoordinates: 'ไม่พบพิกัดเส้นทางที่บันทึกหรือพิกัด GPS ของรอบงาน',
     mapControls: 'ตัวควบคุมแผนที่',
     mapStyle: 'รูปแบบแผนที่',
     roadmap: 'แผนที่',
@@ -49,30 +54,21 @@ const copy = {
     viewControls: 'มุมมองแผนที่',
     zoomIn: 'ซูมเข้า',
     zoomOut: 'ซูมออก',
-    fitRoute: 'แสดงเส้นทางทั้งหมด',
+    fitRoute: 'แสดงรอบงานทั้งหมด',
     enterFullscreen: 'แสดงแผนที่เต็มหน้าจอ',
     exitFullscreen: 'ออกจากแผนที่เต็มหน้าจอ',
   },
 };
 
 function normalizePoint(point) {
-  const latitude = Number(point?.latitude ?? point?.lat);
-  const longitude = Number(point?.longitude ?? point?.lng);
+  const latitudeValue = point?.latitude ?? point?.lat;
+  const longitudeValue = point?.longitude ?? point?.lng;
+  if (latitudeValue == null || longitudeValue == null || String(latitudeValue).trim() === '' || String(longitudeValue).trim() === '') return null;
+  const latitude = Number(latitudeValue);
+  const longitude = Number(longitudeValue);
   return Number.isFinite(latitude) && Number.isFinite(longitude)
     ? { latitude, longitude }
     : null;
-}
-
-function gpsPoints(samples) {
-  return samples
-    .map(sample => ({ ...normalizePoint(sample?.deviceGps), capturedAt: new Date(sample?.capturedAt).getTime() }))
-    .filter(point => Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
-    .sort((a, b) => (Number.isFinite(a.capturedAt) ? a.capturedAt : 0) - (Number.isFinite(b.capturedAt) ? b.capturedAt : 0));
-}
-
-function samplePoints(points, maximum = 220) {
-  if (points.length <= maximum) return points;
-  return Array.from({ length: maximum }, (_, index) => points[Math.round(index * (points.length - 1) / (maximum - 1))]);
 }
 
 function project(point, bounds, width, height) {
@@ -81,47 +77,62 @@ function project(point, bounds, width, height) {
   return { x: 18 + x * 0.92, y: 18 + y * 0.92 };
 }
 
-function CoordinateFallback({ anchors, gps, deviations = [], label, message }) {
+function CoordinateFallback({ anchors, gpsGroups, deviations = [], label, message }) {
+  const gps = gpsGroups.flatMap(group => group.points);
   const points = [...anchors, ...gps, ...deviations];
-  if (anchors.length < 2 || points.length < 2) return <div className="route-map-empty">{label}: {message}</div>;
+  if (!points.length) return <div className="route-map-empty">{label}: {message}</div>;
   const bounds = {
     minLat: Math.min(...points.map(point => point.latitude)), maxLat: Math.max(...points.map(point => point.latitude)),
     minLon: Math.min(...points.map(point => point.longitude)), maxLon: Math.max(...points.map(point => point.longitude)),
   };
   const width = 520;
   const height = 260;
-  const line = anchors.map(point => { const projected = project(point, bounds, width, height); return `${projected.x},${projected.y}`; }).join(' ');
+  const routeLine = anchors.map(point => { const projected = project(point, bounds, width, height); return `${projected.x},${projected.y}`; }).join(' ');
   return <div className="route-map-fallback">
     <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
       <defs><pattern id="route-grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M 36 0 L 0 0 0 36" fill="none" stroke="#e6eaee" strokeWidth="1" /></pattern></defs>
       <rect width="100%" height="100%" fill="#f8fafb" /><rect width="100%" height="100%" fill="url(#route-grid)" />
-      <polyline points={line} fill="none" stroke="#e31b23" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" opacity=".22" />
-      <polyline points={line} fill="none" stroke="#e31b23" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-      {gps.map((point, index) => { const projected = project(point, bounds, width, height); return <circle key={index} cx={projected.x} cy={projected.y} r="4.5" fill="#087ca7" stroke="#fff" strokeWidth="2" />; })}
+      {anchors.length > 1 ? <>
+        <polyline points={routeLine} fill="none" stroke="#e31b23" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" opacity=".22" />
+        <polyline points={routeLine} fill="none" stroke="#e31b23" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      </> : null}
+      {gpsGroups.map(group => {
+        const line = group.points.map(point => { const projected = project(point, bounds, width, height); return `${projected.x},${projected.y}`; }).join(' ');
+        const color = group.selected ? '#087CA7' : '#73838D';
+        return <g key={group.jobId}>
+          {group.linked && group.points.length > 1 ? <polyline points={line} fill="none" stroke={color} strokeWidth={group.selected ? 5 : 2.5} strokeLinecap="round" strokeLinejoin="round" opacity={group.selected ? 1 : 0.48} /> : null}
+          {group.points.map((point, index) => { const projected = project(point, bounds, width, height); return <circle key={`${group.jobId}-${point.sampleId || index}`} cx={projected.x} cy={projected.y} r={group.selected ? 6 : 3.5} fill={color} fillOpacity={group.selected ? 1 : 0.7} stroke="#fff" strokeWidth={group.selected ? 3 : 1.5} />; })}
+        </g>;
+      })}
       {deviations.map((point, index) => { const projected = project(point, bounds, width, height); return <circle key={`deviation-${index}`} cx={projected.x} cy={projected.y} r="7" fill="#B92B3A" stroke="#fff" strokeWidth="2.5" />; })}
     </svg>
   </div>;
 }
 
-function markerIcon(google, color, scale = 5) {
+function markerIcon(google, color, scale = 5, fillOpacity = 1, strokeWeight = 2) {
   return {
     path: google.maps.SymbolPath.CIRCLE,
     scale,
     fillColor: color,
-    fillOpacity: 1,
+    fillOpacity,
     strokeColor: '#fff',
-    strokeWeight: 2,
+    strokeWeight,
   };
 }
 
-export default function RouteMap({ anchors = [], samples = [], deviationEvents = [], label = 'Route map', lang = 'en' }) {
+function countLabel(count, singular, plural) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+export default function RouteMap({ anchors = [], samples = [], deviationEvents = [], selectedJobId = '', workPeriodJobCount, label = 'Route map', lang = 'en' }) {
   const t = copy[lang] || copy.en;
   const bodyRef = useRef(null);
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const mapBoundsRef = useRef(null);
   const routePoints = useMemo(() => anchors.map(normalizePoint).filter(Boolean), [anchors]);
-  const recordedPoints = useMemo(() => gpsPoints(samples), [samples]);
+  const gpsData = useMemo(() => groupGpsSamplesByJob(samples, selectedJobId), [samples, selectedJobId]);
+  const recordedPoints = gpsData.points;
   const deviationPoints = useMemo(() => deviationEvents.map(normalizePoint).filter(Boolean), [deviationEvents]);
   const [state, setState] = useState('loading');
   const [mapType, setMapType] = useState('roadmap');
@@ -150,7 +161,7 @@ export default function RouteMap({ anchors = [], samples = [], deviationEvents =
   }, []);
 
   useEffect(() => {
-    if (routePoints.length < 2) { setState('empty'); return undefined; }
+    if (!routePoints.length && !recordedPoints.length && !deviationPoints.length) { setState('empty'); return undefined; }
     let cancelled = false;
     let map = null;
     const overlays = [];
@@ -159,8 +170,9 @@ export default function RouteMap({ anchors = [], samples = [], deviationEvents =
       try {
         const google = await loadGoogleMaps(lang);
         if (cancelled || !containerRef.current) return;
+        const initialPoint = routePoints[0] || recordedPoints[0] || deviationPoints[0];
         map = new google.maps.Map(containerRef.current, {
-          center: { lat: routePoints[0].latitude, lng: routePoints[0].longitude },
+          center: { lat: initialPoint.latitude, lng: initialPoint.longitude },
           zoom: 7,
           mapTypeId: google.maps.MapTypeId.ROADMAP,
           disableDefaultUI: true,
@@ -177,42 +189,73 @@ export default function RouteMap({ anchors = [], samples = [], deviationEvents =
 
         let displayedRoute = routePoints;
         let routeState = 'ready';
-        try {
-          const computed = await computeGoogleDrivingRoute(routePoints, lang);
-          if (cancelled) return;
-          displayedRoute = computed.path.map(normalizePoint).filter(Boolean);
-        } catch (error) {
-          console.error('[RouteMap] Google driving route failed:', error);
-          routeState = 'route-unavailable';
+        if (routePoints.length > 1) {
+          try {
+            const computed = await computeGoogleDrivingRoute(routePoints, lang);
+            if (cancelled) return;
+            displayedRoute = computed.path.map(normalizePoint).filter(Boolean);
+          } catch (error) {
+            console.error('[RouteMap] Google driving route failed:', error);
+            routeState = 'route-unavailable';
+          }
         }
 
         const routePath = displayedRoute.map(point => ({ lat: point.latitude, lng: point.longitude }));
-        const gpsPath = recordedPoints.map(point => ({ lat: point.latitude, lng: point.longitude }));
-        overlays.push(new google.maps.Polyline({
+        if (routePath.length > 1) overlays.push(new google.maps.Polyline({
           map, path: routePath, strokeColor: '#E31B23', strokeOpacity: 0.95, strokeWeight: 5, zIndex: 20,
         }));
-        if (gpsPath.length > 1) overlays.push(new google.maps.Polyline({
-          map, path: gpsPath, strokeColor: '#087CA7', strokeOpacity: 0.9, strokeWeight: 4, zIndex: 30,
-        }));
+        if (routePath.length) {
+          const routePointLayer = new google.maps.Data({ map });
+          routePointLayer.add(new google.maps.Data.Feature({ geometry: new google.maps.Data.Point(routePath[0]), properties: { color: '#14865B', scale: 7 } }));
+          if (routePath.length > 1) routePointLayer.add(new google.maps.Data.Feature({ geometry: new google.maps.Data.Point(routePath.at(-1)), properties: { color: '#7A1424', scale: 7 } }));
+          routePointLayer.setStyle(feature => ({
+            clickable: false,
+            icon: markerIcon(google, feature.getProperty('color'), feature.getProperty('scale')),
+            zIndex: 30,
+          }));
+          overlays.push(routePointLayer);
+        }
 
-        const pointLayer = new google.maps.Data({ map });
-        pointLayer.add(new google.maps.Data.Feature({ geometry: new google.maps.Data.Point(routePath[0]), properties: { color: '#14865B', scale: 7 } }));
-        pointLayer.add(new google.maps.Data.Feature({ geometry: new google.maps.Data.Point(routePath.at(-1)), properties: { color: '#7A1424', scale: 7 } }));
-        for (const point of samplePoints(gpsPath)) {
-          pointLayer.add(new google.maps.Data.Feature({ geometry: new google.maps.Data.Point(point), properties: { color: '#087CA7', scale: 5 } }));
+        for (const group of gpsData.groups) {
+          const gpsPath = group.points.map(point => ({ lat: point.latitude, lng: point.longitude }));
+          const color = group.selected ? '#087CA7' : '#73838D';
+          if (group.linked && gpsPath.length > 1) overlays.push(new google.maps.Polyline({
+            map,
+            path: gpsPath,
+            strokeColor: color,
+            strokeOpacity: group.selected ? 1 : 0.48,
+            strokeWeight: group.selected ? 6 : 3,
+            zIndex: group.selected ? 45 : 35,
+          }));
+          const pointLayer = new google.maps.Data({ map });
+          for (const point of gpsPath) {
+            pointLayer.add(new google.maps.Data.Feature({ geometry: new google.maps.Data.Point(point), properties: {
+              color, scale: group.selected ? 6 : 4, fillOpacity: group.selected ? 1 : 0.68, strokeWeight: group.selected ? 3 : 1.5,
+            } }));
+          }
+          pointLayer.setStyle(feature => ({
+            clickable: false,
+            icon: markerIcon(google, feature.getProperty('color'), feature.getProperty('scale'), feature.getProperty('fillOpacity'), feature.getProperty('strokeWeight')),
+            zIndex: group.selected ? 60 : 40,
+          }));
+          overlays.push(pointLayer);
         }
-        for (const point of deviationPoints) {
-          pointLayer.add(new google.maps.Data.Feature({ geometry: new google.maps.Data.Point({ lat: point.latitude, lng: point.longitude }), properties: { color: '#B92B3A', scale: 9 } }));
+
+        if (deviationPoints.length) {
+          const deviationLayer = new google.maps.Data({ map });
+          for (const point of deviationPoints) {
+            deviationLayer.add(new google.maps.Data.Feature({ geometry: new google.maps.Data.Point({ lat: point.latitude, lng: point.longitude }), properties: { color: '#B92B3A', scale: 9 } }));
+          }
+          deviationLayer.setStyle(feature => ({
+            clickable: false,
+            icon: markerIcon(google, feature.getProperty('color'), feature.getProperty('scale'), 1, 3),
+            zIndex: 70,
+          }));
+          overlays.push(deviationLayer);
         }
-        pointLayer.setStyle(feature => ({
-          clickable: false,
-          icon: markerIcon(google, feature.getProperty('color'), feature.getProperty('scale')),
-          zIndex: 50,
-        }));
-        overlays.push(pointLayer);
 
         const bounds = new google.maps.LatLngBounds();
-        for (const point of [...routePath, ...gpsPath, ...deviationPoints.map(point => ({ lat: point.latitude, lng: point.longitude }))]) bounds.extend(point);
+        for (const point of [...routePath, ...recordedPoints.map(point => ({ lat: point.latitude, lng: point.longitude })), ...deviationPoints.map(point => ({ lat: point.latitude, lng: point.longitude }))]) bounds.extend(point);
         mapBoundsRef.current = bounds;
         map.fitBounds(bounds, 34);
         google.maps.event.addListenerOnce(map, 'idle', () => {
@@ -237,7 +280,7 @@ export default function RouteMap({ anchors = [], samples = [], deviationEvents =
       if (mapRef.current === map) mapRef.current = null;
       mapBoundsRef.current = null;
     };
-  }, [deviationPoints, lang, recordedPoints, routePoints]);
+  }, [deviationPoints, gpsData.groups, lang, recordedPoints, routePoints]);
 
   function changeMapType(nextType) {
     const map = mapRef.current;
@@ -272,9 +315,10 @@ export default function RouteMap({ anchors = [], samples = [], deviationEvents =
   if (state === 'empty') return <div className="route-map-empty">{label}: {t.noCoordinates}</div>;
   const fallback = state === 'unavailable';
   const controlsDisabled = state === 'loading';
+  const jobCount = Math.max(0, Number.isFinite(Number(workPeriodJobCount)) ? Number(workPeriodJobCount) : gpsData.jobCount);
   return <div className="route-map" role="region" aria-label={label}>
     <div ref={bodyRef} className={`route-map-body${isFullscreen ? ' is-fullscreen' : ''}`}>
-      {!fallback ? <div ref={containerRef} className="route-map-canvas" /> : <CoordinateFallback anchors={routePoints} gps={recordedPoints} deviations={deviationPoints} label={label} message={t.noCoordinates} />}
+      {!fallback ? <div ref={containerRef} className="route-map-canvas" /> : <CoordinateFallback anchors={routePoints} gpsGroups={gpsData.groups} deviations={deviationPoints} label={label} message={t.noCoordinates} />}
       {!fallback ? <div className="route-map-controls" role="group" aria-label={t.mapControls}>
         <div className="route-map-type-control" role="group" aria-label={t.mapStyle}>
           <button type="button" className={`route-map-control-button route-map-type-button${mapType === 'roadmap' ? ' is-active' : ''}`} aria-label={t.showRoadmap} aria-pressed={mapType === 'roadmap'} title={t.showRoadmap} disabled={controlsDisabled} onClick={() => changeMapType('roadmap')}>
@@ -299,6 +343,11 @@ export default function RouteMap({ anchors = [], samples = [], deviationEvents =
       {state === 'route-unavailable' ? <div className="route-map-notice warning" role="status">{t.routeUnavailable}</div> : null}
       {fallback ? <div className="route-map-notice warning" role="status">{t.unavailable}</div> : null}
     </div>
-    <div className="route-map-legend"><span><i className="route-legend-line" />{t.savedRoute}</span><span><i className="gps-legend-dot" />{t.recordedGps}</span>{deviationPoints.length ? <span><i className="route-deviation-dot" />{t.deviation}</span> : null}</div>
+    <div className="route-map-legend">
+      {routePoints.length ? <span><i className="route-legend-line" />{t.savedRoute} · {countLabel(routePoints.length, t.point, t.points)}</span> : null}
+      {recordedPoints.length ? <span><i className="work-period-legend-line" />{t.workPeriod} · {countLabel(jobCount, t.job, t.jobs)} · {countLabel(gpsData.pointCount, t.point, t.points)}</span> : null}
+      {selectedJobId ? <span><i className="selected-job-legend-dot" />{t.selectedJob} · {countLabel(gpsData.selectedPointCount, t.point, t.points)}</span> : null}
+      {deviationPoints.length ? <span><i className="route-deviation-dot" />{t.deviation} · {countLabel(deviationPoints.length, t.event, t.events)}</span> : null}
+    </div>
   </div>;
 }

@@ -117,6 +117,7 @@ test('the dashboard route assignment selector searches and pages a bounded serve
 test('the GPS drawer hides route editing by default and propagates scoped assignments across the dashboard', async () => {
   const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
   const dashboard = await readFile(fileURLToPath(new NodeUrl('../web/app/report-dashboard.jsx', import.meta.url)), 'utf8');
+  const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
   assert.match(drawer, /useState\('job'\)/);
   assert.match(drawer, /useState\(false\);\n\s+const \[draftRouteName/);
   assert.match(drawer, /aria-expanded=\{routeEditorOpen\} aria-controls="route-assignment-editor"/);
@@ -138,8 +139,20 @@ test('the GPS drawer hides route editing by default and propagates scoped assign
   assert.match(routeAssignmentHandler, /assignment\?\.reportIds/);
   assert.match(routeAssignmentHandler, /setReports\(items => items\.map\(/);
   assert.match(routeAssignmentHandler, /setSelectedReport\(current =>/);
+  assert.match(routeAssignmentHandler, /optimisticRouteAssignments\.current\.set\(String\(reportId\), routeName\)/);
+  assert.match(routeAssignmentHandler, /setTimelineRouteAssignment\(assignment \|\| null\)/);
   assert.match(routeAssignmentHandler, /setTimelineRefreshKey\(value => value \+ 1\)/);
-  assert.match(routeAssignmentHandler, /void loadReports\(\{ silent: true \}\)/);
+  assert.match(routeAssignmentHandler, /void loadReports\(\{ silent: true, networkOnly: true \}\)/);
+  assert.match(dashboard, /const optimisticRouteAssignments = useRef\(new Map\(\)\)/);
+  assert.match(dashboard, /applyOptimisticRouteAssignments\([\s\S]*optimisticRouteAssignments\.current/);
+  assert.match(dashboard, /networkOnly \? \{ cacheOffline: false, cache: 'no-store' \} : \{\}/);
+  assert.match(dashboard, /routeAssignment=\{timelineRouteAssignment\}/);
+  assert.match(timeline, /routeAssignment = null/);
+  assert.match(timeline, /const optimisticRouteAssignments = useRef\(new Map\(\)\)/);
+  assert.match(timeline, /adminFetchAllReportsNetworkOnly\(requestFilters\)/);
+  assert.match(timeline, /\{ cacheOffline: false, cache: 'no-store' \}/);
+  assert.match(timeline, /setReports\(items => applyOptimisticRouteAssignments\(items, optimisticRouteAssignments\.current\)\)/);
+  assert.match(timeline, /void loadReports\(\{ silent: true, networkOnly: affectedReportIds\.size > 0 \}\)/);
   assert.match(dashboard, /onRouteAssigned=\{handleRouteAssigned\}/);
   assert.doesNotMatch(dashboard, /onRouteAssigned=\{\(\) => void loadReports\(\{ silent: true \}\)\}/);
   const reportResetStart = drawer.indexOf('useEffect(() => {\n    setPage(1);');
@@ -149,6 +162,13 @@ test('the GPS drawer hides route editing by default and propagates scoped assign
   assert.doesNotMatch(reportResetEffect, /setDraftRouteName|report\.routeName/,
     'propagating the assigned route should not clear the success notice for the current report');
   assert.match(drawer, /setDraftRouteName\(report\.routeName \|\| ''\);\n  \}, \[report\.routeName\]\);/);
+});
+
+test('timeline rows use the complete work-period grouping key', async () => {
+  const timeline = await readFile(fileURLToPath(new NodeUrl('../web/app/timeline-dashboard.jsx', import.meta.url)), 'utf8');
+  assert.match(timeline, /grouped\.set\(key, \{ groupKey: key,/);
+  assert.match(timeline, /key=\{row\.groupKey\}/);
+  assert.doesNotMatch(timeline, /key=\{`\$\{row\.date\}-\$\{row\.actualDate\}-\$\{row\.vehicle\}`\}/);
 });
 
 test('the GPS drawer keeps counts and retry feedback semantic when detail refreshes fail', async () => {
@@ -183,6 +203,37 @@ test('confirmed route deviations expose an exact GPS event in the map, drawer, a
   assert.match(timeline, /routeDeviation: speedSeries\.routeDeviationByReportId\[report\.id\] \|\| null/);
 });
 
+test('the GPS drawer maps the complete work period and refreshes it after a lookup retry', async () => {
+  const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
+  assert.match(drawer, /adminFetchWorkPeriodGpsData/);
+  assert.match(drawer, /adminFetchWorkPeriodGpsData\(report\.id, \{ signal: controller\.signal \}\)/);
+  assert.match(drawer, /setWorkPeriodGpsRefreshKey\(value => value \+ 1\)/);
+  assert.match(drawer, /workPeriodGps \? workPeriodSamples : samples/);
+  assert.match(drawer, /workPeriodGpsLoading \? t\.periodMapLoading : workPeriodGpsError \|\| periodMapSummary/);
+  assert.match(drawer, /anchors=\{activeDetail\?\.route\?\.anchors \|\| \[\]\}/);
+  assert.match(drawer, /selectedJobId=\{selectedJobId\}/);
+  assert.match(drawer, /workPeriodJobCount=\{mapJobCount\}/);
+  assert.doesNotMatch(drawer, /activeDetail\?\.route \? <section className="gps-route-section"/);
+});
+
+test('the work-period map separates job paths, highlights the selected job, and fits every point', async () => {
+  const map = await readFile(fileURLToPath(new NodeUrl('../web/app/route-map.jsx', import.meta.url)), 'utf8');
+  assert.match(map, /groupGpsSamplesByJob\(samples, selectedJobId\)/);
+  assert.match(map, /if \(!routePoints\.length && !recordedPoints\.length && !deviationPoints\.length\)/);
+  assert.doesNotMatch(map, /if \(routePoints\.length < 2\)/);
+  assert.match(map, /for \(const group of gpsData\.groups\)/);
+  assert.match(map, /const gpsPath = group\.points\.map/);
+  assert.match(map, /if \(group\.linked && gpsPath\.length > 1\)/);
+  assert.match(map, /strokeWeight: group\.selected \? 6 : 3/);
+  assert.match(map, /scale: group\.selected \? 6 : 4/);
+  assert.match(map, /strokeWeight: group\.selected \? 3 : 1\.5/);
+  assert.match(map, /recordedPoints\.map\(point => \(\{ lat: point\.latitude, lng: point\.longitude \}\)\)/);
+  assert.match(map, /t\.savedRoute/);
+  assert.match(map, /t\.workPeriod/);
+  assert.match(map, /t\.selectedJob/);
+  assert.match(map, /t\.deviation/);
+});
+
 test('the GPS drawer and route map retain balanced proportions across responsive widths', async () => {
   const styles = await readFile(fileURLToPath(new NodeUrl('../web/app/styles.css', import.meta.url)), 'utf8');
 
@@ -197,6 +248,8 @@ test('the GPS drawer and route map retain balanced proportions across responsive
   assertDeclaration(styles, '.gps-route-missing', 'margin', '0');
   assertDeclaration(styles, '.gps-route-missing', 'padding', '18px');
   assertDeclaration(styles, '.route-map', 'flex', '1');
+  assertDeclaration(styles, '.route-map-legend', 'flex-wrap', 'wrap');
+  assertDeclaration(styles, '.gps-work-period-summary', 'display', 'flex');
   assertDeclaration(styles, '.route-map-control-button', 'height', '34px');
   assertDeclaration(styles, '.route-map-icon-button', 'width', '34px');
   assertDeclaration(styles, '.gps-samples-disclosure', 'min-height', '46px');

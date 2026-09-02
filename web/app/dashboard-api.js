@@ -116,3 +116,27 @@ export async function adminFetchReportGpsData(reportId, { signal } = {}) {
 export async function adminFetchReportGpsSamples(reportId, options = {}) {
   return (await adminFetchReportGpsData(reportId, options)).samples;
 }
+
+export async function adminFetchWorkPeriodGpsData(reportId, { signal } = {}) {
+  const samples = [];
+  const pageSize = 200;
+  let page = 1;
+  let totalPages = 1;
+  let workPeriod = null;
+  let reports = [];
+  do {
+    const result = await adminFetch(`/api/admin/reports/${encodeURIComponent(reportId)}/work-period-gps?page=${page}&pageSize=${pageSize}`, { signal });
+    if (page === 1) {
+      workPeriod = result.workPeriod || null;
+      reports = Array.isArray(result.reports) ? result.reports : [];
+    }
+    samples.push(...(Array.isArray(result.samples) ? result.samples : []));
+    totalPages = Math.max(1, Number(result.pageInfo?.totalPages || 1));
+    page += 1;
+  } while (page <= totalPages);
+  return { workPeriod, reports, samples };
+}
+
+export async function adminFetchWorkPeriodGpsSamples(reportId, options = {}) {
+  return (await adminFetchWorkPeriodGpsData(reportId, options)).samples;
+}

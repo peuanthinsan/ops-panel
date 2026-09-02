@@ -91,6 +91,74 @@ test('production reconciles two external GPS sources by time and exposes an auth
   assert.match(source, /LEFT JOIN job_gps_summaries gps_summary ON gps_summary\.job_id = report\.id/);
 });
 
+test('production exposes an authorized anchor-derived work-period GPS contract and a paging client', async () => {
+  const source = await readFile(fileURLToPath(new NodeUrl('../web/lib/server/api.mjs', import.meta.url)), 'utf8');
+  const client = await readFile(fileURLToPath(new NodeUrl('../web/app/dashboard-api.js', import.meta.url)), 'utf8');
+  assert.match(source, /async function getWorkPeriodGpsDetail\(request, reportId\)/);
+  assert.match(source, /route\.match\(\/\^admin\\\/reports\\\/\(\[\^\/\]\+\)\\\/work-period-gps\$\//);
+  assert.match(source, /workPeriodGpsMatch[\s\S]*await requireAdmin\(request\)[\s\S]*getWorkPeriodGpsDetail\(request, reportId\)/);
+  assert.match(source, /const period = await workPeriodForReport\(reportId\)/);
+  assert.match(source, /sample\.job_id = ANY\(\$1::text\[\]\)/);
+  assert.match(source, /sample\.job_id IS NULL[\s\S]*lower\(sample\.vehicle_number\) = lower\(\$2\)[\s\S]*sample\.captured_at >= \$3::timestamptz[\s\S]*sample\.captured_at <= \$4::timestamptz/);
+  assert.match(source, /sample\.job_id AS "jobId"[\s\S]*ORDER BY sample\.captured_at ASC, sample\.id ASC/);
+  assert.match(source, /workPeriod:[\s\S]*workPeriodId: period\.workPeriodId[\s\S]*reports: periodReports[\s\S]*samples,[\s\S]*pageInfo:/);
+  assert.match(client, /export async function adminFetchWorkPeriodGpsData\(reportId/);
+  assert.match(client, /\/work-period-gps\?page=\$\{page\}&pageSize=\$\{pageSize\}/);
+  assert.match(client, /do \{[\s\S]*samples\.push[\s\S]*\} while \(page <= totalPages\)/);
+});
+
+test('the work-period GPS client exhausts every server page without losing metadata or job IDs', async () => {
+  const previous = {
+    fetch: globalThis.fetch,
+    navigator: globalThis.navigator,
+    window: globalThis.window,
+    CustomEvent: globalThis.CustomEvent,
+  };
+  const requestedUrls: string[] = [];
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } });
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: { dispatchEvent() {}, setTimeout, clearTimeout },
+  });
+  globalThis.CustomEvent = class CustomEvent {
+    type: string;
+    detail: unknown;
+    constructor(type: string, init?: { detail?: unknown }) { this.type = type; this.detail = init?.detail; }
+  } as typeof globalThis.CustomEvent;
+  globalThis.fetch = async (url) => {
+    requestedUrls.push(String(url));
+    const page = new URL(String(url), 'http://localhost').searchParams.get('page');
+    return Response.json({
+      workPeriod: { workPeriodId: 'OPS-period-load', anchorReportId: 'OPS-period-unload' },
+      reports: [{ id: 'OPS-period-load' }, { id: 'OPS-period-unload' }],
+      samples: page === '1'
+        ? [{ id: 'GPS-1', jobId: 'OPS-period-load' }]
+        : [{ id: 'GPS-2', jobId: 'OPS-period-unload' }],
+      pageInfo: { page: Number(page), totalPages: 2 },
+    });
+  };
+
+  try {
+    const api = await import(`../web/app/dashboard-api.js?work-period-gps-test=${Date.now()}`);
+    const result = await api.adminFetchWorkPeriodGpsData('OPS-period-unload');
+    assert.deepEqual(requestedUrls, [
+      '/api/admin/reports/OPS-period-unload/work-period-gps?page=1&pageSize=200',
+      '/api/admin/reports/OPS-period-unload/work-period-gps?page=2&pageSize=200',
+    ]);
+    assert.deepEqual(result.workPeriod, { workPeriodId: 'OPS-period-load', anchorReportId: 'OPS-period-unload' });
+    assert.deepEqual(result.reports.map((report: { id: string }) => report.id), ['OPS-period-load', 'OPS-period-unload']);
+    assert.deepEqual(result.samples.map((sample: { id: string; jobId: string }) => [sample.id, sample.jobId]), [
+      ['GPS-1', 'OPS-period-load'],
+      ['GPS-2', 'OPS-period-unload'],
+    ]);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete globalThis[key as keyof typeof globalThis];
+      else Object.defineProperty(globalThis, key, { configurable: true, value });
+    }
+  }
+});
+
 test('production driver lookup rejects stale vehicle correlation before calling the adapter', async () => {
   const source = await readFile(fileURLToPath(new NodeUrl('../web/lib/server/api.mjs', import.meta.url)), 'utf8');
   assert.match(source, /requestedVehicleNumber = String\(query\.get\('vehicleNumber'\)/);
@@ -147,6 +215,21 @@ test('production stores work-period route assignments and inherits them until Fi
   assert.match(source, /async function assignRouteToWorkPeriod\(reportId, routeName\)/);
   assert.match(source, /scope === 'work_period'/);
   assert.match(source, /async function inheritedWorkPeriodRouteName\(vehicleNumber, startTime\)/);
+});
+
+test('production route inheritance excludes only the previous Finish row at an inclusive period boundary', async () => {
+  const source = await readFile(fileURLToPath(new NodeUrl('../web/lib/server/api.mjs', import.meta.url)), 'utf8');
+  const inheritanceSource = source.match(
+    /async function inheritedWorkPeriodRouteName\(vehicleNumber, startTime\) \{[\s\S]*?\n\}\n\nasync function assignRouteToWorkPeriod/,
+  )?.[0];
+  assert.ok(inheritanceSource, 'expected to find the production route-inheritance query');
+  assert.match(inheritanceSource, /SELECT id AS finish_report_id, end_time AS finished_at/);
+  assert.match(inheritanceSource, /end_time <= \$2::timestamptz/);
+  assert.match(inheritanceSource, /report\.start_time >= COALESCE\(\(SELECT finished_at FROM previous_finish\), '-infinity'::timestamptz\)/);
+  assert.match(inheritanceSource, /report\.id IS DISTINCT FROM \(SELECT finish_report_id FROM previous_finish\)/);
+  assert.match(inheritanceSource, /report\.start_time <= \$2::timestamptz/);
+  assert.doesNotMatch(inheritanceSource, /report\.start_time > COALESCE/);
+  assert.doesNotMatch(inheritanceSource, /report\.mode\s*(?:<>|!=)\s*'Finish work'/);
 });
 
 test('production binding history uses an exclusive unbound boundary', async () => {

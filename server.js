@@ -314,21 +314,10 @@ async function reconcileExternalGpsForJob(job, targetAt) {
     toleranceMs,
   };
 }
-function jobGpsDetail(report, searchParams) {
-  const pageSize = Math.min(200, Math.max(1, Math.trunc(Number(searchParams.get('pageSize'))) || 100));
-  const page = Math.max(1, Math.trunc(Number(searchParams.get('page'))) || 1);
-  const summaryReport = reportWithGpsSummary(report);
-  const samples = gpsSyncSamples.filter(sample => sample.jobId === report.id || (
-    !sample.jobId
-    && sample.vehicleNumber === report.vehicleNumber
-    && sample.deviceId === report.deviceId
-    && Date.parse(sample.capturedAt) >= Date.parse(report.startTime)
-    && Date.parse(sample.capturedAt) <= Date.parse(report.endTime)
-  )).sort((left, right) => Date.parse(right.capturedAt) - Date.parse(left.capturedAt));
-  const offset = (page - 1) * pageSize;
-  const pageSamples = samples.slice(offset, offset + pageSize).map(sample => ({
+function gpsSampleResponse(sample, fallbackJobId = null) {
+  return {
     id: sample.id,
-    jobId: sample.jobId || report.id,
+    jobId: sample.jobId || fallbackJobId,
     capturedAt: sample.capturedAt,
     deviceGps: sample.deviceGps,
     fmsGps: sample.fmsStatus === 'received' ? sample.fmsNormalized || null : null,
@@ -338,7 +327,26 @@ function jobGpsDetail(report, searchParams) {
     timeDeltaMs: sample.timeDeltaMs ?? null,
     pairStatus: sample.pairStatus || (sample.fmsStatus === 'received' ? 'fms_received' : sample.fmsStatus === 'not_configured' ? 'device_only' : 'fms_delayed'),
     syncedAt: sample.syncedAt,
-  }));
+  };
+}
+
+function gpsPage(searchParams) {
+  const pageSize = Math.min(200, Math.max(1, Math.trunc(Number(searchParams.get('pageSize'))) || 100));
+  const page = Math.max(1, Math.trunc(Number(searchParams.get('page'))) || 1);
+  return { page, pageSize, offset: (page - 1) * pageSize };
+}
+
+function jobGpsDetail(report, searchParams) {
+  const { page, pageSize, offset } = gpsPage(searchParams);
+  const summaryReport = reportWithGpsSummary(report);
+  const samples = gpsSyncSamples.filter(sample => sample.jobId === report.id || (
+    !sample.jobId
+    && sample.vehicleNumber === report.vehicleNumber
+    && sample.deviceId === report.deviceId
+    && Date.parse(sample.capturedAt) >= Date.parse(report.startTime)
+    && Date.parse(sample.capturedAt) <= Date.parse(report.endTime)
+  )).sort((left, right) => Date.parse(right.capturedAt) - Date.parse(left.capturedAt));
+  const pageSamples = samples.slice(offset, offset + pageSize).map(sample => gpsSampleResponse(sample, report.id));
   const route = report.routeName
     ? jobRoutes.find(item => item.routeName.toLowerCase() === report.routeName.toLowerCase()) || null
     : null;
@@ -364,6 +372,49 @@ function jobGpsDetail(report, searchParams) {
       totalPages: Math.max(1, Math.ceil(samples.length / pageSize)),
       start: pageSamples.length ? offset + 1 : 0,
       end: offset + pageSamples.length,
+    },
+  };
+}
+
+function workPeriodGpsDetail(reportId, searchParams) {
+  const annotated = annotateWorkPeriods(reports);
+  const anchorReport = annotated.find(report => report.id === reportId);
+  if (!anchorReport) return null;
+  const periodReports = annotated
+    .filter(report => report.workPeriodId === anchorReport.workPeriodId && sameVehicle(report.vehicleNumber, anchorReport.vehicleNumber))
+    .sort((left, right) => Date.parse(left.startTime) - Date.parse(right.startTime) || String(left.id).localeCompare(String(right.id)));
+  const periodReportIds = new Set(periodReports.map(report => report.id));
+  const periodStartMs = Date.parse(anchorReport.workPeriodStartTime || anchorReport.startTime);
+  const periodEndMs = anchorReport.workPeriodEndTime ? Date.parse(anchorReport.workPeriodEndTime) : Number.POSITIVE_INFINITY;
+  const periodSamples = gpsSyncSamples.filter(sample => {
+    if (sample.jobId) return periodReportIds.has(sample.jobId);
+    const capturedAtMs = Date.parse(sample.capturedAt);
+    return sameVehicle(sample.vehicleNumber, anchorReport.vehicleNumber)
+      && Number.isFinite(capturedAtMs)
+      && capturedAtMs >= periodStartMs
+      && capturedAtMs <= periodEndMs;
+  }).sort((left, right) => Date.parse(left.capturedAt) - Date.parse(right.capturedAt) || String(left.id).localeCompare(String(right.id)));
+  const { page, pageSize, offset } = gpsPage(searchParams);
+  const pageSamples = periodSamples.slice(offset, offset + pageSize).map(sample => gpsSampleResponse(sample));
+  return {
+    workPeriod: {
+      workPeriodId: anchorReport.workPeriodId,
+      vehicleNumber: anchorReport.vehicleNumber,
+      startTime: anchorReport.workPeriodStartTime || anchorReport.startTime,
+      endTime: anchorReport.workPeriodEndTime || null,
+      complete: Boolean(anchorReport.workPeriodComplete),
+      anchorReportId: reportId,
+    },
+    reports: periodReports,
+    samples: pageSamples,
+    pageInfo: {
+      page,
+      pageSize,
+      total: periodSamples.length,
+      totalPages: Math.max(1, Math.ceil(periodSamples.length / pageSize)),
+      start: pageSamples.length ? offset + 1 : 0,
+      end: offset + pageSamples.length,
+      hasNextPage: offset + pageSamples.length < periodSamples.length,
     },
   };
 }
@@ -487,6 +538,14 @@ const server = http.createServer(async (req, res) => {
   if (req.url?.startsWith('/api/admin/reports/') && req.method === 'GET') {
     if (!isAdmin(req)) return send(res, 401, { error: 'Admin login required' });
     const target = new URL(req.url, 'http://localhost');
+    const workPeriodGpsMatch = target.pathname.match(/^\/api\/admin\/reports\/([^/]+)\/work-period-gps$/);
+    if (workPeriodGpsMatch) {
+      const reportId = decodeURIComponent(workPeriodGpsMatch[1]);
+      if (!/^[a-zA-Z0-9._:-]+$/.test(reportId)) return send(res, 400, { error: 'A valid report id is required' });
+      const detail = workPeriodGpsDetail(reportId, target.searchParams);
+      if (!detail) return send(res, 404, { error: 'Report not found' });
+      return send(res, 200, detail);
+    }
     const match = target.pathname.match(/^\/api\/admin\/reports\/([^/]+)\/gps$/);
     if (match) {
       const reportId = decodeURIComponent(match[1]);
