@@ -7,13 +7,14 @@
     "orientation": "default",
     "scheme": "songdeeops",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "platforms": [
       "android"
     ],
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      "expo-system-ui",
       "expo-sqlite",
       "@react-native-community/datetimepicker",
       [

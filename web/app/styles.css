@@ -525,6 +525,22 @@ button:focus-visible{outline:3px solid #111;outline-offset:2px;box-shadow:0 0 0 
 .route-selector-results>button{flex:none;min-height:30px;border:1px solid #C8CDD2;border-radius:7px;padding:5px 8px;background:#fff;color:#7A1424;font:inherit;font-size:9px;font-weight:800;cursor:pointer}
 .route-selector-results>button:hover{border-color:#E31B23;background:#FFF7F7}
 .route-selector-results>button:disabled{cursor:wait;opacity:.65}
+.route-selector-popover{position:relative;top:auto;min-width:0}
+.route-selector-search>input{min-height:44px;font-size:14px}
+.route-selector-options{max-height:240px;min-height:44px}
+.route-selector-options>button{min-height:44px;flex-shrink:0}
+.route-selector-options>button.active{outline:2px solid #B3131A;outline-offset:-2px;background:#FFF1F1}
+.route-selector-option-copy strong{white-space:normal;overflow-wrap:anywhere}
+.route-selector-current{display:grid;gap:2px;min-width:0;padding:7px 9px;border-radius:6px;background:#FFF1F1;color:#8F1117;font-size:10px}
+.route-selector-current strong{font-size:12px;overflow-wrap:anywhere}
+.route-selector-pagination{display:flex;justify-content:space-between;gap:8px;border-top:1px solid #E4E7EA;padding-top:7px}
+.route-selector-pagination>button,.route-selector-results>button{min-height:44px;border:1px solid #C8CDD2;border-radius:7px;padding:7px 12px;background:#fff;color:#7A1424;font:inherit;font-size:11px;font-weight:800;cursor:pointer}
+.route-selector-pagination>button:hover:not(:disabled){border-color:#E31B23;background:#FFF7F7}
+.route-selector-pagination>button:disabled{color:#68727D;opacity:.55;cursor:default}
+.route-selector-results{min-height:28px}
+.route-selector-status,.route-selector-results>span,.route-selector-results>span strong{font-size:11px}
+.route-selector-results .error{color:#B3131A}
+@media(max-width:600px){.route-selector-search>input{font-size:16px}.route-selector-options{max-height:210px}}
 
 .gps-detail-section{
   display:grid;
@@ -573,10 +589,10 @@ button:focus-visible{outline:3px solid #111;outline-offset:2px;box-shadow:0 0 0 
 .route-map-control-button:disabled{opacity:.55}
 .route-map-notice{top:52px;font-size:9px}
 .route-map-legend{min-height:31px;align-items:center;gap:5px 12px;padding:6px 9px;border-top:1px solid #E7EAED;background:#fff;font-size:9px}
-.route-map-cluster-marker{cursor:pointer}
-.route-map-cluster-marker:focus-visible{outline:none}
-.route-map-cluster-marker:focus-visible .route-cluster-focus-ring,.route-map-cluster-marker.is-active .route-cluster-focus-ring{stroke:#111}
-.route-cluster-count{fill:#fff;font-family:Arial,sans-serif;font-size:11px;font-weight:850;pointer-events:none;user-select:none}
+.route-map-fix-marker{cursor:pointer}
+.route-map-fix-marker:focus-visible{outline:none}
+.route-map-fix-marker:focus-visible .route-fix-focus-ring,.route-map-fix-marker.is-active .route-fix-focus-ring{stroke:#111}
+.route-fix-number{fill:#fff;font-family:Arial,sans-serif;font-size:11px;font-weight:850;pointer-events:none;user-select:none}
 .gps-fix-tray{flex:none;border-top:1px solid #D7DBDF;background:#fff}
 .gps-fix-tray-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:9px 10px 7px}
 .gps-fix-tray-heading>div{display:grid;gap:2px;min-width:0}

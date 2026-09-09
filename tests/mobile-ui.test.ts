@@ -67,13 +67,13 @@ test('compact controls are reserved for short landscape screens', () => {
 
 test('mobile action cards pin aligned numbers above a compact text group', async () => {
   const source = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
-  assert.match(source, /<View style=\{\[styles\.actionNumberSlot, compactLandscape && compactStyles\.actionNumberSlot, largeText && accessibilityStyles\.actionNumberSlot\]\}>/);
-  assert.match(source, /<View style=\{\[styles\.actionTextSlot, compactLandscape && compactStyles\.actionTextSlot, largeText && accessibilityStyles\.actionTextSlot\]\}>/);
+  assert.match(source, /<View style=\{\[styles\.actionNumberSlot, compactActions && compactStyles\.actionNumberSlot, landscape && !compactLandscape && landscapeStyles\.actionNumberSlot, largeText && accessibilityStyles\.actionNumberSlot\]\}>/);
+  assert.match(source, /<View style=\{\[styles\.actionTextSlot, compactActions && compactStyles\.actionTextSlot, landscape && landscapeStyles\.actionTextSlot, largeText && accessibilityStyles\.actionTextSlot\]\}>/);
   assert.match(source, /actionNumberSlot: \{ height: '45%',[^}]*justifyContent: 'flex-end'/);
   assert.match(source, /actionTextSlot: \{ flex: 1, minHeight: 0,[^}]*paddingTop: 16/);
   assert.match(source, /actionNumberSlot: \{ height: '38%'/);
   assert.match(source, /actionSub: \{ fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 8 \}/);
-  assert.match(source, /numberOfLines=\{largeText \? undefined : compactLandscape \? 2 : 5\}/);
+  assert.match(source, /numberOfLines=\{largeText \? undefined : compactActions \? 2 : 5\}/);
 });
 
 test('production movement detection relies only on the server-side FMS adapter', async () => {
@@ -201,7 +201,7 @@ test('mobile saved jobs expose scalable search, filter, and sort controls withou
 test('mobile route selection uses bounded server search and a virtualized list', async () => {
   const app = await readFile(fileURLToPath(new NodeUrl('../app/index.tsx', import.meta.url)), 'utf8');
   const api = await readFile(fileURLToPath(new NodeUrl('../lib/api.ts', import.meta.url)), 'utf8');
-  assert.match(app, /fetchJobRoutes\(binding\.deviceId, search, 50\)/);
+  assert.match(app, /fetchJobRoutes\(binding\.deviceId, search, MOBILE_ROUTE_PAGE_SIZE, offset\)/);
   assert.match(app, /accessibilityLabel=\{language === 'en' \? 'Search job routes'/);
   assert.match(app, /<FlatList[\s\S]*data=\{routeOptions\}[\s\S]*windowSize=\{5\}/);
   assert.doesNotMatch(app, /<ScrollView style=\{routeStyles\.routeList\}>\{routeOptions\.map/);

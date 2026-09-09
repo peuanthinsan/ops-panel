@@ -124,7 +124,7 @@ function project(point, bounds, width, height) {
   return { x: 18 + x * 0.92, y: 18 + y * 0.92 };
 }
 
-function CoordinateFallback({ anchors, gpsGroups, trailPoints = [], locationClusters = [], activeClusterKey = '', deviations = [], label, message, onSelectCluster }) {
+function CoordinateFallback({ anchors, gpsGroups, trailPoints = [], fixes = [], activeFixKey = '', deviations = [], label, message, onSelectFix }) {
   const points = [...anchors, ...trailPoints, ...deviations];
   if (!points.length) return <div className="route-map-empty">{label}: {message}</div>;
   const bounds = {
@@ -135,10 +135,12 @@ function CoordinateFallback({ anchors, gpsGroups, trailPoints = [], locationClus
   const height = 260;
   const routeLine = anchors.map(point => { const projected = project(point, bounds, width, height); return `${projected.x},${projected.y}`; }).join(' ');
   const workPeriodLine = trailPoints.map(point => { const projected = project(point, bounds, width, height); return `${projected.x},${projected.y}`; }).join(' ');
-  // SVG uses painter's order instead of CSS z-index, so render the active stack last.
-  const renderedLocationClusters = [
-    ...locationClusters.filter(cluster => cluster.key !== activeClusterKey),
-    ...locationClusters.filter(cluster => cluster.key === activeClusterKey),
+  // SVG uses painter's order instead of CSS z-index. Ordinary fixes paint first,
+  // the drawer's selected job next, and the explicitly selected GPS row last.
+  const renderedFixes = [
+    ...fixes.filter(point => point.fixKey !== activeFixKey && !point.selected),
+    ...fixes.filter(point => point.fixKey !== activeFixKey && point.selected),
+    ...fixes.filter(point => point.fixKey === activeFixKey),
   ];
   return <div className="route-map-fallback">
     <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" role="group" aria-label={label}>
@@ -161,34 +163,34 @@ function CoordinateFallback({ anchors, gpsGroups, trailPoints = [], locationClus
           {group.selected && group.points.length > 1 ? <polyline points={line} fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" /> : null}
         </g>;
       })}
-      {renderedLocationClusters.map(cluster => {
-        const projected = project(cluster, bounds, width, height);
-        const active = cluster.key === activeClusterKey;
-        const radius = cluster.count > 1 ? 11 : 7;
-        const color = '#0B6F70';
+      {deviations.map((point, index) => { const projected = project(point, bounds, width, height); return <circle key={`deviation-${index}`} cx={projected.x} cy={projected.y} r="7" fill="#B92B3A" stroke="#fff" strokeWidth="2.5" />; })}
+      {renderedFixes.map(point => {
+        const projected = project(point, bounds, width, height);
+        const active = point.fixKey === activeFixKey;
+        const radius = 11;
         const activate = event => {
           if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
           if (event.type === 'keydown') event.preventDefault();
-          onSelectCluster(cluster.key);
+          onSelectFix(point.fixKey);
         };
         return <g
-          key={cluster.id}
-          className={`route-map-cluster-marker${active ? ' is-active' : ''}${cluster.selected ? ' contains-selected' : ''}`}
+          key={point.fixKey}
+          className={`route-map-fix-marker${active ? ' is-active' : ''}${point.selected ? ' is-selected-job' : ''}`}
           role="button"
           tabIndex={0}
-          aria-label={cluster.title}
+          aria-label={point.title}
           aria-pressed={active}
           onClick={activate}
+          onFocus={activate}
           onKeyDown={activate}
         >
-          <title>{cluster.title}</title>
-          <circle className="route-cluster-focus-ring" cx={projected.x} cy={projected.y} r={radius + 5} fill="transparent" stroke="transparent" strokeWidth="3" />
-          {cluster.selected ? <circle cx={projected.x} cy={projected.y} r={radius + 3} fill="#fff" stroke="#087CA7" strokeWidth="2.5" /> : null}
-          <circle cx={projected.x} cy={projected.y} r={radius} fill={color} stroke="#fff" strokeWidth="2.5" />
-          {cluster.count > 1 ? <text className="route-cluster-count" x={projected.x} y={projected.y} textAnchor="middle" dominantBaseline="central">{cluster.count}</text> : null}
+          <title>{point.title}</title>
+          <circle className="route-fix-focus-ring" cx={projected.x} cy={projected.y} r={radius + 5} fill="transparent" stroke="transparent" strokeWidth="3" />
+          {point.selected ? <circle cx={projected.x} cy={projected.y} r={radius + 3} fill="#fff" stroke="#087CA7" strokeWidth="2.5" /> : null}
+          <circle cx={projected.x} cy={projected.y} r={radius} fill="#0B6F70" stroke="#fff" strokeWidth="2.5" />
+          <text className="route-fix-number" x={projected.x} y={projected.y} textAnchor="middle" dominantBaseline="central">{point.chronologicalIndex}</text>
         </g>;
       })}
-      {deviations.map((point, index) => { const projected = project(point, bounds, width, height); return <circle key={`deviation-${index}`} cx={projected.x} cy={projected.y} r="7" fill="#B92B3A" stroke="#fff" strokeWidth="2.5" />; })}
     </svg>
   </div>;
 }
@@ -204,20 +206,18 @@ function markerIcon(google, color, scale = 5, fillOpacity = 1, strokeWeight = 2)
   };
 }
 
-function clusterMarkerIcon(google, count, selected, active) {
-  const size = count > 9 ? 46 : 40;
+function fixMarkerIcon(google, number, selected, active) {
+  const size = number > 9 ? 46 : 40;
   const center = size / 2;
   const innerRadius = 12;
   const activeRing = active
     ? `<circle cx="${center}" cy="${center}" r="18" fill="none" stroke="#111" stroke-width="2.5"/>`
     : '';
-  const countText = count > 1
-    ? `<text x="${center}" y="${center + 1}" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-family="Arial,sans-serif" font-size="${count > 9 ? 12 : 13}" font-weight="700">${count}</text>`
-    : '';
+  const numberText = `<text x="${center}" y="${center + 1}" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-family="Arial,sans-serif" font-size="${number > 9 ? 12 : 13}" font-weight="700">${number}</text>`;
   const selectedRing = selected
     ? `<circle cx="${center}" cy="${center}" r="15" fill="#fff" stroke="#087CA7" stroke-width="2.5"/>`
     : '';
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${activeRing}${selectedRing}<circle cx="${center}" cy="${center}" r="${innerRadius}" fill="#0B6F70" stroke="#fff" stroke-width="3"/>${countText}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${activeRing}${selectedRing}<circle cx="${center}" cy="${center}" r="${innerRadius}" fill="#0B6F70" stroke="#fff" stroke-width="3"/>${numberText}</svg>`;
   return {
     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
     scaledSize: new google.maps.Size(size, size),
@@ -282,8 +282,8 @@ export default function RouteMap({ anchors = [], samples = [], reports = [], dev
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const mapBoundsRef = useRef(null);
-  const clusterLayerRef = useRef(null);
-  const activeClusterKeyRef = useRef('');
+  const fixLayerRef = useRef(null);
+  const activeFixKeyRef = useRef('');
   const routePoints = useMemo(() => anchors.map(normalizePoint).filter(Boolean), [anchors]);
   const gpsData = useMemo(() => groupGpsSamplesByJob(samples, selectedJobId), [samples, selectedJobId]);
   const recordedPoints = gpsData.trailPoints;
@@ -308,47 +308,42 @@ export default function RouteMap({ anchors = [], samples = [], reports = [], dev
       report: reportsById.get(String(point.jobId || '')) || null,
     };
   }), [clusterMembershipByFixKey, recordedPoints, reportsById]);
-  const visualClusters = useMemo(() => locationClusters.map((cluster, index) => ({
-    ...cluster,
-    locationIndex: index + 1,
-    title: t.mapLocationTitle
-      .replace('{location}', String(index + 1))
-      .replace('{count}', String(cluster.count)),
-  })), [lang, locationClusters, t.mapLocationTitle]);
+  const visualFixes = useMemo(() => fixRows.map(point => {
+    const activity = point.report ? displayActivity(point.report.mode, lang) : t.unlinkedJob;
+    return {
+      ...point,
+      selected: String(point.jobId) === String(selectedJobId),
+      title: `${t.fix} ${point.chronologicalIndex}: ${activity}, ${displayTime(point.capturedAt, lang)}, ${t.mapLocation} ${point.clusterIndex}`,
+    };
+  }), [fixRows, lang, selectedJobId, t.fix, t.mapLocation, t.unlinkedJob]);
   const deviationPoints = useMemo(() => deviationEvents.map(normalizePoint).filter(Boolean), [deviationEvents]);
   const [state, setState] = useState('loading');
   const [mapType, setMapType] = useState('roadmap');
   const [supportsFullscreen, setSupportsFullscreen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [activeClusterKey, setActiveClusterKey] = useState('');
   const [activeFixKey, setActiveFixKey] = useState('');
-  activeClusterKeyRef.current = activeClusterKey;
-
-  const activateCluster = useCallback(clusterKey => {
-    const clusterFixes = fixRows.filter(point => point.clusterKey === clusterKey);
-    const preferred = clusterFixes.find(point => String(point.jobId) === String(selectedJobId)) || clusterFixes[0];
-    setActiveClusterKey(clusterKey);
-    setActiveFixKey(preferred?.fixKey || '');
-    window.requestAnimationFrame(() => detailRef.current?.scrollIntoView({ block: 'nearest' }));
-  }, [fixRows, selectedJobId]);
+  activeFixKeyRef.current = activeFixKey;
 
   const activateFix = useCallback(point => {
-    setActiveClusterKey(point.clusterKey);
     setActiveFixKey(point.fixKey);
     window.requestAnimationFrame(() => detailRef.current?.scrollIntoView({ block: 'nearest' }));
   }, []);
 
+  const activateFixByKey = useCallback(pointFixKey => {
+    const point = fixRows.find(candidate => candidate.fixKey === pointFixKey);
+    if (point) activateFix(point);
+  }, [activateFix, fixRows]);
+
   useEffect(() => {
     const preferred = fixRows.find(point => String(point.jobId) === String(selectedJobId)) || fixRows[0];
-    setActiveClusterKey(preferred?.clusterKey || '');
     setActiveFixKey(preferred?.fixKey || '');
   }, [fixRows, selectedJobId]);
 
   useEffect(() => {
-    clusterLayerRef.current?.forEach(feature => {
-      feature.setProperty('active', String(feature.getProperty('clusterKey') || '') === activeClusterKey);
+    fixLayerRef.current?.forEach(feature => {
+      feature.setProperty('active', String(feature.getProperty('fixKey') || '') === activeFixKey);
     });
-  }, [activeClusterKey]);
+  }, [activeFixKey]);
 
   useEffect(() => {
     setSupportsFullscreen(Boolean(document.fullscreenEnabled && bodyRef.current?.requestFullscreen && document.exitFullscreen));
@@ -375,7 +370,7 @@ export default function RouteMap({ anchors = [], samples = [], reports = [], dev
     if (!routePoints.length && !recordedPoints.length && !deviationPoints.length) { setState('empty'); return undefined; }
     let cancelled = false;
     let map = null;
-    let clusterLayer = null;
+    let fixLayer = null;
     const overlays = [];
     const listeners = [];
 
@@ -470,33 +465,33 @@ export default function RouteMap({ anchors = [], samples = [], reports = [], dev
           }
         }
 
-        if (visualClusters.length) {
-          clusterLayer = new google.maps.Data({ map });
-          clusterLayerRef.current = clusterLayer;
-          for (const cluster of visualClusters) {
-            clusterLayer.add(new google.maps.Data.Feature({
-              geometry: new google.maps.Data.Point({ lat: cluster.latitude, lng: cluster.longitude }),
+        if (visualFixes.length) {
+          fixLayer = new google.maps.Data({ map });
+          fixLayerRef.current = fixLayer;
+          for (const point of visualFixes) {
+            fixLayer.add(new google.maps.Data.Feature({
+              geometry: new google.maps.Data.Point({ lat: point.latitude, lng: point.longitude }),
               properties: {
-                clusterKey: cluster.key,
-                count: cluster.count,
-                selected: cluster.selected,
-                active: cluster.key === activeClusterKeyRef.current,
-                title: cluster.title,
+                fixKey: point.fixKey,
+                number: point.chronologicalIndex,
+                selected: point.selected,
+                active: point.fixKey === activeFixKeyRef.current,
+                title: point.title,
               },
             }));
           }
-          clusterLayer.setStyle(feature => ({
+          fixLayer.setStyle(feature => ({
             clickable: true,
             cursor: 'pointer',
-            icon: clusterMarkerIcon(google, Number(feature.getProperty('count')), Boolean(feature.getProperty('selected')), Boolean(feature.getProperty('active'))),
+            icon: fixMarkerIcon(google, Number(feature.getProperty('number')), Boolean(feature.getProperty('selected')), Boolean(feature.getProperty('active'))),
             title: feature.getProperty('title'),
-            zIndex: feature.getProperty('active') ? 1_000 : feature.getProperty('selected') ? 72 : 60,
+            zIndex: feature.getProperty('active') ? 1_000 : feature.getProperty('selected') ? 900 : 60 + Math.min(9, Number(feature.getProperty('number')) || 0),
           }));
-          listeners.push(clusterLayer.addListener('click', event => {
-            const clusterKey = String(event.feature.getProperty('clusterKey') || '');
-            if (clusterKey) activateCluster(clusterKey);
+          listeners.push(fixLayer.addListener('click', event => {
+            const pointFixKey = String(event.feature.getProperty('fixKey') || '');
+            if (pointFixKey) activateFixByKey(pointFixKey);
           }));
-          overlays.push(clusterLayer);
+          overlays.push(fixLayer);
         }
 
         if (deviationPoints.length) {
@@ -537,10 +532,10 @@ export default function RouteMap({ anchors = [], samples = [], reports = [], dev
       for (const overlay of overlays) overlay.setMap?.(null);
       if (map && window.google?.maps?.event) window.google.maps.event.clearInstanceListeners(map);
       if (mapRef.current === map) mapRef.current = null;
-      if (clusterLayerRef.current === clusterLayer) clusterLayerRef.current = null;
+      if (fixLayerRef.current === fixLayer) fixLayerRef.current = null;
       mapBoundsRef.current = null;
     };
-  }, [activateCluster, deviationPoints, gpsData.groups, lang, recordedPoints, routePoints, visualClusters]);
+  }, [activateFixByKey, deviationPoints, gpsData.groups, lang, recordedPoints, routePoints, visualFixes]);
 
   function changeMapType(nextType) {
     const map = mapRef.current;
@@ -587,12 +582,12 @@ export default function RouteMap({ anchors = [], samples = [], reports = [], dev
   const activeIsSelectedJob = String(activeFix?.jobId || '') === String(selectedJobId || '');
   const fixSummary = t.fixSummary
     .replace('{fixes}', String(gpsData.pointCount))
-    .replace('{locations}', String(visualClusters.length))
+    .replace('{locations}', String(locationClusters.length))
     .replace('{mapped}', String(mappedJobCount))
     .replace('{jobs}', String(jobCount));
   return <div className="route-map" role="region" aria-label={label}>
     <div ref={bodyRef} className={`route-map-body${isFullscreen ? ' is-fullscreen' : ''}`}>
-      {!fallback ? <div ref={containerRef} className="route-map-canvas" /> : <CoordinateFallback anchors={routePoints} gpsGroups={gpsData.groups} trailPoints={gpsData.trailPoints} locationClusters={visualClusters} activeClusterKey={activeClusterKey} deviations={deviationPoints} label={label} message={t.noCoordinates} onSelectCluster={activateCluster} />}
+      {!fallback ? <div ref={containerRef} className="route-map-canvas" /> : <CoordinateFallback anchors={routePoints} gpsGroups={gpsData.groups} trailPoints={gpsData.trailPoints} fixes={visualFixes} activeFixKey={activeFixKey} deviations={deviationPoints} label={label} message={t.noCoordinates} onSelectFix={activateFixByKey} />}
       {!fallback ? <div className="route-map-controls" role="group" aria-label={t.mapControls}>
         <div className="route-map-type-control" role="group" aria-label={t.mapStyle}>
           <button type="button" className={`route-map-control-button route-map-type-button${mapType === 'roadmap' ? ' is-active' : ''}`} aria-label={t.showRoadmap} aria-pressed={mapType === 'roadmap'} title={t.showRoadmap} disabled={controlsDisabled} onClick={() => changeMapType('roadmap')}>

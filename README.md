@@ -115,7 +115,19 @@ Build a production-connected, release-signed APK for direct installation:
 npx eas-cli@latest build --platform android --profile production-apk
 ```
 
-The current production-connected APK is Android version code 10. Its SHA-256 digest is `42997e05db25d4ab71a667d33019285b5881a65f60a197d262f74cc7dfb4a85b`, and it is available from EAS build [`6dbc0c6c-145d-4527-a876-e8ad7a0bd30d`](https://expo.dev/accounts/peuanthinsan/projects/ops-panel/builds/6dbc0c6c-145d-4527-a876-e8ad7a0bd30d). The downloaded file is `releases/ops-panel-v0.1.0-build10-production.apk`. APK binaries stay outside Git and are ignored under `releases/`.
+The latest completed production-connected APK is Android version code 10 (built August 24, 2026). Its SHA-256 digest is `42997e05db25d4ab71a667d33019285b5881a65f60a197d262f74cc7dfb4a85b`. The saved APK was uploaded unchanged to [Expo build `ac4e04d2-80a0-4e70-a022-1e8581576c22`](https://expo.dev/accounts/peuanthinsan/projects/songdee-ops-panel/builds/ac4e04d2-80a0-4e70-a022-1e8581576c22) on September 8, 2026. Open that page and click **Install** to display the installation QR code. This download expires on December 7, 2026 at 18:47 Bangkok time (11:47 UTC).
+
+The original EAS build [`6dbc0c6c-145d-4527-a876-e8ad7a0bd30d`](https://expo.dev/accounts/peuanthinsan/projects/songdee-ops-panel/builds/6dbc0c6c-145d-4527-a876-e8ad7a0bd30d) finished successfully, but its hosted artifact expired on September 7, 2026 at 13:25 Bangkok time (06:25 UTC). Its download returns `NoSuchKey`; use the restored upload above.
+
+The saved installer is `releases/songdee-ops-panel-v0.1.0-build10-production.apk`. Its Android signature and the SHA-256 above were verified on September 8, 2026. It requires Android 7.0 or later. Copy this APK to a USB drive or the tablet's Downloads folder, open it with the tablet's file manager, and allow installation from that source if Android asks. APK binaries stay outside Git and are ignored under `releases/`, so this saved file is available only in workspaces where it was downloaded.
+
+EAS-hosted artifacts have an expiration date even when their build status remains `FINISHED`. Check `expirationDate` with `eas build:view BUILD_ID --json` before sharing an EAS download. To restore Expo installation and its QR code from a saved APK without rebuilding, upload it again:
+
+```sh
+eas upload --platform android --build-path releases/songdee-ops-panel-v0.1.0-build10-production.apk --non-interactive
+```
+
+This creates a new internal build page and leaves the APK unchanged. Verify the new download's checksum and record its URL and expiration date. Keep a verified copy of each released APK; if no saved copy remains, create a new APK using the `production-apk` command above.
 
 Build the Play Store Android App Bundle after preview verification:
 

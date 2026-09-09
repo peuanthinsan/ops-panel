@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { operationActions } from '../../lib/actions';
@@ -17,6 +18,8 @@ import { adminFetch, adminFetchAllReports } from '../dashboard-api';
 import { useReportSpeedSeries } from '../report-speed-series';
 import SpeedTimelineOverlay from '../speed-timeline';
 import { TimelineAlertChips, TimelineAlertMarkers } from '../timeline-alerts';
+import ClassicOperationReport from './classic-operation-report';
+import { classicReportPages, classicActivityDurations, normalizeReportStyle } from '../../lib/report-classic';
 
 const MODE_META = Object.fromEntries(operationActions.map(action => [action[2], { number: action[0], th: action[1], en: action[2] }]));
 
@@ -106,9 +109,16 @@ function useDocumentLanguage(lang) {
   }, [lang]);
 }
 
-function PrintToolbar({ lang, onPrint, backPath = '/' }) {
+function PrintToolbar({ lang, onPrint, backPath = '/', reportStyle, onStyleChange }) {
   return <div className="print-toolbar" role="toolbar" aria-label={lang === 'th' ? 'คำสั่งพิมพ์' : 'Print controls'}>
     <button type="button" onClick={() => window.location.assign(backPath)}>{lang === 'th' ? 'กลับแดชบอร์ด' : 'Back to dashboard'}</button>
+    {onStyleChange ? <label className="report-style-control">
+      <span id="report-style-label">{lang === 'th' ? 'รูปแบบรายงาน' : 'Report style'}</span>
+      <select aria-labelledby="report-style-label" value={reportStyle} onChange={event => onStyleChange(event.target.value)}>
+        <option value="classic">{lang === 'th' ? 'คลาสสิก — แบบฟอร์มเดิม' : 'Classic — Original form'}</option>
+        <option value="modern">{lang === 'th' ? 'โมเดิร์น — แดชบอร์ด' : 'Modern — Dashboard'}</option>
+      </select>
+    </label> : null}
     <button className="primary" type="button" onClick={onPrint}>{lang === 'th' ? 'พิมพ์ / บันทึก PDF' : 'Print / Save PDF'}</button>
   </div>;
 }
@@ -304,7 +314,15 @@ function dailyJobRangeLabel(lang, start, end, total) {
   return lang === 'th' ? `งาน ${start}–${end} จาก ${total}` : `Jobs ${start}–${end} of ${total}`;
 }
 
-export function PortraitPrintDashboard({ date: requestedDate, workPeriodId: requestedWorkPeriodId, vehicle: requestedVehicle, lang: requestedLang }) {
+export function PortraitPrintDashboard({ date: requestedDate, workPeriodId: requestedWorkPeriodId, vehicle: requestedVehicle, lang: requestedLang, style: requestedStyle }) {
+  const router = useRouter();
+  const reportStyle = normalizeReportStyle(requestedStyle);
+  const [printTimestamp] = useState(() => new Date());
+  function changeReportStyle(value) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('style', normalizeReportStyle(value));
+    router.replace(`${url.pathname}${url.search}${url.hash}`, { scroll: false });
+  }
   const lang = requestedLang === 'en' ? 'en' : 'th';
   useDocumentLanguage(lang);
   const vehicle = String(requestedVehicle || '').trim();
@@ -323,15 +341,21 @@ export function PortraitPrintDashboard({ date: requestedDate, workPeriodId: requ
   const breakSeconds = Math.max(0, shiftSeconds - totalSeconds);
   const timelineOrigin = summary.start || '';
   const alerts = deriveTimelineAlerts(summary.rows, speedSeries.samplesByReportId).map(alert => ({ ...alert, minute: Math.max(0, (Date.parse(alert.capturedAt) - Date.parse(timelineOrigin)) / 60_000) }));
-  const printedAt = new Intl.DateTimeFormat(lang === 'th' ? 'th-TH' : 'en-GB', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date());
+  const printedAt = new Intl.DateTimeFormat(lang === 'th' ? 'th-TH' : 'en-GB', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(printTimestamp);
   const documentId = `SD-${date.replaceAll('-', '')}-${vehicle}`;
   const timelineRows = summary.rows.map(report => {
     const position = portraitTimelinePosition(report.startTime, report.endTime, timelineOrigin, timelineSpanMinutes);
     return position ? { report, position } : null;
   }).filter(Boolean);
   const jobPages = paginateDailyReportJobs(summary.rows);
-  return <main className="print-preview portrait-preview">
-    <PrintToolbar lang={lang} onPrint={() => window.print()} />
+  const model = {
+    summary, date, documentId, printedAt, totalSeconds, breakSeconds,
+    samplesByReportId: speedSeries.samplesByReportId,
+    classic: { pages: classicReportPages(summary.rows, date), durations: classicActivityDurations(summary.rows) },
+  };
+  return <main className={`print-preview operation-report-preview ${reportStyle === 'classic' ? 'classic-preview' : 'portrait-preview'}`} data-report-style={reportStyle}>
+    <PrintToolbar lang={lang} onPrint={() => window.print()} reportStyle={reportStyle} onStyleChange={changeReportStyle} />
+    {reportStyle === 'classic' ? <ClassicOperationReport model={model} lang={lang} /> : <>
     <section className="print-sheet portrait-sheet">
       <DailyReportMasthead lang={lang} documentId={documentId} printedAt={printedAt} page={1} totalPages={jobPages.totalPages} />
       <DailyTripInfo lang={lang} vehicle={vehicle} summary={summary} date={date} />
@@ -350,6 +374,6 @@ export function PortraitPrintDashboard({ date: requestedDate, workPeriodId: requ
         <section className="report-section job-section continuation-job-section"><div className="report-section-heading"><h2>{lang === 'th' ? 'รายการงาน (ต่อ)' : 'JOB LIST — CONTINUED'}</h2><span>{dailyJobRangeLabel(lang, start, end, summary.rows.length)}</span></div><DailyJobTable rows={pageRows} lang={lang} /></section>
         {pageNumber === jobPages.totalPages ? <DailySignatureFooter lang={lang} /> : null}
       </section>;
-    })}
+    })}</>}
   </main>;
 }

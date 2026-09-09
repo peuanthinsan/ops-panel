@@ -1,0 +1,91 @@
+.classic-preview { font-family: Arial, "Noto Sans Thai", Sarabun, sans-serif; color: #000; }
+.classic-report {
+  --classic-unit: .191333mm;
+  --classic-line: .15mm solid #000;
+  --classic-gutter: calc(60 * var(--classic-unit));
+  box-sizing: border-box;
+  width: 297mm;
+  min-height: 210mm;
+  padding: 5mm;
+  color: #000;
+  font-family: Arial, "Noto Sans Thai", Sarabun, sans-serif;
+  font-size: calc(11 * var(--classic-unit));
+  line-height: normal;
+  overflow: visible;
+}
+.classic-report * { box-sizing: border-box; }
+.classic-report .classic-form { display: grid; grid-template-columns: 34fr 380fr 1086fr; min-height: calc(824 * var(--classic-unit)); border: var(--classic-line); }
+.classic-report .classic-layout-code { min-width: 0; display: flex; align-items: center; justify-content: center; border-right: var(--classic-line); }
+.classic-report .classic-layout-code > span { writing-mode: vertical-rl; transform: rotate(180deg); padding: 1mm .4mm; font-size: calc(9 * var(--classic-unit)); letter-spacing: .15mm; }
+.classic-report table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0 0 calc(6 * var(--classic-unit)); }
+.classic-report td, .classic-report th { border: var(--classic-line); padding: calc(2 * var(--classic-unit)) calc(4 * var(--classic-unit)); font-weight: normal; vertical-align: middle; overflow-wrap: anywhere; }
+.classic-report .classic-info-block { min-width: 0; border-right: var(--classic-line); }
+.classic-report .classic-company { padding: calc(6 * var(--classic-unit)); border-bottom: var(--classic-line); font-size: calc(12 * var(--classic-unit)); font-weight: bold; }
+.classic-report .classic-header-table th { width: 42%; color: #333; text-align: left; }
+.classic-report .classic-header-table td { font-weight: bold; }
+.classic-report .classic-header-table td, .classic-report .classic-header-table th { font-size: calc(10 * var(--classic-unit)); }
+.classic-report .classic-title { margin: 0; padding: calc(14 * var(--classic-unit)) calc(4 * var(--classic-unit)) calc(4 * var(--classic-unit)); border-bottom: var(--classic-line); text-align: center; font-size: calc(24 * var(--classic-unit)); line-height: 1.2; font-weight: bold; }
+.classic-report .classic-print-meta { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 1mm; padding: calc(4 * var(--classic-unit)) calc(8 * var(--classic-unit)); border-bottom: var(--classic-line); font-size: calc(9 * var(--classic-unit)); overflow-wrap: anywhere; }
+.classic-report .classic-print-meta > span:first-child { width: 100%; }
+.classic-report .classic-value-table td { text-align: center; font-size: calc(10 * var(--classic-unit)); }
+.classic-report .classic-value-table strong { display: block; margin-top: calc(2 * var(--classic-unit)); font-size: calc(12 * var(--classic-unit)); font-weight: bold; white-space: nowrap; }
+.classic-report .classic-triplog-table th { background: #e6e6e6; font-size: calc(9 * var(--classic-unit)); text-align: center; }
+.classic-report .classic-triplog-table td { font-size: calc(9 * var(--classic-unit)); text-align: center; }
+.classic-report .classic-trip-number { width: 8%; }
+.classic-report .classic-trip-time { width: 24%; }
+.classic-report .classic-trip-status { width: 20%; }
+.classic-report .classic-triplog-table .classic-trip-description { text-align: left; overflow-wrap: anywhere; word-break: normal; }
+.classic-report .classic-triplog-table small { display: block; font-size: calc(8 * var(--classic-unit)); }
+.classic-report .classic-time-divider { padding: 0 .2mm; }
+.classic-report .classic-day-offset { white-space: nowrap; }
+.classic-report .classic-blank-trip-row { height: calc(20 * var(--classic-unit)); }
+.classic-report .classic-cancelled { color: #555; }
+.classic-report .classic-cancelled td:nth-child(3) { text-decoration: line-through; }
+.classic-report .classic-cancelled td:nth-child(3) small { text-decoration: none; }
+.classic-report .classic-no-jobs { height: calc(20 * var(--classic-unit)); }
+.classic-report .classic-expense-table th { text-align: center; background: #e6e6e6; font-size: calc(9 * var(--classic-unit)); }
+.classic-report .classic-expense-table td { height: calc(20 * var(--classic-unit)); }
+.classic-report .classic-notes { min-height: calc(170 * var(--classic-unit)); padding: calc(4 * var(--classic-unit)) calc(6 * var(--classic-unit)); border-top: var(--classic-line); color: #333; font-size: calc(9 * var(--classic-unit)); }
+.classic-report .classic-footer-meta { display: flex; justify-content: space-between; gap: 1mm; padding: calc(6 * var(--classic-unit)) calc(8 * var(--classic-unit)); font-size: calc(10 * var(--classic-unit)); }
+.classic-report .classic-timeline-block { min-width: 0; display: flex; flex-direction: column; }
+.classic-report .classic-hour-row { display: flex; height: calc(34 * var(--classic-unit)); border-bottom: var(--classic-line); background: #e6e6e6; }
+.classic-report .classic-hour-gutter { flex: 0 0 var(--classic-gutter); border-right: var(--classic-line); }
+.classic-report .classic-hours { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); flex: 1; }
+.classic-report .classic-hour-cell { display: flex; align-items: center; justify-content: center; gap: .4mm; border-right: var(--classic-line); font-size: calc(9 * var(--classic-unit)); writing-mode: vertical-rl; }
+.classic-report .classic-hour-cell:last-child { border-right: 0; }
+.classic-report .classic-hour-cell small { font-size: calc(7 * var(--classic-unit)); }
+.classic-report .classic-chart-legend { display: flex; flex-wrap: wrap; align-items: center; gap: .8mm 2mm; min-height: calc(17 * var(--classic-unit)); padding: calc(2 * var(--classic-unit)) calc(4 * var(--classic-unit)); border-bottom: var(--classic-line); background: #fafafa; font-size: calc(9 * var(--classic-unit)); }
+.classic-report .classic-chart-legend > span { display: inline-flex; align-items: center; gap: .8mm; }
+.classic-report .classic-chart-legend i { display: inline-block; width: calc(12 * var(--classic-unit)); border-top: .3mm solid #0f6e56; }
+.classic-report .classic-chart-legend .classic-window { margin-left: auto; }
+.classic-report .classic-chart-row { display: flex; height: calc(190 * var(--classic-unit)); border-bottom: var(--classic-line); }
+.classic-report .classic-chart-gutter { flex: 0 0 var(--classic-gutter); position: relative; border-right: var(--classic-line); font-size: calc(9 * var(--classic-unit)); }
+.classic-report .classic-chart-gutter > span { position: absolute; left: calc(2 * var(--classic-unit)); transform: translateY(-50%); }
+.classic-report .classic-chart-area { flex: 1; min-width: 0; position: relative; }
+.classic-report .classic-chart-area svg { display: block; width: 100%; height: 100%; }
+.classic-report .classic-chart-grid { stroke: #ccc; stroke-width: .5; }
+.classic-report .classic-speed-path { fill: none; stroke: #0f6e56; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.classic-report .classic-speed-point { fill: #0f6e56; }
+.classic-report .classic-no-speed { position: absolute; inset: 0; display: grid; place-items: center; color: #555; font-size: calc(11 * var(--classic-unit)); }
+.classic-report .classic-status-row, .classic-report .classic-ledger-row { display: flex; min-height: calc(15 * var(--classic-unit)); border-bottom: var(--classic-line); }
+.classic-report .classic-status-label, .classic-report .classic-ledger-gutter { flex: 0 0 var(--classic-gutter); display: flex; align-items: center; padding-left: calc(4 * var(--classic-unit)); border-right: var(--classic-line); background: #f2f2f2; font-size: calc(9 * var(--classic-unit)); }
+.classic-report .classic-status-track, .classic-report .classic-ledger-track { flex: 1; position: relative; min-width: 0; background: repeating-linear-gradient(to right, transparent 0, transparent calc(100% / 24 - 1px), #ccc calc(100% / 24 - 1px), #ccc calc(100% / 24)); }
+.classic-report .classic-status-fill { position: absolute; top: .2mm; bottom: .2mm; background: #8fcb6b; border: .15mm solid #4c8a2e; }
+.classic-report .classic-ledger { display: flex; flex-direction: column; min-height: calc(270 * var(--classic-unit)); }
+.classic-report .classic-ledger-row { height: calc(15 * var(--classic-unit)); }
+.classic-report .classic-totals-strip { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); border-bottom: var(--classic-line); font-size: calc(9 * var(--classic-unit)); }
+.classic-report .classic-totals-strip > div { min-width: 0; border-right: var(--classic-line); padding: calc(3 * var(--classic-unit)) calc(4 * var(--classic-unit)); overflow-wrap: anywhere; }
+.classic-report .classic-totals-strip > div:last-child { border-right: 0; }
+.classic-report .classic-totals-strip strong { display: block; margin-top: calc(2 * var(--classic-unit)); font-size: calc(12 * var(--classic-unit)); font-weight: bold; }
+.classic-report .classic-checklist { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.classic-report .classic-checklist-group { min-width: 0; border-right: var(--classic-line); }
+.classic-report .classic-checklist-group:last-child { border-right: 0; }
+.classic-report .classic-checklist-title { padding: calc(2 * var(--classic-unit)); border-bottom: var(--classic-line); background: #e6e6e6; font-size: calc(10 * var(--classic-unit)); text-align: center; }
+.classic-report .classic-checklist-item { display: flex; justify-content: space-between; align-items: center; gap: 1mm; border-bottom: .1mm solid #ccc; padding: calc(2 * var(--classic-unit)) calc(6 * var(--classic-unit)); font-size: calc(10 * var(--classic-unit)); }
+.classic-report .classic-checklist-item:last-child { border-bottom: 0; }
+.classic-report .classic-circle { flex: 0 0 calc(11 * var(--classic-unit)); display: inline-block; width: calc(11 * var(--classic-unit)); height: calc(11 * var(--classic-unit)); border: var(--classic-line); border-radius: 50%; }
+@media print {
+  .classic-preview .classic-report { width: 297mm !important; min-height: 210mm !important; height: auto; margin: 0; box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
+  .classic-report, .classic-report * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .classic-report tr { break-inside: avoid; page-break-inside: avoid; }
+}

@@ -1,0 +1,101 @@
+export type ThemeScheme = 'light' | 'dark';
+
+export type ThemeColors = {
+  background: string;
+  surface: string;
+  surfaceMuted: string;
+  text: string;
+  textMuted: string;
+  border: string;
+  inputBorder: string;
+  header: string;
+  headerText: string;
+  headerMuted: string;
+  headerBorder: string;
+  brand: string;
+  onBrand: string;
+  accent: string;
+  accentSurface: string;
+  accentText: string;
+  disabledSurface: string;
+  disabledBorder: string;
+  disabledText: string;
+  disabledBadge: string;
+  overlay: string;
+  successText: string;
+  successSurface: string;
+  warningText: string;
+  warningSurface: string;
+  errorText: string;
+  errorSurface: string;
+  neutralSurface: string;
+  selectedSurface: string;
+  selectedText: string;
+};
+
+export const themeColors: Record<ThemeScheme, ThemeColors> = {
+  light: {
+    background: '#EEF0F2',
+    surface: '#FFFFFF',
+    surfaceMuted: '#F8F9FA',
+    text: '#111111',
+    textMuted: '#5E6872',
+    border: '#D7DBDF',
+    inputBorder: '#7C8791',
+    header: '#111111',
+    headerText: '#FFFFFF',
+    headerMuted: '#C8CDD2',
+    headerBorder: '#656D75',
+    brand: '#E31B23',
+    onBrand: '#FFFFFF',
+    accent: '#C4161E',
+    accentSurface: '#FFF1F1',
+    accentText: '#7A1424',
+    disabledSurface: '#D9DDDF',
+    disabledBorder: '#B9C0C5',
+    disabledText: '#596167',
+    disabledBadge: '#727A80',
+    overlay: 'rgba(0,0,0,0.5)',
+    successText: '#23623D',
+    successSurface: '#EDF9F0',
+    warningText: '#76560D',
+    warningSurface: '#FFF6DC',
+    errorText: '#7A1424',
+    errorSurface: '#FFF1F1',
+    neutralSurface: '#E5E9ED',
+    selectedSurface: '#111111',
+    selectedText: '#FFFFFF',
+  },
+  dark: {
+    background: '#14171B',
+    surface: '#20252B',
+    surfaceMuted: '#292F36',
+    text: '#F4F6F8',
+    textMuted: '#B8C1CA',
+    border: '#454E58',
+    inputBorder: '#78838F',
+    header: '#111111',
+    headerText: '#FFFFFF',
+    headerMuted: '#C8CDD2',
+    headerBorder: '#656D75',
+    brand: '#E31B23',
+    onBrand: '#FFFFFF',
+    accent: '#FF858B',
+    accentSurface: '#41282E',
+    accentText: '#FFB7BE',
+    disabledSurface: '#30363D',
+    disabledBorder: '#505962',
+    disabledText: '#AEB7C0',
+    disabledBadge: '#626C77',
+    overlay: 'rgba(0,0,0,0.72)',
+    successText: '#9DE0B4',
+    successSurface: '#203E2D',
+    warningText: '#F3D184',
+    warningSurface: '#443A23',
+    errorText: '#FFB7BE',
+    errorSurface: '#41282E',
+    neutralSurface: '#343C46',
+    selectedSurface: '#41282E',
+    selectedText: '#FFB7BE',
+  },
+};

@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
-import { AccessibilityInfo, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View, findNodeHandle } from 'react-native';
+import { AccessibilityInfo, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, findNodeHandle } from 'react-native';
 import { operationActions } from '../lib/actions';
 import type { DeviceBinding } from '../lib/device';
 import type { DeviceJobHistorySummary } from '../lib/device-job-history';
@@ -15,7 +15,10 @@ import {
   savedJobDayKeys,
 } from '../lib/mobile-report';
 import type { SavedJob } from '../lib/saved-jobs';
+import { useTheme } from '../lib/theme';
+import type { ThemeColors } from '../lib/theme-colors';
 import { RedGpsPin } from './RedGpsPin';
+import { ThemeToggle } from './ThemeToggle';
 
 type MobileJobReportProps = {
   binding: DeviceBinding;
@@ -71,12 +74,14 @@ function syncStatus(job: SavedJob, language: 'en' | 'th') {
 }
 
 function FilterChip({ active, label, onPress }: { active: boolean; label: string; onPress(): void }) {
+  const styles = useReportStyles();
   return <Pressable accessibilityRole="button" accessibilityState={{ selected: active }} onPress={onPress} style={[styles.filterChip, active && styles.filterChipActive]}>
     <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{label}</Text>
   </Pressable>;
 }
 
 function FilterRow({ children, label }: { children: ReactNode; label: string }) {
+  const styles = useReportStyles();
   return <View style={styles.filterRow}>
     <Text style={styles.filterLabel}>{label}</Text>
     <ScrollView contentContainerStyle={styles.filterRail} horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false}>{children}</ScrollView>
@@ -84,6 +89,7 @@ function FilterRow({ children, label }: { children: ReactNode; label: string }) 
 }
 
 function JobCard({ job, language, landscape }: { job: SavedJob; language: 'en' | 'th'; landscape: boolean }) {
+  const styles = useReportStyles();
   const deliveryStatus = syncStatus(job, language);
   const deliverySummary = deliveryStatus ? ` ${language === 'en' ? 'Dashboard delivery' : 'การส่งไปแดชบอร์ด'} ${deliveryStatus}.` : '';
   const accessibleSummary = language === 'en'
@@ -105,6 +111,7 @@ function JobCard({ job, language, landscape }: { job: SavedJob; language: 'en' |
 }
 
 function TimelineJobCard({ job, language, landscape }: { job: SavedJob; language: 'en' | 'th'; landscape: boolean }) {
+  const styles = useReportStyles();
   return <View style={[styles.timelineJobRow, job.status === 'Cancelled' && styles.cancelledTimeline]}>
     <View style={styles.timelineRail}>
       <View style={styles.timelineLine} />
@@ -126,6 +133,8 @@ function bangkokBoundary(kind: 'start' | 'end') {
 }
 
 export function MobileJobReport({ binding, error, hasMore, jobs, language, loading, loadingMore, monthKeys, portrait, reportDay, summary, totalJobs, onClose, onLoadMore, onQueryChange, onRefresh, onSelectDay }: MobileJobReportProps) {
+  const { colors, scheme } = useTheme();
+  const styles = useReportStyles();
   const [search, setSearch] = useState('');
   const [month, setMonth] = useState<string | null>(null);
   const [mode, setMode] = useState<string | null>(null);
@@ -259,7 +268,10 @@ export function MobileJobReport({ binding, error, hasMore, jobs, language, loadi
         autoCorrect={false}
         onChangeText={setSearch}
         placeholder={copy.searchPlaceholder}
-        placeholderTextColor="#68727D"
+        placeholderTextColor={colors.textMuted}
+        keyboardAppearance={scheme}
+        cursorColor={colors.accent}
+        selectionColor={colors.accent}
         returnKeyType="search"
         style={styles.searchInput}
         value={search}
@@ -305,13 +317,18 @@ export function MobileJobReport({ binding, error, hasMore, jobs, language, loadi
 
   return <View accessibilityViewIsModal onAccessibilityEscape={onClose} style={styles.page}>
     <View style={styles.header}>
-      <RedGpsPin size={34} />
-      <View style={styles.headerInfo}>
-        <Text ref={reportTitleRef} accessible accessibilityRole="header" style={styles.title}>{daily ? copy.daily : copy.all}</Text>
-        <Text numberOfLines={1} style={styles.subtitle}>{binding.vehicleNumber} · {binding.deviceId}{reportDay ? ` · ${formatMobileReportDay(reportDay, language)}` : ''}</Text>
+      <View style={styles.headerIdentity}>
+        <RedGpsPin size={34} />
+        <View style={styles.headerInfo}>
+          <Text ref={reportTitleRef} accessible accessibilityRole="header" style={styles.title}>{daily ? copy.daily : copy.all}</Text>
+          <Text numberOfLines={1} style={styles.subtitle}>{binding.vehicleNumber} · {binding.deviceId}{reportDay ? ` · ${formatMobileReportDay(reportDay, language)}` : ''}</Text>
+        </View>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={copy.refresh} accessibilityState={{ busy: loading, disabled: loading }} disabled={loading} onPress={onRefresh} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>{loading ? '…' : copy.refresh}</Text></Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel={copy.close} onPress={onClose} style={styles.closeButton}><Text style={styles.closeButtonText}>×</Text></Pressable>
+      <View style={styles.headerControls}>
+        <ThemeToggle compact language={language} />
+        <Pressable accessibilityRole="button" accessibilityLabel={copy.refresh} accessibilityState={{ busy: loading, disabled: loading }} disabled={loading} onPress={onRefresh} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>{loading ? '…' : copy.refresh}</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={copy.close} onPress={onClose} style={styles.closeButton}><Text style={styles.closeButtonText}>×</Text></Pressable>
+      </View>
     </View>
     {error ? <Text accessibilityLiveRegion="assertive" accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     <FlatList
@@ -328,9 +345,8 @@ export function MobileJobReport({ binding, error, hasMore, jobs, language, loadi
       keyboardShouldPersistTaps="handled"
       maxToRenderPerBatch={12}
       numColumns={portrait ? 1 : 2}
-      onRefresh={onRefresh}
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={onRefresh} colors={[colors.accent]} tintColor={colors.accent} progressBackgroundColor={colors.surface} />}
       removeClippedSubviews
-      refreshing={loading}
       renderItem={({ item }) => daily
         ? <TimelineJobCard job={item} language={language} landscape={!portrait} />
         : <JobCard job={item} language={language} landscape={!portrait} />}
@@ -340,90 +356,105 @@ export function MobileJobReport({ binding, error, hasMore, jobs, language, loadi
   </View>;
 }
 
-const colors = { red: '#E31B23', maroon: '#7A1424', black: '#111111', grey: '#5E6872', lightGrey: '#EEF0F2', white: '#FFFFFF' };
-const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: colors.lightGrey },
-  header: { minHeight: 76, backgroundColor: colors.black, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 10 },
-  headerInfo: { flex: 1, minWidth: 0 },
-  title: { color: colors.white, fontSize: 20, fontWeight: '800' },
-  subtitle: { color: '#C8CDD2', fontSize: 11, marginTop: 3 },
-  secondaryButton: { minHeight: 48, justifyContent: 'center', borderWidth: 1, borderColor: '#5C6268', borderRadius: 7, paddingHorizontal: 12 },
-  secondaryButtonText: { color: colors.white, fontWeight: '700', fontSize: 12 },
-  closeButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  closeButtonText: { color: colors.white, fontSize: 30, lineHeight: 32 },
-  error: { color: colors.maroon, backgroundColor: '#FFE8E9', paddingHorizontal: 16, paddingVertical: 10, fontWeight: '700' },
-  list: { padding: 12, gap: 10 },
-  emptyList: { flexGrow: 1 },
-  viewSwitch: { flexDirection: 'row', backgroundColor: '#DDE1E4', borderRadius: 9, padding: 3, marginBottom: 10 },
-  switchButton: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 7, paddingHorizontal: 12 },
-  switchButtonActive: { backgroundColor: colors.black },
-  switchText: { color: colors.grey, fontSize: 13, fontWeight: '800' },
-  switchTextActive: { color: colors.white },
-  disabled: { opacity: 0.45 },
-  dayPicker: { gap: 7, paddingBottom: 10 },
-  dayButton: { minHeight: 48, justifyContent: 'center', backgroundColor: colors.white, borderColor: '#D7DBDF', borderWidth: 1, borderRadius: 7, paddingHorizontal: 12 },
-  dayButtonActive: { backgroundColor: colors.red, borderColor: colors.red },
-  dayButtonText: { color: colors.black, fontSize: 12, fontWeight: '700' },
-  dayButtonTextActive: { color: colors.white },
-  filtersPanel: { backgroundColor: colors.white, borderWidth: 1, borderColor: '#D7DBDF', borderRadius: 10, padding: 12, marginBottom: 10 },
-  filterToggle: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  filterToggleCopy: { flex: 1, minWidth: 0 },
-  filterToggleTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
-  filterToggleTitle: { color: colors.black, fontSize: 15, fontWeight: '900' },
-  filterCountBadge: { color: colors.white, backgroundColor: colors.red, borderRadius: 11, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, fontSize: 10, fontWeight: '900' },
-  filterSummary: { color: colors.grey, fontSize: 11, fontWeight: '600', marginTop: 4 },
-  filterChevron: { width: 10, height: 10, borderRightWidth: 2, borderBottomWidth: 2, borderColor: colors.black, transform: [{ rotate: '45deg' }, { translateY: -2 }] },
-  filterChevronExpanded: { transform: [{ rotate: '225deg' }, { translateY: -2 }] },
-  filterBody: { borderTopWidth: 1, borderTopColor: '#E2E5E7', marginTop: 8, paddingTop: 12 },
-  collapsedResultCount: { color: colors.grey, fontSize: 12, fontWeight: '700', borderTopWidth: 1, borderTopColor: '#E2E5E7', marginTop: 8, paddingTop: 10 },
-  searchInput: { minHeight: 48, borderWidth: 1, borderColor: '#BFC5CA', borderRadius: 8, paddingHorizontal: 14, color: colors.black, backgroundColor: colors.white, fontSize: 15, fontWeight: '600' },
-  filterRow: { marginTop: 12 },
-  dateTimeSection: { marginTop: 12 },
-  dateTimeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  dateTimeButton: { flex: 1, minWidth: 210, minHeight: 58, justifyContent: 'center', borderWidth: 1, borderColor: '#C8CDD2', borderRadius: 8, backgroundColor: colors.white, paddingHorizontal: 12, paddingVertical: 8 },
-  dateTimeButtonLabel: { color: colors.grey, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
-  dateTimeButtonValue: { color: colors.black, fontSize: 12, fontWeight: '800', marginTop: 4 },
-  clearRangeButton: { minHeight: 48, alignSelf: 'flex-start', justifyContent: 'center', marginTop: 3, paddingHorizontal: 8 },
-  filterLabel: { color: colors.black, fontSize: 12, fontWeight: '900', marginBottom: 7 },
-  filterRail: { gap: 7, paddingRight: 8 },
-  filterChip: { minHeight: 48, justifyContent: 'center', borderWidth: 1, borderColor: '#C8CDD2', borderRadius: 24, backgroundColor: colors.white, paddingHorizontal: 13 },
-  filterChipActive: { backgroundColor: colors.black, borderColor: colors.black },
-  filterChipText: { color: '#535C64', fontSize: 12, fontWeight: '800' },
-  filterChipTextActive: { color: colors.white },
-  filterFooter: { minHeight: 32, marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  resultCount: { color: colors.grey, fontSize: 12, fontWeight: '700' },
-  clearButton: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 10 },
-  clearButtonText: { color: colors.red, fontSize: 12, fontWeight: '900' },
-  summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
-  summaryCard: { flex: 1, minWidth: 130, backgroundColor: colors.white, borderWidth: 1, borderColor: '#D7DBDF', borderRadius: 9, padding: 14 },
-  summaryCardPortrait: { flexBasis: '47%' },
-  summaryLabel: { color: colors.grey, fontSize: 11, fontWeight: '700' },
-  summaryValue: { color: colors.black, fontSize: 24, fontWeight: '900', marginTop: 4 },
-  sectionTitle: { color: colors.black, fontSize: 18, fontWeight: '900', marginTop: 4, marginBottom: 10 },
-  timelineJobRow: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'stretch' },
-  cancelledTimeline: { backgroundColor: '#FFF7F7', borderRadius: 10 },
-  timelineRail: { width: 24, alignItems: 'center', alignSelf: 'stretch' },
-  timelineLine: { position: 'absolute', width: 2, top: 10, bottom: -10, backgroundColor: '#C8CDD2' },
-  timelineDot: { width: 11, height: 11, marginTop: 5, borderRadius: 6, backgroundColor: colors.red, borderWidth: 2, borderColor: colors.white },
-  cancelledDot: { backgroundColor: colors.grey },
-  timelineJobContent: { flex: 1, minWidth: 0, paddingBottom: 10 },
-  timelineTime: { color: colors.black, fontSize: 12, fontWeight: '900', marginBottom: 6 },
-  jobCard: { flex: 1, minWidth: 0, backgroundColor: colors.white, borderWidth: 1, borderColor: '#D7DBDF', borderRadius: 10, padding: 16 },
-  jobCardLandscape: { marginHorizontal: 5 },
-  jobTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  jobMode: { flex: 1, color: colors.black, fontSize: 18, fontWeight: '800' },
-  jobStatuses: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginTop: 8 },
-  jobStatus: { color: '#176B3A', backgroundColor: '#E7F7ED', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, overflow: 'hidden', fontSize: 11, fontWeight: '800' },
-  cancelledStatus: { color: colors.grey, backgroundColor: '#E4E7E9' },
-  pendingStatus: { color: '#7A4C00', backgroundColor: '#FFF0CC' },
-  failedStatus: { color: colors.maroon, backgroundColor: '#FFE0E2' },
-  jobTime: { color: colors.black, fontSize: 14, fontWeight: '700', marginTop: 12 },
-  jobTimeSecondary: { color: colors.black, fontSize: 14, fontWeight: '700', marginTop: 4 },
-  jobMeta: { color: colors.grey, fontSize: 12, marginTop: 6 },
-  jobId: { color: colors.grey, fontSize: 10, marginTop: 10 },
-  empty: { alignItems: 'center', padding: 30 },
-  emptyTitle: { color: colors.black, fontSize: 20, fontWeight: '800', textAlign: 'center' },
-  emptyBody: { color: colors.grey, fontSize: 13, textAlign: 'center', marginTop: 7 },
-  loadMoreButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 8, borderWidth: 1, borderColor: colors.red, backgroundColor: colors.white, marginTop: 4, marginBottom: 8 },
-  loadMoreText: { color: colors.red, fontSize: 13, fontWeight: '900' },
-});
+const reportStyleCache = new WeakMap<ThemeColors, ReturnType<typeof createReportStyles>>();
+
+function useReportStyles() {
+  const { colors } = useTheme();
+  let styles = reportStyleCache.get(colors);
+  if (!styles) {
+    styles = createReportStyles(colors);
+    reportStyleCache.set(colors, styles);
+  }
+  return styles;
+}
+
+function createReportStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    page: { flex: 1, backgroundColor: colors.background },
+    header: { minHeight: 76, backgroundColor: colors.header, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
+    headerIdentity: { flex: 1, minWidth: 180, flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerControls: { flexDirection: 'row', flexWrap: 'wrap', maxWidth: '100%', alignItems: 'center', marginLeft: 'auto', gap: 8 },
+    headerInfo: { flex: 1, minWidth: 0 },
+    title: { color: colors.headerText, fontSize: 20, fontWeight: '800' },
+    subtitle: { color: colors.headerMuted, fontSize: 11, marginTop: 3 },
+    secondaryButton: { minHeight: 48, justifyContent: 'center', borderWidth: 1, borderColor: colors.headerBorder, borderRadius: 7, paddingHorizontal: 12 },
+    secondaryButtonText: { color: colors.headerText, fontWeight: '700', fontSize: 12 },
+    closeButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+    closeButtonText: { color: colors.headerText, fontSize: 30, lineHeight: 32 },
+    error: { color: colors.errorText, backgroundColor: colors.errorSurface, paddingHorizontal: 16, paddingVertical: 10, fontWeight: '700' },
+    list: { padding: 12, gap: 10 },
+    emptyList: { flexGrow: 1 },
+    viewSwitch: { flexDirection: 'row', backgroundColor: colors.neutralSurface, borderRadius: 9, padding: 3, marginBottom: 10 },
+    switchButton: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 7, paddingHorizontal: 12 },
+    switchButtonActive: { backgroundColor: colors.selectedSurface },
+    switchText: { color: colors.textMuted, fontSize: 13, fontWeight: '800' },
+    switchTextActive: { color: colors.selectedText },
+    disabled: { opacity: 0.45 },
+    dayPicker: { gap: 7, paddingBottom: 10 },
+    dayButton: { minHeight: 48, justifyContent: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 7, paddingHorizontal: 12 },
+    dayButtonActive: { backgroundColor: colors.brand, borderColor: colors.brand },
+    dayButtonText: { color: colors.text, fontSize: 12, fontWeight: '700' },
+    dayButtonTextActive: { color: colors.onBrand },
+    filtersPanel: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 12, marginBottom: 10 },
+    filterToggle: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12 },
+    filterToggleCopy: { flex: 1, minWidth: 0 },
+    filterToggleTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
+    filterToggleTitle: { color: colors.text, fontSize: 15, fontWeight: '900' },
+    filterCountBadge: { color: colors.onBrand, backgroundColor: colors.brand, borderRadius: 11, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3, fontSize: 10, fontWeight: '900' },
+    filterSummary: { color: colors.textMuted, fontSize: 11, fontWeight: '600', marginTop: 4 },
+    filterChevron: { width: 10, height: 10, borderRightWidth: 2, borderBottomWidth: 2, borderColor: colors.text, transform: [{ rotate: '45deg' }, { translateY: -2 }] },
+    filterChevronExpanded: { transform: [{ rotate: '225deg' }, { translateY: -2 }] },
+    filterBody: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 12 },
+    collapsedResultCount: { color: colors.textMuted, fontSize: 12, fontWeight: '700', borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 10 },
+    searchInput: { minHeight: 48, borderWidth: 1, borderColor: colors.inputBorder, borderRadius: 8, paddingHorizontal: 14, color: colors.text, backgroundColor: colors.surface, fontSize: 15, fontWeight: '600' },
+    filterRow: { marginTop: 12 },
+    dateTimeSection: { marginTop: 12 },
+    dateTimeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    dateTimeButton: { flex: 1, minWidth: 210, minHeight: 58, justifyContent: 'center', borderWidth: 1, borderColor: colors.inputBorder, borderRadius: 8, backgroundColor: colors.surface, paddingHorizontal: 12, paddingVertical: 8 },
+    dateTimeButtonLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+    dateTimeButtonValue: { color: colors.text, fontSize: 12, fontWeight: '800', marginTop: 4 },
+    clearRangeButton: { minHeight: 48, alignSelf: 'flex-start', justifyContent: 'center', marginTop: 3, paddingHorizontal: 8 },
+    filterLabel: { color: colors.text, fontSize: 12, fontWeight: '900', marginBottom: 7 },
+    filterRail: { gap: 7, paddingRight: 8 },
+    filterChip: { minHeight: 48, justifyContent: 'center', borderWidth: 1, borderColor: colors.inputBorder, borderRadius: 24, backgroundColor: colors.surface, paddingHorizontal: 13 },
+    filterChipActive: { backgroundColor: colors.selectedSurface, borderColor: colors.selectedSurface },
+    filterChipText: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
+    filterChipTextActive: { color: colors.selectedText },
+    filterFooter: { minHeight: 32, marginTop: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+    resultCount: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
+    clearButton: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 10 },
+    clearButtonText: { color: colors.accent, fontSize: 12, fontWeight: '900' },
+    summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+    summaryCard: { flex: 1, minWidth: 130, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 9, padding: 14 },
+    summaryCardPortrait: { flexBasis: '47%' },
+    summaryLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '700' },
+    summaryValue: { color: colors.text, fontSize: 24, fontWeight: '900', marginTop: 4 },
+    sectionTitle: { color: colors.text, fontSize: 18, fontWeight: '900', marginTop: 4, marginBottom: 10 },
+    timelineJobRow: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'stretch' },
+    cancelledTimeline: { backgroundColor: colors.surfaceMuted, borderRadius: 10 },
+    timelineRail: { width: 24, alignItems: 'center', alignSelf: 'stretch' },
+    timelineLine: { position: 'absolute', width: 2, top: 10, bottom: -10, backgroundColor: colors.border },
+    timelineDot: { width: 11, height: 11, marginTop: 5, borderRadius: 6, backgroundColor: colors.accent, borderWidth: 2, borderColor: colors.surface },
+    cancelledDot: { backgroundColor: colors.textMuted },
+    timelineJobContent: { flex: 1, minWidth: 0, paddingBottom: 10 },
+    timelineTime: { color: colors.text, fontSize: 12, fontWeight: '900', marginBottom: 6 },
+    jobCard: { flex: 1, minWidth: 0, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 16 },
+    jobCardLandscape: { marginHorizontal: 5 },
+    jobTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    jobMode: { flex: 1, color: colors.text, fontSize: 18, fontWeight: '800' },
+    jobStatuses: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginTop: 8 },
+    jobStatus: { color: colors.successText, backgroundColor: colors.successSurface, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, overflow: 'hidden', fontSize: 11, fontWeight: '800' },
+    cancelledStatus: { color: colors.textMuted, backgroundColor: colors.neutralSurface },
+    pendingStatus: { color: colors.warningText, backgroundColor: colors.warningSurface },
+    failedStatus: { color: colors.errorText, backgroundColor: colors.errorSurface },
+    jobTime: { color: colors.text, fontSize: 14, fontWeight: '700', marginTop: 12 },
+    jobTimeSecondary: { color: colors.text, fontSize: 14, fontWeight: '700', marginTop: 4 },
+    jobMeta: { color: colors.textMuted, fontSize: 12, marginTop: 6 },
+    jobId: { color: colors.textMuted, fontSize: 10, marginTop: 10 },
+    empty: { alignItems: 'center', padding: 30 },
+    emptyTitle: { color: colors.text, fontSize: 20, fontWeight: '800', textAlign: 'center' },
+    emptyBody: { color: colors.textMuted, fontSize: 13, textAlign: 'center', marginTop: 7 },
+    loadMoreButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 8, borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.surface, marginTop: 4, marginBottom: 8 },
+    loadMoreText: { color: colors.accent, fontSize: 13, fontWeight: '900' },
+  });
+}

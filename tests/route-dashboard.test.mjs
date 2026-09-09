@@ -105,9 +105,9 @@ test('the dashboard route assignment selector searches and pages a bounded serve
   const drawer = await readFile(fileURLToPath(new NodeUrl('../web/app/job-gps-drawer.jsx', import.meta.url)), 'utf8');
   assert.match(selector, /\/api\/admin\/job-route-options\?\$\{params\}/);
   assert.match(selector, /const routePageSize = 50/);
-  assert.match(selector, /offset: String\(offset\)/);
-  assert.match(selector, /async function loadMoreRoutes\(\)/);
-  assert.match(selector, /t\.loadMore/);
+  assert.match(selector, /offset: String\(request\.offset\)/);
+  assert.match(selector, /t\.previous/);
+  assert.match(selector, /t\.next/);
   assert.match(selector, /role="combobox"/);
   assert.match(selector, /role="listbox"/);
   assert.match(drawer, /<RouteSelector/);
@@ -255,7 +255,7 @@ test('the GPS drawer maps the complete work period and refreshes it after a look
   assert.doesNotMatch(drawer, /activeDetail\?\.route \? <section className="gps-route-section"/);
 });
 
-test('the work-period map draws the raw trail and truthful clickable location stacks without losing job-fix detail', async () => {
+test('the work-period map draws every numbered GPS fix and promotes the selected row above co-located circles', async () => {
   const map = await readFile(fileURLToPath(new NodeUrl('../web/app/route-map.jsx', import.meta.url)), 'utf8');
   assert.match(map, /groupGpsSamplesByJob\(samples, selectedJobId\)/);
   assert.match(map, /if \(!routePoints\.length && !recordedPoints\.length && !deviationPoints\.length\)/);
@@ -275,26 +275,34 @@ test('the work-period map draws the raw trail and truthful clickable location st
   assert.match(map, /for \(const point of cluster\.points\) membership\.set\(fixKey\(point\), \{ clusterKey: cluster\.key, clusterIndex: index \+ 1 \}\);/);
   assert.match(map, /const membership = clusterMembershipByFixKey\.get\(pointFixKey\);/);
   assert.doesNotMatch(map, /const clusterKey = coordinateKey\(point\);/);
-  assert.match(map, /function clusterMarkerIcon\(google, count, selected, active\)/);
+  assert.match(map, /function fixMarkerIcon\(google, number, selected, active\)/);
+  assert.match(map, /const visualFixes = useMemo\(\(\) => fixRows\.map\(point =>/);
   assert.match(map, /feature\.setProperty\('active'/);
-  assert.match(map, /clusterMarkerIcon\(google, Number\(feature\.getProperty\('count'\)\), Boolean\(feature\.getProperty\('selected'\)\), Boolean\(feature\.getProperty\('active'\)\)\)/);
-  assert.match(map, /zIndex: feature\.getProperty\('active'\) \? 1_000 : feature\.getProperty\('selected'\) \? 72 : 60/);
-  assert.match(map, /for \(const cluster of visualClusters\)/);
-  assert.match(map, /clusterKey: cluster\.key/);
-  assert.match(map, /count: cluster\.count/);
+  assert.match(map, /String\(feature\.getProperty\('fixKey'\) \|\| ''\) === activeFixKey/);
+  assert.match(map, /fixMarkerIcon\(google, Number\(feature\.getProperty\('number'\)\), Boolean\(feature\.getProperty\('selected'\)\), Boolean\(feature\.getProperty\('active'\)\)\)/);
+  assert.match(map, /zIndex: feature\.getProperty\('active'\) \? 1_000 : feature\.getProperty\('selected'\) \? 900 : 60 \+ Math\.min\(9, Number\(feature\.getProperty\('number'\)\) \|\| 0\)/);
+  assert.match(map, /for \(const point of visualFixes\)/);
+  assert.match(map, /fixKey: point\.fixKey/);
+  assert.match(map, /number: point\.chronologicalIndex/);
   assert.match(map, /clickable: true/);
   assert.match(map, /title: feature\.getProperty\('title'\)/);
-  assert.match(map, /clusterLayer\.addListener\('click'/);
+  assert.match(map, /fixLayer\.addListener\('click'/);
+  assert.match(map, /activateFixByKey\(pointFixKey\)/);
   assert.match(map, /for \(const listener of listeners\) listener\.remove\?\.\(\);/);
   assert.match(map, /trailPoints=\{gpsData\.trailPoints\}/);
-  assert.match(map, /locationClusters=\{visualClusters\}/);
-  assert.match(map, /const renderedLocationClusters = \[/);
-  assert.match(map, /\.\.\.locationClusters\.filter\(cluster => cluster\.key === activeClusterKey\)/);
-  assert.match(map, /renderedLocationClusters\.map\(cluster =>/);
+  assert.match(map, /fixes=\{visualFixes\}/);
+  assert.match(map, /const renderedFixes = \[/);
+  assert.match(map, /\.\.\.fixes\.filter\(point => point\.fixKey !== activeFixKey && !point\.selected\)/);
+  assert.match(map, /\.\.\.fixes\.filter\(point => point\.fixKey !== activeFixKey && point\.selected\)/);
+  assert.match(map, /\.\.\.fixes\.filter\(point => point\.fixKey === activeFixKey\)/);
+  assert.match(map, /renderedFixes\.map\(point =>/);
   assert.match(map, /role="group" aria-label=\{label\}/);
-  assert.match(map, /className=\{`route-map-cluster-marker/);
+  assert.match(map, /className=\{`route-map-fix-marker/);
+  assert.match(map, /className="route-fix-number"/);
+  assert.match(map, /\{point\.chronologicalIndex\}<\/text>/);
   assert.match(map, /role="button"/);
   assert.match(map, /tabIndex=\{0\}/);
+  assert.match(map, /onFocus=\{activate\}/);
   assert.match(map, /onKeyDown=\{activate\}/);
   assert.doesNotMatch(map, /preserveAspectRatio="none" aria-hidden="true"/);
   assert.match(map, /recordedPoints\.map\(point => \(\{ lat: point\.latitude, lng: point\.longitude \}\)\)/);

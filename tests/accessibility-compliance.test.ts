@@ -69,7 +69,7 @@ test('mobile UI supports TalkBack focus, 48dp controls, and an enlarged-text 3x3
   assert.match(app, /accessibilityStyles = StyleSheet\.create\([\s\S]*content: \{ padding: 6 \}/);
   assert.match(app, /actionNumberSlot: \{ height: '32%' \}/);
   assert.match(app, /headerButton: \{ minWidth: 48, minHeight: 48/);
-  assert.match(app, /card: \{ width: '100%', maxWidth: 420, maxHeight: '90%'/);
+  assert.match(app, /card: \{ width: '100%', maxWidth: landscape \? 560 : 420, maxHeight: '90%'/);
   assert.match(app, /findNodeHandle\(vehicleAdminTitleRef\.current\)/);
   assert.match(app, /restoreFocusToNode\(savedJobsTriggerNodeRef\.current/);
   assert.match(app, /Tablet connection needs repair/);

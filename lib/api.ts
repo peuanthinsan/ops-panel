@@ -171,8 +171,9 @@ export async function fetchVehicleMotion(deviceId: string) {
 export type JobRouteOption = { id: string; routeName: string };
 export type JobRouteOptions = { routes: JobRouteOption[]; hasMore: boolean };
 
-export async function fetchJobRoutes(deviceId: string, search = '', limit = 50): Promise<JobRouteOptions> {
-  const query = new URLSearchParams({ deviceId, limit: String(limit) });
+export async function fetchJobRoutes(deviceId: string, search = '', limit = 50, offset = 0): Promise<JobRouteOptions> {
+  const safeOffset = Math.min(100_000, Math.max(0, Math.trunc(offset) || 0));
+  const query = new URLSearchParams({ deviceId, limit: String(limit), offset: String(safeOffset) });
   if (search.trim()) query.set('q', search.trim());
   const path = `/api/job-routes?${query.toString()}`;
   const response = await deviceFetch(path, {}, 8000);
