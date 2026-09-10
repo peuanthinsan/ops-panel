@@ -1,0 +1,434 @@
+diff --git a/hosting/README.md b/hosting/README.md
+new file mode 100644
+index 0000000..4e24f2f
+--- /dev/null
++++ b/hosting/README.md
+@@ -0,0 +1,11 @@
++# Windows hosting
++
++Build: node hosting/build.cjs PUBLIC_BUILD_SETTINGS_JSON EMPTY_OUTPUT_DIRECTORY
++
++The build settings JSON may contain only NEXT_PUBLIC_ values. Use {} if none are required. Never pass production secrets to the build.
++
++Start a packaged release with SONGDEE_CONFIG pointing to its protected runtime JSON, then run node hosting/launch.cjs. Runtime configuration remains outside Git and the release.
++
++The launcher opts into SONGDEE_WINDOWS_HOSTING=1 and binds to loopback. Existing cloud deployments leave that flag unset. Database migrations are never part of this build.
++
++Deployment is not enabled by adding these files. The Windows controller, service configuration, initial baseline revision, and rollback checks must be installed and validated separately.
+diff --git a/hosting/app.json b/hosting/app.json
+new file mode 100644
+index 0000000..e6d17eb
+--- /dev/null
++++ b/hosting/app.json
+@@ -0,0 +1,4 @@
++{
++  "app": "ops",
++  "version": 1
++}
+diff --git a/hosting/build.cjs b/hosting/build.cjs
+new file mode 100644
+index 0000000..99f5a30
+--- /dev/null
++++ b/hosting/build.cjs
+@@ -0,0 +1,69 @@
++'use strict';
++const fs = require('node:fs');
++const path = require('node:path');
++const { spawnSync } = require('node:child_process');
++
++// Run from a clean checkout. Never supply production runtime credentials here.
++const root = path.resolve(__dirname, '..');
++const app = JSON.parse(fs.readFileSync(path.join(__dirname, 'app.json'), 'utf8')).app;
++const [configFile, output] = process.argv.slice(2);
++if (!configFile || !output) throw new Error('Usage: node hosting/build.cjs PUBLIC_BUILD_SETTINGS_JSON OUTPUT_DIRECTORY');
++const publicSettings = JSON.parse(fs.readFileSync(configFile, 'utf8').replace(/^\uFEFF/, ''));
++if (Object.keys(publicSettings).some(key => !/^NEXT_PUBLIC_[A-Z0-9_]+$/.test(key))) {
++  throw new Error('Build settings may contain only NEXT_PUBLIC_ values; never pass runtime secrets');
++}
++const destination = path.resolve(output);
++if (fs.existsSync(destination)) throw new Error('Output directory must not already exist');
++if (destination.startsWith(root + path.sep)) throw new Error('Output must be outside the source checkout');
++const env = {
++  ...process.env, ...publicSettings, NODE_ENV: 'production', NEXT_TELEMETRY_DISABLED: '1', SONGDEE_WINDOWS_HOSTING: '1',
++  DATABASE_URL: 'postgresql://build_only:dummy@127.0.0.1:54329/build_only',
++  POSTGRES_URL: 'postgresql://build_only:dummy@127.0.0.1:54329/build_only',
++  SONGDEE_ADMIN_TOKEN_SECRET: 'build-validation-only-not-a-production-secret',
++  AUTH_SECRET: 'build-validation-only-not-a-production-secret',
++};
++delete env.AUTH_URL;
++delete env.NEXTAUTH_URL;
++const npm = path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
++function node(args, cwd = root, variables = env) {
++  const result = spawnSync(process.execPath, args, { cwd, env: variables, stdio: 'inherit', windowsHide: true });
++  if (result.error || result.status !== 0) throw new Error('Build command failed; exit code ' + result.status);
++}
++function install(cwd) {
++  node([npm, 'ci', '--include=dev', '--no-audit', '--no-fund'], cwd, {
++    ...process.env, NODE_ENV: 'development', NEXT_TELEMETRY_DISABLED: '1',
++  });
++}
++function copy(from, to) { fs.cpSync(from, to, { recursive: true, errorOnExist: true }); }
++if (app === 'dashboard') {
++  install(root);
++  node([path.join(root, 'node_modules/vitest/vitest.mjs'), 'run']);
++  node([path.join(root, 'node_modules/next/dist/bin/next'), 'build']);
++  copy(path.join(root, '.next/standalone'), destination);
++  if (fs.existsSync(path.join(root, 'public'))) copy(path.join(root, 'public'), path.join(destination, 'public'));
++  copy(path.join(root, '.next/static'), path.join(destination, '.next/static'));
++} else if (app === 'ops') {
++  const web = path.join(root, 'web');
++  install(web);
++  node([path.join(web, 'node_modules/next/dist/bin/next'), 'build'], web);
++  copy(path.join(web, '.next/standalone'), destination);
++  copy(path.join(web, 'public'), path.join(destination, 'web/public'));
++  copy(path.join(web, '.next/static'), path.join(destination, 'web/.next/static'));
++} else if (app === 'svis') {
++  install(root);
++  install(path.join(root, 'web'));
++  node(['--test', 'host/host-policy.test.cjs', 'host/proxy-headers.test.cjs']);
++  node([npm, 'run', 'build'], path.join(root, 'web'));
++  node(['host/build.cjs']);
++  fs.mkdirSync(destination, { recursive: true });
++  for (const dir of ['dist', 'public']) copy(path.join(root, dir), path.join(destination, dir));
++  // Use the repository lockfile for reproducible runtime dependency installation.
++  copy(path.join(root, 'package.json'), path.join(destination, 'package.json'));
++  copy(path.join(root, 'package-lock.json'), path.join(destination, 'package-lock.json'));
++  node([npm, 'ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], destination, {
++    ...process.env, NODE_ENV: 'production',
++  });
++} else throw new Error('Unknown application');
++fs.mkdirSync(path.join(destination, 'hosting'), { recursive: true });
++for (const name of ['launch.cjs', 'app.json']) copy(path.join(__dirname, name), path.join(destination, 'hosting', name));
++console.log('Release packaged for ' + app);
+diff --git a/hosting/launch.cjs b/hosting/launch.cjs
+new file mode 100644
+index 0000000..d6d6361
+--- /dev/null
++++ b/hosting/launch.cjs
+@@ -0,0 +1,26 @@
++'use strict';
++const fs = require('node:fs');
++const path = require('node:path');
++if (!process.env.SONGDEE_CONFIG) throw new Error('SONGDEE_CONFIG must identify the protected runtime JSON');
++const settings = JSON.parse(fs.readFileSync(process.env.SONGDEE_CONFIG, 'utf8').replace(/^\uFEFF/, ''));
++for (const [key, value] of Object.entries(settings)) {
++  if (!/^[A-Z][A-Z0-9_]*$/.test(key) || ['NODE_OPTIONS', 'PATH', 'NODE_PATH'].includes(key)) throw new Error('Invalid runtime setting name');
++  if (!['string', 'number', 'boolean'].includes(typeof value)) throw new Error('Invalid runtime setting value');
++  process.env[key] = String(value);
++}
++process.env.SONGDEE_WINDOWS_HOSTING = '1';
++process.env.NODE_ENV = 'production';
++process.env.HOST = process.env.HOSTNAME = '127.0.0.1';
++if (process.env.SONGDEE_CANDIDATE_PORT) {
++  if (!/^\d{4,5}$/.test(process.env.SONGDEE_CANDIDATE_PORT)) throw new Error('Invalid candidate port');
++  process.env.PORT = process.env.SONGDEE_CANDIDATE_PORT;
++}
++const { app } = JSON.parse(fs.readFileSync(path.join(__dirname, 'app.json'), 'utf8'));
++if (app === 'dashboard') {
++  delete process.env.AUTH_URL;
++  delete process.env.NEXTAUTH_URL;
++  process.env.AUTH_TRUST_HOST = 'true';
++  require('../server.js');
++} else if (app === 'ops') require('../web/server.js');
++else if (app === 'svis') require('../dist/server.cjs');
++else throw new Error('Unknown application');
+diff --git a/web/lib/server/database.mjs b/web/lib/server/database.mjs
+index 153a800..943d3e5 100644
+--- a/web/lib/server/database.mjs
++++ b/web/lib/server/database.mjs
+@@ -1,4 +1,5 @@
+ import { neon } from '@neondatabase/serverless';
++import { localPostgres } from './local-postgres.mjs';
+ 
+ let databaseClient;
+ export const REQUIRED_DATABASE_SCHEMA_VERSION = '2026-09-02.1';
+@@ -15,7 +16,8 @@ export function getDatabase() {
+   if (!connectionString) {
+     throw new ConfigurationError('DATABASE_URL is not configured.');
+   }
+-  databaseClient ||= neon(connectionString);
++  const hostname = new URL(connectionString).hostname;
++  databaseClient ||= ['127.0.0.1', 'localhost', '[::1]'].includes(hostname) ? localPostgres(connectionString) : neon(connectionString);
+   return databaseClient;
+ }
+ 
+diff --git a/web/lib/server/local-postgres.mjs b/web/lib/server/local-postgres.mjs
+new file mode 100644
+index 0000000..ec8820d
+--- /dev/null
++++ b/web/lib/server/local-postgres.mjs
+@@ -0,0 +1,40 @@
++import pg from 'pg';
++
++export function localPostgres(connectionString) {
++  const url = new URL(connectionString);
++  if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) throw new Error('Local database adapter requires loopback');
++  const pool = new pg.Pool({ connectionString, max: 10, connectionTimeoutMillis: 10000, options: '-c timezone=UTC' });
++  pool.on('error', error => console.error(JSON.stringify({ event: 'ops_database_pool_error', code: error.code || 'UNKNOWN' })));
++  class Query {
++    constructor(text, values) { this.text = text; this.values = values; this.promise = null; }
++    then(resolve, reject) { this.promise ||= pool.query(this.text, this.values).then(result => result.rows); return this.promise.then(resolve, reject); }
++  }
++  function sql(strings, ...values) {
++    if (!Array.isArray(strings) || !Object.hasOwn(strings, 'raw')) throw new TypeError('Use tagged SQL or sql.query');
++    return new Query(strings.reduce((text, part, index) => text + (index ? '$' + index : '') + part, ''), values);
++  }
++  sql.query = (text, values = []) => new Query(text, values);
++  sql.transaction = async (queries, options = {}) => {
++    if (typeof queries === 'function') queries = queries(sql);
++    if (!Array.isArray(queries) || queries.some(query => !(query instanceof Query) || query.promise)) throw new Error('Transaction requires unexecuted queries');
++    const client = await pool.connect();
++    try {
++      let begin = 'BEGIN';
++      if (options.isolationLevel) {
++        const levels = { ReadUncommitted: 'READ UNCOMMITTED', ReadCommitted: 'READ COMMITTED', RepeatableRead: 'REPEATABLE READ', Serializable: 'SERIALIZABLE' };
++        if (!levels[options.isolationLevel]) throw new Error('Unsupported isolation level');
++        begin += ' ISOLATION LEVEL ' + levels[options.isolationLevel];
++      }
++      if (options.readOnly) begin += ' READ ONLY';
++      await client.query(begin);
++      const results = [];
++      for (const query of queries) results.push((await client.query(query.text, query.values)).rows);
++      const committed = await client.query('COMMIT');
++      if (committed.command !== 'COMMIT') throw new Error('Database transaction did not commit');
++      return results;
++    } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
++    finally { client.release(); }
++  };
++  sql.close = () => pool.end();
++  return sql;
++}
+diff --git a/web/next.config.mjs b/web/next.config.mjs
+index bebef8c..96797fb 100644
+--- a/web/next.config.mjs
++++ b/web/next.config.mjs
+@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
+ /** @type {import('next').NextConfig} */
+ const nextConfig = {
+   agentRules: false,
++  ...(process.env.SONGDEE_WINDOWS_HOSTING === '1' ? { output: 'standalone' } : {}),
+   allowedDevOrigins: ['127.0.0.1'],
+   reactStrictMode: true,
+   distDir: process.env.SONGDEE_NEXT_DIST_DIR || '.next',
+diff --git a/web/package-lock.json b/web/package-lock.json
+index 39548f6..49e59d9 100644
+--- a/web/package-lock.json
++++ b/web/package-lock.json
+@@ -12,6 +12,7 @@
+         "@neondatabase/serverless": "^1.1.0",
+         "@phosphor-icons/react": "^2.1.10",
+         "next": "16.3.1",
++        "pg": "^8.23.0",
+         "react": "19.2.8",
+         "react-dom": "19.2.8"
+       },
+@@ -1209,6 +1210,95 @@
+         }
+       }
+     },
++    "node_modules/pg": {
++      "version": "8.23.0",
++      "resolved": "https://registry.npmjs.org/pg/-/pg-8.23.0.tgz",
++      "integrity": "sha512-Ip2EQCngowJLGOfCwkFhPXU7/ljlhn6Rxlmy4XYfL2Y+vyRM59+8uR2xqRWKdYmbXmxCFOAmKxBuSUCdF34qLg==",
++      "license": "MIT",
++      "dependencies": {
++        "pg-connection-string": "^2.14.0",
++        "pg-pool": "^3.14.0",
++        "pg-protocol": "^1.16.0",
++        "pg-types": "2.2.0",
++        "pgpass": "1.0.5"
++      },
++      "engines": {
++        "node": ">= 16.0.0"
++      },
++      "optionalDependencies": {
++        "pg-cloudflare": "^1.4.0"
++      },
++      "peerDependencies": {
++        "pg-native": ">=3.0.1"
++      },
++      "peerDependenciesMeta": {
++        "pg-native": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/pg-cloudflare": {
++      "version": "1.4.0",
++      "resolved": "https://registry.npmjs.org/pg-cloudflare/-/pg-cloudflare-1.4.0.tgz",
++      "integrity": "sha512-Vo7z/6rrQYxpNRylp4Tlob2elzbh+N/MOQbxFVWCxS7oEx6jF53GTJFxK2WWpKuBRkmiin4Mt+xofFDjx09R0A==",
++      "license": "MIT",
++      "optional": true
++    },
++    "node_modules/pg-connection-string": {
++      "version": "2.14.0",
++      "resolved": "https://registry.npmjs.org/pg-connection-string/-/pg-connection-string-2.14.0.tgz",
++      "integrity": "sha512-XwWDGcLRGCXAR8F/AM5bG7Q+A3Wm2s6QeEjlOKZLlH3UYcguiqCWKyWXVag5TLTIjR7oOJUY8kcADaZgWPyLeg==",
++      "license": "MIT"
++    },
++    "node_modules/pg-int8": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/pg-int8/-/pg-int8-1.0.1.tgz",
++      "integrity": "sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==",
++      "license": "ISC",
++      "engines": {
++        "node": ">=4.0.0"
++      }
++    },
++    "node_modules/pg-pool": {
++      "version": "3.14.0",
++      "resolved": "https://registry.npmjs.org/pg-pool/-/pg-pool-3.14.0.tgz",
++      "integrity": "sha512-gKtPkFdQPU3DksooVLi9LsjZxrsBUZIpa+7aVx+LV5pNh0KzP4Zleud2po+ConrxbuXGBJ6Hfer6hdgpIBpBaw==",
++      "license": "MIT",
++      "peerDependencies": {
++        "pg": ">=8.0"
++      }
++    },
++    "node_modules/pg-protocol": {
++      "version": "1.16.0",
++      "resolved": "https://registry.npmjs.org/pg-protocol/-/pg-protocol-1.16.0.tgz",
++      "integrity": "sha512-sILXutLVjCLjcDuOmvhX5e2Z4cS5qG/6Bu3VkpFwdf/633ElGLpEh9bgmuI5I4sqKqkifQiGyiCcx1HdtrK7tg==",
++      "license": "MIT"
++    },
++    "node_modules/pg-types": {
++      "version": "2.2.0",
++      "resolved": "https://registry.npmjs.org/pg-types/-/pg-types-2.2.0.tgz",
++      "integrity": "sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==",
++      "license": "MIT",
++      "dependencies": {
++        "pg-int8": "1.0.1",
++        "postgres-array": "~2.0.0",
++        "postgres-bytea": "~1.0.0",
++        "postgres-date": "~1.0.4",
++        "postgres-interval": "^1.1.0"
++      },
++      "engines": {
++        "node": ">=4"
++      }
++    },
++    "node_modules/pgpass": {
++      "version": "1.0.5",
++      "resolved": "https://registry.npmjs.org/pgpass/-/pgpass-1.0.5.tgz",
++      "integrity": "sha512-FdW9r/jQZhSeohs1Z3sI1yxFQNFvMcnmfuj4WBMUTxOrAyLMaTcE1aAMBiTlbMNaXvBCQuVi0R7hd8udDSP7ug==",
++      "license": "MIT",
++      "dependencies": {
++        "split2": "^4.1.0"
++      }
++    },
+     "node_modules/picocolors": {
+       "version": "1.1.1",
+       "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+@@ -1243,6 +1333,45 @@
+         "node": "^10 || ^12 || >=14"
+       }
+     },
++    "node_modules/postgres-array": {
++      "version": "2.0.0",
++      "resolved": "https://registry.npmjs.org/postgres-array/-/postgres-array-2.0.0.tgz",
++      "integrity": "sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=4"
++      }
++    },
++    "node_modules/postgres-bytea": {
++      "version": "1.0.1",
++      "resolved": "https://registry.npmjs.org/postgres-bytea/-/postgres-bytea-1.0.1.tgz",
++      "integrity": "sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/postgres-date": {
++      "version": "1.0.7",
++      "resolved": "https://registry.npmjs.org/postgres-date/-/postgres-date-1.0.7.tgz",
++      "integrity": "sha512-suDmjLVQg78nMK2UZ454hAG+OAW+HQPZ6n++TNDUX+L0+uUlLywnoxJKDou51Zm+zTCjrCl0Nq6J9C5hP9vK/Q==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
++    "node_modules/postgres-interval": {
++      "version": "1.2.0",
++      "resolved": "https://registry.npmjs.org/postgres-interval/-/postgres-interval-1.2.0.tgz",
++      "integrity": "sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==",
++      "license": "MIT",
++      "dependencies": {
++        "xtend": "^4.0.0"
++      },
++      "engines": {
++        "node": ">=0.10.0"
++      }
++    },
+     "node_modules/react": {
+       "version": "19.2.8",
+       "resolved": "https://registry.npmjs.org/react/-/react-19.2.8.tgz",
+@@ -1342,6 +1471,15 @@
+         "node": ">=0.10.0"
+       }
+     },
++    "node_modules/split2": {
++      "version": "4.2.0",
++      "resolved": "https://registry.npmjs.org/split2/-/split2-4.2.0.tgz",
++      "integrity": "sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==",
++      "license": "ISC",
++      "engines": {
++        "node": ">= 10.x"
++      }
++    },
+     "node_modules/styled-jsx": {
+       "version": "5.1.6",
+       "resolved": "https://registry.npmjs.org/styled-jsx/-/styled-jsx-5.1.6.tgz",
+@@ -1412,6 +1550,15 @@
+       "integrity": "sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==",
+       "dev": true,
+       "license": "MIT"
++    },
++    "node_modules/xtend": {
++      "version": "4.0.2",
++      "resolved": "https://registry.npmjs.org/xtend/-/xtend-4.0.2.tgz",
++      "integrity": "sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=0.4"
++      }
+     }
+   }
+ }
+diff --git a/web/package.json b/web/package.json
+index eafcc0b..67bd925 100644
+--- a/web/package.json
++++ b/web/package.json
+@@ -15,7 +15,8 @@
+     "@phosphor-icons/react": "^2.1.10",
+     "next": "16.3.1",
+     "react": "19.2.8",
+-    "react-dom": "19.2.8"
++    "react-dom": "19.2.8",
++    "pg": "^8.23.0"
+   },
+   "overrides": {
+     "postcss": "^8.5.26",
+diff --git a/web/proxy.js b/web/proxy.js
+new file mode 100644
+index 0000000..c319889
+--- /dev/null
++++ b/web/proxy.js
+@@ -0,0 +1,16 @@
++import { NextResponse } from 'next/server';
++import { isIP } from 'node:net';
++
++export function proxy(request) {
++  if (process.env.SONGDEE_WINDOWS_HOSTING !== '1') return NextResponse.next();
++  const hostname = new URL('http://' + (request.headers.get('host') || request.nextUrl.host)).hostname.toLowerCase().replace(/\.$/, '');
++  if (hostname === 'api2.songdeegps.com') return new Response(null, { status: 404 });
++  // This production listener is loopback-only. ngrok appends its observed
++  // client address; discard caller-supplied earlier entries for rate limiting.
++  const headers = new Headers(request.headers);
++  const observed = (headers.get('x-forwarded-for') || '').split(',').at(-1).trim();
++  headers.set('x-forwarded-for', isIP(observed) ? observed : 'unknown');
++  headers.set('x-real-ip', isIP(observed) ? observed : 'unknown');
++  return NextResponse.next({ request: { headers } });
++}
++export const config = { matcher: '/:path*' };

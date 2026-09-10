@@ -1,0 +1,20 @@
+[
+  {
+    "app": "dashboard",
+    "base": "84f3f7e096eaeb881aeb4e7a5c97538b3d6202b3",
+    "patch": "dashboard.patch",
+    "bytes": 11498
+  },
+  {
+    "app": "svis",
+    "base": "100a5ab96e1d2ef534e2357848dce307df4c6dda",
+    "patch": "svis.patch",
+    "bytes": 640867
+  },
+  {
+    "app": "ops",
+    "base": "1ef40a1a057b7dbfb5fd4d89144970f2bda3e030",
+    "patch": "ops.patch",
+    "bytes": 19037
+  }
+]

@@ -1,0 +1,241 @@
+diff --git a/app/api/auth/[...nextauth]/route.ts b/app/api/auth/[...nextauth]/route.ts
+index 311d931..b0d748f 100644
+--- a/app/api/auth/[...nextauth]/route.ts
++++ b/app/api/auth/[...nextauth]/route.ts
+@@ -1 +1,13 @@
+-export { GET, POST } from 'app/auth';
++import { GET as authGet, POST as authPost } from 'app/auth';
++import { NextRequest } from 'next/server';
++import { normalizeAuthRequest } from 'app/lib/request-origin';
++
++export function GET(request: NextRequest) {
++  const normalized = normalizeAuthRequest(request);
++  return normalized instanceof NextRequest ? authGet(normalized) : normalized;
++}
++
++export function POST(request: NextRequest) {
++  const normalized = normalizeAuthRequest(request);
++  return normalized instanceof NextRequest ? authPost(normalized) : normalized;
++}
+diff --git a/app/lib/request-origin.ts b/app/lib/request-origin.ts
+new file mode 100644
+index 0000000..86df3fe
+--- /dev/null
++++ b/app/lib/request-origin.ts
+@@ -0,0 +1,43 @@
++import { NextRequest, NextResponse } from 'next/server';
++
++// The Node listener is loopback-only. Keep the permitted public and local
++// origins explicit so caller-supplied forwarding headers cannot change them.
++export function normalizeAuthRequest(request: NextRequest): NextRequest | NextResponse {
++  if (process.env.SONGDEE_WINDOWS_HOSTING !== '1') return request;
++  let incoming: URL;
++  try {
++    incoming = new URL(`http://${request.headers.get('host') || ''}`);
++  } catch {
++    return new NextResponse(null, { status: 400 });
++  }
++  if (incoming.username || incoming.password || incoming.pathname !== '/' || incoming.search || incoming.hash) {
++    return new NextResponse(null, { status: 400 });
++  }
++  const hostname = incoming.hostname.toLowerCase().replace(/\.$/, '');
++  const publicHost = hostname === 'dashboard.songdeegps.com';
++  const localHost = ['localhost', '127.0.0.1', '172.24.8.104'].includes(hostname);
++  if ((!publicHost && !localHost) || (publicHost && incoming.port && incoming.port !== '443') ||
++      (localHost && incoming.port && incoming.port !== '8080')) {
++    return new NextResponse(null, { status: 404 });
++  }
++  const url = new URL(request.url);
++  url.protocol = publicHost ? 'https:' : 'http:';
++  url.host = publicHost ? 'dashboard.songdeegps.com' : incoming.host.toLowerCase();
++  url.port = publicHost ? '' : incoming.port;
++  if (hostname === '127.0.0.1') {
++    // NextRequest normalizes loopback IPs to localhost. Use one local origin
++    // for the browser, auth callbacks, and host-scoped session cookies.
++    url.hostname = 'localhost';
++    return NextResponse.redirect(url, 307);
++  }
++  const headers = new Headers(request.headers);
++  headers.set('host', url.host);
++  headers.set('x-forwarded-host', url.host);
++  headers.set('x-forwarded-proto', publicHost ? 'https' : 'http');
++  return new NextRequest(url, {
++    method: request.method,
++    headers,
++    body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
++    signal: request.signal,
++  });
++}
+diff --git a/hosting/README.md b/hosting/README.md
+new file mode 100644
+index 0000000..4e24f2f
+--- /dev/null
++++ b/hosting/README.md
+@@ -0,0 +1,11 @@
++# Windows hosting
++
++Build: node hosting/build.cjs PUBLIC_BUILD_SETTINGS_JSON EMPTY_OUTPUT_DIRECTORY
++
++The build settings JSON may contain only NEXT_PUBLIC_ values. Use {} if none are required. Never pass production secrets to the build.
++
++Start a packaged release with SONGDEE_CONFIG pointing to its protected runtime JSON, then run node hosting/launch.cjs. Runtime configuration remains outside Git and the release.
++
++The launcher opts into SONGDEE_WINDOWS_HOSTING=1 and binds to loopback. Existing cloud deployments leave that flag unset. Database migrations are never part of this build.
++
++Deployment is not enabled by adding these files. The Windows controller, service configuration, initial baseline revision, and rollback checks must be installed and validated separately.
+diff --git a/hosting/app.json b/hosting/app.json
+new file mode 100644
+index 0000000..7604c38
+--- /dev/null
++++ b/hosting/app.json
+@@ -0,0 +1,4 @@
++{
++  "app": "dashboard",
++  "version": 1
++}
+diff --git a/hosting/build.cjs b/hosting/build.cjs
+new file mode 100644
+index 0000000..99f5a30
+--- /dev/null
++++ b/hosting/build.cjs
+@@ -0,0 +1,69 @@
++'use strict';
++const fs = require('node:fs');
++const path = require('node:path');
++const { spawnSync } = require('node:child_process');
++
++// Run from a clean checkout. Never supply production runtime credentials here.
++const root = path.resolve(__dirname, '..');
++const app = JSON.parse(fs.readFileSync(path.join(__dirname, 'app.json'), 'utf8')).app;
++const [configFile, output] = process.argv.slice(2);
++if (!configFile || !output) throw new Error('Usage: node hosting/build.cjs PUBLIC_BUILD_SETTINGS_JSON OUTPUT_DIRECTORY');
++const publicSettings = JSON.parse(fs.readFileSync(configFile, 'utf8').replace(/^\uFEFF/, ''));
++if (Object.keys(publicSettings).some(key => !/^NEXT_PUBLIC_[A-Z0-9_]+$/.test(key))) {
++  throw new Error('Build settings may contain only NEXT_PUBLIC_ values; never pass runtime secrets');
++}
++const destination = path.resolve(output);
++if (fs.existsSync(destination)) throw new Error('Output directory must not already exist');
++if (destination.startsWith(root + path.sep)) throw new Error('Output must be outside the source checkout');
++const env = {
++  ...process.env, ...publicSettings, NODE_ENV: 'production', NEXT_TELEMETRY_DISABLED: '1', SONGDEE_WINDOWS_HOSTING: '1',
++  DATABASE_URL: 'postgresql://build_only:dummy@127.0.0.1:54329/build_only',
++  POSTGRES_URL: 'postgresql://build_only:dummy@127.0.0.1:54329/build_only',
++  SONGDEE_ADMIN_TOKEN_SECRET: 'build-validation-only-not-a-production-secret',
++  AUTH_SECRET: 'build-validation-only-not-a-production-secret',
++};
++delete env.AUTH_URL;
++delete env.NEXTAUTH_URL;
++const npm = path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
++function node(args, cwd = root, variables = env) {
++  const result = spawnSync(process.execPath, args, { cwd, env: variables, stdio: 'inherit', windowsHide: true });
++  if (result.error || result.status !== 0) throw new Error('Build command failed; exit code ' + result.status);
++}
++function install(cwd) {
++  node([npm, 'ci', '--include=dev', '--no-audit', '--no-fund'], cwd, {
++    ...process.env, NODE_ENV: 'development', NEXT_TELEMETRY_DISABLED: '1',
++  });
++}
++function copy(from, to) { fs.cpSync(from, to, { recursive: true, errorOnExist: true }); }
++if (app === 'dashboard') {
++  install(root);
++  node([path.join(root, 'node_modules/vitest/vitest.mjs'), 'run']);
++  node([path.join(root, 'node_modules/next/dist/bin/next'), 'build']);
++  copy(path.join(root, '.next/standalone'), destination);
++  if (fs.existsSync(path.join(root, 'public'))) copy(path.join(root, 'public'), path.join(destination, 'public'));
++  copy(path.join(root, '.next/static'), path.join(destination, '.next/static'));
++} else if (app === 'ops') {
++  const web = path.join(root, 'web');
++  install(web);
++  node([path.join(web, 'node_modules/next/dist/bin/next'), 'build'], web);
++  copy(path.join(web, '.next/standalone'), destination);
++  copy(path.join(web, 'public'), path.join(destination, 'web/public'));
++  copy(path.join(web, '.next/static'), path.join(destination, 'web/.next/static'));
++} else if (app === 'svis') {
++  install(root);
++  install(path.join(root, 'web'));
++  node(['--test', 'host/host-policy.test.cjs', 'host/proxy-headers.test.cjs']);
++  node([npm, 'run', 'build'], path.join(root, 'web'));
++  node(['host/build.cjs']);
++  fs.mkdirSync(destination, { recursive: true });
++  for (const dir of ['dist', 'public']) copy(path.join(root, dir), path.join(destination, dir));
++  // Use the repository lockfile for reproducible runtime dependency installation.
++  copy(path.join(root, 'package.json'), path.join(destination, 'package.json'));
++  copy(path.join(root, 'package-lock.json'), path.join(destination, 'package-lock.json'));
++  node([npm, 'ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], destination, {
++    ...process.env, NODE_ENV: 'production',
++  });
++} else throw new Error('Unknown application');
++fs.mkdirSync(path.join(destination, 'hosting'), { recursive: true });
++for (const name of ['launch.cjs', 'app.json']) copy(path.join(__dirname, name), path.join(destination, 'hosting', name));
++console.log('Release packaged for ' + app);
+diff --git a/hosting/launch.cjs b/hosting/launch.cjs
+new file mode 100644
+index 0000000..d6d6361
+--- /dev/null
++++ b/hosting/launch.cjs
+@@ -0,0 +1,26 @@
++'use strict';
++const fs = require('node:fs');
++const path = require('node:path');
++if (!process.env.SONGDEE_CONFIG) throw new Error('SONGDEE_CONFIG must identify the protected runtime JSON');
++const settings = JSON.parse(fs.readFileSync(process.env.SONGDEE_CONFIG, 'utf8').replace(/^\uFEFF/, ''));
++for (const [key, value] of Object.entries(settings)) {
++  if (!/^[A-Z][A-Z0-9_]*$/.test(key) || ['NODE_OPTIONS', 'PATH', 'NODE_PATH'].includes(key)) throw new Error('Invalid runtime setting name');
++  if (!['string', 'number', 'boolean'].includes(typeof value)) throw new Error('Invalid runtime setting value');
++  process.env[key] = String(value);
++}
++process.env.SONGDEE_WINDOWS_HOSTING = '1';
++process.env.NODE_ENV = 'production';
++process.env.HOST = process.env.HOSTNAME = '127.0.0.1';
++if (process.env.SONGDEE_CANDIDATE_PORT) {
++  if (!/^\d{4,5}$/.test(process.env.SONGDEE_CANDIDATE_PORT)) throw new Error('Invalid candidate port');
++  process.env.PORT = process.env.SONGDEE_CANDIDATE_PORT;
++}
++const { app } = JSON.parse(fs.readFileSync(path.join(__dirname, 'app.json'), 'utf8'));
++if (app === 'dashboard') {
++  delete process.env.AUTH_URL;
++  delete process.env.NEXTAUTH_URL;
++  process.env.AUTH_TRUST_HOST = 'true';
++  require('../server.js');
++} else if (app === 'ops') require('../web/server.js');
++else if (app === 'svis') require('../dist/server.cjs');
++else throw new Error('Unknown application');
+diff --git a/next.config.mjs b/next.config.mjs
+new file mode 100644
+index 0000000..c1485a2
+--- /dev/null
++++ b/next.config.mjs
+@@ -0,0 +1,6 @@
++/** @type {import('next').NextConfig} */
++const nextConfig = process.env.SONGDEE_WINDOWS_HOSTING === '1' ? {
++  output: 'standalone',
++  skipProxyUrlNormalize: true,
++} : {};
++export default nextConfig;
+diff --git a/proxy.ts b/proxy.ts
+index fb1f7fa..067b786 100644
+--- a/proxy.ts
++++ b/proxy.ts
+@@ -1,7 +1,21 @@
+ import NextAuth from 'next-auth';
+ import { authConfig } from 'app/auth.config';
++import { NextRequest, NextResponse, type NextFetchEvent, type NextMiddleware } from 'next/server';
++import { normalizeAuthRequest } from 'app/lib/request-origin';
+ 
+-export default NextAuth(authConfig).auth;
++const authenticate = NextAuth(authConfig).auth as NextMiddleware;
++
++export default async function proxy(request: NextRequest, event: NextFetchEvent) {
++  const normalized = normalizeAuthRequest(request);
++  if (!(normalized instanceof NextRequest)) return normalized;
++  const response = await authenticate(normalized, event);
++  if (response?.headers.get('x-middleware-next') === '1') {
++    // Server actions read Next's request headers separately from middleware.
++    const forwarded = NextResponse.next({ request: { headers: normalized.headers } });
++    for (const [name, value] of forwarded.headers) response.headers.set(name, value);
++  }
++  return response;
++}
+ 
+ export const config = {
+   // Run on app routes AND /api/* (except NextAuth's own callback). The `authorized`

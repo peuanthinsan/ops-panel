@@ -1,0 +1,15 @@
+{
+  "app": "dashboard",
+  "standalonePackaging": "passed",
+  "nextBuild": "passed",
+  "productionCredentialsUsed": false,
+  "node": "v24.19.0",
+  "locale": "th-TH",
+  "testsPassed": 510,
+  "baseSha": "16704b72a47838fc737e471a24b260f211856b0a",
+  "at": "2026-09-10T11:28:56.7407121Z",
+  "testFilesPassed": 39,
+  "githubPublication": "pending",
+  "change": "test-only: assert all 12 labels without assuming English collation",
+  "patchSha256": "C7CD6B457F1CD99E492D872E7FCB2938739A30A20BD78C2CD534177423A1A560"
+}
