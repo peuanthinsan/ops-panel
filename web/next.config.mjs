@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   agentRules: false,
+  ...(process.env.SONGDEE_WINDOWS_HOSTING === '1' ? { output: 'standalone' } : {}),
   allowedDevOrigins: ['127.0.0.1'],
   reactStrictMode: true,
   distDir: process.env.SONGDEE_NEXT_DIST_DIR || '.next',

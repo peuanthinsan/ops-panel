@@ -1,4 +1,5 @@
 import { neon } from '@neondatabase/serverless';
+import { localPostgres } from './local-postgres.mjs';
 
 let databaseClient;
 export const REQUIRED_DATABASE_SCHEMA_VERSION = '2026-09-02.1';
@@ -15,7 +16,8 @@ export function getDatabase() {
   if (!connectionString) {
     throw new ConfigurationError('DATABASE_URL is not configured.');
   }
-  databaseClient ||= neon(connectionString);
+  const hostname = new URL(connectionString).hostname;
+  databaseClient ||= ['127.0.0.1', 'localhost', '[::1]'].includes(hostname) ? localPostgres(connectionString) : neon(connectionString);
   return databaseClient;
 }
 
