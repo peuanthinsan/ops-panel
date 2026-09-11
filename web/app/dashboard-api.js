@@ -3,8 +3,7 @@
 import { clearAdminSessionToken, getAdminSessionToken } from './dashboard-session.js';
 import { readOfflineResponse, writeOfflineResponse } from './offline-store.js';
 
-const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL
-  || (process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : '');
+const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
 export async function adminFetch(path, options = {}) {
   const token = typeof window !== 'undefined' ? getAdminSessionToken() : '';

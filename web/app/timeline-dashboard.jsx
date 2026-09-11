@@ -11,8 +11,8 @@ import { reportMatchesFilters } from '../lib/report-filter';
 import { paginateReports } from '../lib/report-pagination';
 import { reportModeColor } from '../lib/report-mode-meta';
 import { localizedDashboardReportError } from '../lib/dashboard-errors';
-import { timelineReportMatchesFilters } from '../lib/timeline-filter';
-import { timelinePosition } from '../lib/timeline-position';
+import { isTimelineReport, timelineReportMatchesFilters } from '../lib/timeline-filter';
+import { assignTimelineLanes, formatTimelineTime, timelineRangePosition } from '../lib/timeline-position';
 import { deriveTimelineAlerts } from '../lib/timeline-alerts';
 import { adminFetch, adminFetchAllReports } from './dashboard-api';
 import { useReportSpeedSeries } from './report-speed-series';
@@ -24,8 +24,8 @@ const emptySharedFilters = Object.freeze({});
 const timelineModes = reportableOperations.map(action => action[2]);
 const modeCopy = Object.fromEntries(reportableOperations.map(action => [action[2], { en: action[2], th: action[1] }]));
 const text = {
-  en: { eyebrow: 'DAILY OPERATIONS', title: 'Per-vehicle timeline', subtitle: 'See each work period continuously, including jobs after midnight.', inspectHint: 'Select a job band to open its GPS detail.', openGps: 'Open GPS job detail', date: 'Work started', search: 'Search vehicle or driver', printTimeline: 'Print timeline', filterJobs: 'Filter jobs', jobTypes: 'Job types', selectAll: 'Select all', clearAll: 'Clear', resetFilters: 'Reset filters', noneSelected: 'None', load: 'Load', unload: 'Unload', stop: 'Stop / wait', other: 'Break / other', speed: 'Speed (km/h)', alert: 'Alert', topSpeed: 'Top speed', gaps: 'Gaps are driving or no recorded job', vehicleDriver: 'Vehicle / driver', vehicleDriverDate: 'Vehicle / driver / work period', rowScale: 'Each row uses its own work-period scale', nextDay: '+1 day', loading: 'Loading timeline…', failed: 'Could not load reports.', empty: 'No saved jobs match this work-period range and search.', emptyCompleted: 'No completed jobs match this work-period range and search.', emptyCancelled: 'No cancelled jobs match this work-period range and search.', emptyNoStatus: 'Select at least one status to display timeline jobs.', emptyNoMode: 'Select at least one job type to display timeline jobs.', emptyTitle: 'No timeline activity yet', emptyBody: 'Completed and cancelled tablet jobs will be arranged by vehicle and work period.', manageFleet: 'Manage fleet', showing: 'Showing', of: 'of', page: 'Page', previous: 'Previous', next: 'Next', cancelled: 'Cancelled', completed: 'Completed', activity: 'Activity', status: 'Status', start: 'Start', end: 'End', duration: 'Duration', vehicle: 'Vehicle', driver: 'Driver', device: 'Device', gps: 'GPS points', location: 'Location', reportId: 'Report ID', unknown: 'Not available' },
-  th: { eyebrow: 'การปฏิบัติงานรายวัน', title: 'ไทม์ไลน์รายรถ', subtitle: 'ดูแต่ละรอบงานอย่างต่อเนื่อง รวมถึงงานหลังเที่ยงคืน', inspectHint: 'เลือกแถบงานเพื่อเปิดรายละเอียด GPS', openGps: 'เปิดรายละเอียด GPS ของงาน', date: 'วันที่เริ่มรอบงาน', search: 'ค้นหารถหรือคนขับ', printTimeline: 'พิมพ์ไทม์ไลน์', filterJobs: 'กรองงาน', jobTypes: 'ประเภทงาน', selectAll: 'เลือกทั้งหมด', clearAll: 'ล้าง', resetFilters: 'รีเซ็ตตัวกรอง', noneSelected: 'ไม่ได้เลือก', load: 'ขึ้นสินค้า', unload: 'ลงสินค้า', stop: 'หยุด / รอ', other: 'พัก / อื่น ๆ', speed: 'ความเร็ว (กม./ชม.)', alert: 'การแจ้งเตือน', topSpeed: 'ความเร็วสูงสุด', gaps: 'ช่องว่างคือช่วงขับรถหรือไม่มีงานที่บันทึก', vehicleDriver: 'รถ / คนขับ', vehicleDriverDate: 'รถ / คนขับ / รอบงาน', rowScale: 'แต่ละแถวใช้สเกลตามรอบงาน', nextDay: '+1 วัน', loading: 'กำลังโหลดไทม์ไลน์…', failed: 'ไม่สามารถโหลดรายงานได้', empty: 'ไม่พบงานที่บันทึกตรงกับช่วงรอบงานและคำค้นหา', emptyCompleted: 'ไม่พบงานที่เสร็จตรงกับช่วงรอบงานและคำค้นหา', emptyCancelled: 'ไม่พบงานที่ยกเลิกตรงกับช่วงรอบงานและคำค้นหา', emptyNoStatus: 'เลือกอย่างน้อยหนึ่งสถานะเพื่อแสดงงานในไทม์ไลน์', emptyNoMode: 'เลือกอย่างน้อยหนึ่งประเภทงานเพื่อแสดงงานในไทม์ไลน์', emptyTitle: 'ยังไม่มีกิจกรรมในไทม์ไลน์', emptyBody: 'งานที่จบและงานที่ยกเลิกจากแท็บเล็ตจะแสดงตามรถและรอบงาน', manageFleet: 'จัดการรถ', showing: 'แสดง', of: 'จาก', page: 'หน้า', previous: 'ก่อนหน้า', next: 'ถัดไป', cancelled: 'ยกเลิก', completed: 'เสร็จสิ้น', activity: 'กิจกรรม', status: 'สถานะ', start: 'เริ่ม', end: 'จบ', duration: 'ระยะเวลา', vehicle: 'รถ', driver: 'พขร.', device: 'อุปกรณ์', gps: 'จุด GPS', location: 'ตำแหน่ง', reportId: 'รหัสรายงาน', unknown: 'ไม่มีข้อมูล' },
+  en: { eyebrow: 'DAILY OPERATIONS', title: 'Per-vehicle timeline', subtitle: 'See each work period continuously, including jobs after midnight.', inspectHint: 'Select a job band to open its GPS detail.', openGps: 'Open GPS job detail', date: 'Work started', search: 'Search vehicle or driver', printTimeline: 'Print timeline', filterJobs: 'Filter jobs', jobTypes: 'Job types', selectAll: 'Select all', clearAll: 'Clear', resetFilters: 'Reset filters', noneSelected: 'None', load: 'Load', unload: 'Unload', stop: 'Stop / wait', other: 'Break / other', speed: 'Speed (km/h)', alert: 'Alert', topSpeed: 'Top speed', gaps: 'Gaps are driving or no recorded job', vehicleDriver: 'Vehicle / driver', vehicleDriverDate: 'Vehicle / driver / work period', rowScale: 'Each row uses its own work-period scale', nextDay: '+1 day', loading: 'Loading timeline…', failed: 'Could not load reports.', empty: 'No saved jobs match this work-period range and search.', emptyCompleted: 'No completed jobs match this work-period range and search.', emptyCancelled: 'No cancelled jobs match this work-period range and search.', emptyNoStatus: 'Select at least one status to display timeline jobs.', emptyNoMode: 'Select at least one job type to display timeline jobs.', emptyTitle: 'No timeline activity yet', emptyBody: 'Completed tablet jobs will be arranged by vehicle and work period.', manageFleet: 'Manage fleet', showing: 'Showing', of: 'of', page: 'Page', previous: 'Previous', next: 'Next', cancelled: 'Cancelled', completed: 'Completed', activity: 'Activity', status: 'Status', start: 'Start', end: 'End', duration: 'Duration', vehicle: 'Vehicle', driver: 'Driver', device: 'Device', gps: 'GPS points', location: 'Location', reportId: 'Report ID', unknown: 'Not available' },
+  th: { eyebrow: 'การปฏิบัติงานรายวัน', title: 'ไทม์ไลน์รายรถ', subtitle: 'ดูแต่ละรอบงานอย่างต่อเนื่อง รวมถึงงานหลังเที่ยงคืน', inspectHint: 'เลือกแถบงานเพื่อเปิดรายละเอียด GPS', openGps: 'เปิดรายละเอียด GPS ของงาน', date: 'วันที่เริ่มรอบงาน', search: 'ค้นหารถหรือคนขับ', printTimeline: 'พิมพ์ไทม์ไลน์', filterJobs: 'กรองงาน', jobTypes: 'ประเภทงาน', selectAll: 'เลือกทั้งหมด', clearAll: 'ล้าง', resetFilters: 'รีเซ็ตตัวกรอง', noneSelected: 'ไม่ได้เลือก', load: 'ขึ้นสินค้า', unload: 'ลงสินค้า', stop: 'หยุด / รอ', other: 'พัก / อื่น ๆ', speed: 'ความเร็ว (กม./ชม.)', alert: 'การแจ้งเตือน', topSpeed: 'ความเร็วสูงสุด', gaps: 'ช่องว่างคือช่วงขับรถหรือไม่มีงานที่บันทึก', vehicleDriver: 'รถ / คนขับ', vehicleDriverDate: 'รถ / คนขับ / รอบงาน', rowScale: 'แต่ละแถวใช้สเกลตามรอบงาน', nextDay: '+1 วัน', loading: 'กำลังโหลดไทม์ไลน์…', failed: 'ไม่สามารถโหลดรายงานได้', empty: 'ไม่พบงานที่บันทึกตรงกับช่วงรอบงานและคำค้นหา', emptyCompleted: 'ไม่พบงานที่เสร็จตรงกับช่วงรอบงานและคำค้นหา', emptyCancelled: 'ไม่พบงานที่ยกเลิกตรงกับช่วงรอบงานและคำค้นหา', emptyNoStatus: 'เลือกอย่างน้อยหนึ่งสถานะเพื่อแสดงงานในไทม์ไลน์', emptyNoMode: 'เลือกอย่างน้อยหนึ่งประเภทงานเพื่อแสดงงานในไทม์ไลน์', emptyTitle: 'ยังไม่มีกิจกรรมในไทม์ไลน์', emptyBody: 'งานที่จบจากแท็บเล็ตจะแสดงตามรถและรอบงาน', manageFleet: 'จัดการรถ', showing: 'แสดง', of: 'จาก', page: 'หน้า', previous: 'ก่อนหน้า', next: 'ถัดไป', cancelled: 'ยกเลิก', completed: 'เสร็จสิ้น', activity: 'กิจกรรม', status: 'สถานะ', start: 'เริ่ม', end: 'จบ', duration: 'ระยะเวลา', vehicle: 'รถ', driver: 'พขร.', device: 'อุปกรณ์', gps: 'จุด GPS', location: 'ตำแหน่ง', reportId: 'รหัสรายงาน', unknown: 'ไม่มีข้อมูล' },
 };
 const workPeriodStartedCopy = { en: 'Work period · started', th: 'รอบงาน · เริ่ม' };
 const printWorkReportCopy = { en: 'Print work report', th: 'พิมพ์รายงานรอบงาน' };
@@ -74,12 +74,6 @@ function formatTimelineDateTime(value, lang) {
   return new Intl.DateTimeFormat(lang === 'th' ? 'th-TH' : 'en-GB', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Asia/Bangkok' }).format(date);
 }
 
-function formatTimelineTime(value, lang) {
-  const date = value ? new Date(value) : null;
-  if (!date || !Number.isFinite(date.getTime())) return '—';
-  return new Intl.DateTimeFormat(lang === 'th' ? 'th-TH' : 'en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' }).format(date);
-}
-
 function timelineLocation(report, fallback) {
   if (report.locationName || report.location || report.address) return report.locationName || report.location || report.address;
   const latitude = Number(report.lastDeviceLatitude ?? report.latitude);
@@ -94,22 +88,14 @@ function timelineSpeed(report, lang, fallback) {
 }
 
 function timelineSegment(report, lang, labels, scaleStart, scaleEnd) {
-  const start = Date.parse(report.startTime);
-  const end = Date.parse(report.endTime);
-  const duration = Math.max(60_000, scaleEnd - scaleStart);
-  const position = Number.isFinite(start) && Number.isFinite(end) && Number.isFinite(scaleStart) && Number.isFinite(scaleEnd)
-    ? { left: ((start - scaleStart) / duration) * 100, width: (Math.max(60_000, end - start) / duration) * 100 }
-    : timelinePosition(report.startTime, report.endTime);
+  const position = timelineRangePosition(report.startTime, report.endTime, scaleStart, scaleEnd);
   if (!position) return null;
-  const left = Number.isFinite(position.left) ? Math.max(0, Math.min(100, position.left)) : 0;
-  const availableWidth = Math.max(0, 100 - left);
-  const width = Math.min(availableWidth, Number.isFinite(position.width) ? Math.max(0.01, position.width) : 0.01);
+  const { left, width } = position;
   const modeLabel = modeCopy[report.mode]?.[lang] || report.mode || '—';
-  const cancelled = report.status === 'Cancelled';
   const finishWork = report.mode === 'Finish work';
   const detail = {
     activity: modeLabel,
-    status: cancelled ? labels.cancelled : labels.completed,
+    status: labels.completed,
     start: formatTimelineDateTime(report.startTime, lang),
     end: formatTimelineDateTime(report.endTime, lang),
     duration: formatReportDuration(report.startTime, report.endTime, report.duration),
@@ -124,12 +110,14 @@ function timelineSegment(report, lang, labels, scaleStart, scaleEnd) {
   return {
     id: report.id || `${report.vehicleNumber}-${report.startTime}`,
     tooltipId: `timeline-tooltip-${String(report.id || `${report.vehicleNumber}-${report.startTime}`).replace(/[^a-zA-Z0-9_-]/g, '-')}`,
-    title: `${modeLabel}${cancelled ? ` · ${labels.cancelled}` : ''}`,
+    title: modeLabel,
+    left,
+    width,
     finishWork,
     report,
     detail,
     accessibleLabel: `${labels.activity}: ${detail.activity}. ${labels.status}: ${detail.status}. ${labels.start}: ${detail.start}. ${labels.end}: ${detail.end}. ${labels.duration}: ${detail.duration}. ${labels.topSpeed}: ${detail.speed}. ${labels.vehicle}: ${detail.vehicle}. ${labels.driver}: ${detail.driver}. ${labels.device}: ${detail.device}. ${labels.gps}: ${detail.gps}. ${labels.location}: ${detail.location}. ${labels.reportId}: ${detail.reportId}.`,
-    style: { left: `${left}%`, width: `${width}%`, backgroundColor: reportModeColor(report.mode), opacity: cancelled ? 0.42 : 1 },
+    style: { left: `min(${left}%, calc(100% - 12px))`, width: `${width}%`, backgroundColor: reportModeColor(report.mode) },
   };
 }
 
@@ -138,8 +126,6 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
   const [reports, setReports] = useState([]);
   const [date, setDate] = useState('');
   const [search, setSearch] = useState('');
-  const [showCompleted, setShowCompleted] = useState(true);
-  const [showCancelled, setShowCancelled] = useState(false);
   const [selectedModes, setSelectedModes] = useState(() => new Set(timelineModes));
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -224,9 +210,10 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
   const rows = useMemo(() => {
     const query = embedded ? '' : search.trim().toLowerCase();
     const grouped = new Map();
-    const activeFilters = { showCompleted, showCancelled, selectedModes };
+    const activeFilters = { selectedModes };
     for (let reportIndex = 0; reportIndex < timelineReports.length; reportIndex += 1) {
       const report = timelineReports[reportIndex];
+      if (!isTimelineReport(report)) continue;
       const day = report.workPeriodDate || reportDateKey(report.workPeriodStartTime || report.startTime);
       const actualDay = reportDateKey(report.startTime);
       if (effectiveStartDate && day < effectiveStartDate) continue;
@@ -241,22 +228,13 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
     return [...grouped.values()].map(row => {
       const reportTimes = row.reports.flatMap(report => [Date.parse(report.startTime), Date.parse(report.endTime)]).filter(Number.isFinite);
       const scaleStart = reportTimes.length ? Math.min(...reportTimes) : row.periodStart;
-      const scaleEnd = reportTimes.length ? Math.max(...reportTimes, scaleStart + 60_000) : scaleStart + 60_000;
+      const scaleEnd = reportTimes.length ? Math.max(...reportTimes, scaleStart + 1000) : scaleStart + 1000;
       const segments = row.reports.map(report => timelineSegment(report, lang, t, scaleStart, scaleEnd)).filter(Boolean);
-      const laneEnds = [];
-      segments.forEach(segment => {
-        const start = Number.parseFloat(segment.style.left) || 0;
-        const width = Math.max(0.01, Number.parseFloat(segment.style.width) || 0);
-        let lane = laneEnds.findIndex(end => start >= end);
-        if (lane < 0) lane = laneEnds.length;
-        laneEnds[lane] = start + width;
-        // Keep the job markers on one compact timeline row. Overlapping jobs
-        // still remain individually focusable/clickable in the same track.
-        segment.lane = 0;
-      });
-      return { ...row, laneCount: 1, scaleStart, scaleEnd, scaleDuration: Math.max(1, (scaleEnd - scaleStart) / 60_000), segments };
+      // Reserve the 12px marker width even at the narrowest (580px) track.
+      const layout = assignTimelineLanes(segments, (12 / 580) * 100);
+      return { ...row, ...layout, scaleStart, scaleEnd, scaleDuration: (scaleEnd - scaleStart) / 60_000 };
     }).filter(row => row.segments.length).sort((left, right) => right.periodStart - left.periodStart || left.actualDate.localeCompare(right.actualDate) || left.order - right.order);
-  }, [timelineReports, effectiveStartDate, effectiveEndDate, embedded, search, sharedQuery, showCompleted, showCancelled, selectedModes, lang, t]);
+  }, [timelineReports, effectiveStartDate, effectiveEndDate, embedded, search, sharedQuery, selectedModes, lang, t]);
   const timelinePage = useMemo(() => paginateReports(rows, page, pageSize), [rows, page]);
   const speedReports = useMemo(() => timelinePage.items.flatMap(row => row.reports), [timelinePage.items]);
   const speedSeries = useReportSpeedSeries(speedReports);
@@ -273,17 +251,8 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
     });
     return [row, positionedAlerts];
   })), [timelinePage.items, speedSeries.loading, speedSeries.routeDeviationByReportId, speedSeries.samplesByReportId]);
-  const statusSummary = [showCompleted ? t.completed : '', showCancelled ? t.cancelled : ''].filter(Boolean).join(' + ') || t.noneSelected;
-  const emptyFilterMessage = !showCompleted && !showCancelled
-    ? t.emptyNoStatus
-    : selectedModes.size === 0
-      ? t.emptyNoMode
-      : showCancelled && !showCompleted
-        ? t.emptyCancelled
-        : showCompleted && !showCancelled
-          ? t.emptyCompleted
-          : t.empty;
-  useEffect(() => { setPage(1); setTooltip(null); }, [effectiveStartDate, effectiveEndDate, embedded, search, sharedQuery, showCompleted, showCancelled, selectedModes]);
+  const emptyFilterMessage = selectedModes.size === 0 ? t.emptyNoMode : t.emptyCompleted;
+  useEffect(() => { setPage(1); setTooltip(null); }, [effectiveStartDate, effectiveEndDate, embedded, search, sharedQuery, selectedModes]);
   useEffect(() => {
     if (!tooltip) return undefined;
     const close = event => { if (event.type !== 'keydown' || event.key === 'Escape') setTooltip(null); };
@@ -312,10 +281,10 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
     const params = new URLSearchParams({ view: 'timeline', lang, startDate: printStartDate, endDate: printEndDate });
     if (search.trim()) params.set('search', search.trim());
     params.set('timelineFilter', '1');
-    params.set('timelineShowCompleted', showCompleted ? '1' : '0');
-    params.set('timelineShowCancelled', showCancelled ? '1' : '0');
+    params.set('timelineShowCompleted', '1');
+    params.set('timelineShowCancelled', '0');
     for (const mode of selectedModes) params.append('timelineMode', mode);
-    if (showCompleted !== showCancelled) params.set('status', showCompleted ? 'Completed' : 'Cancelled');
+    params.set('status', 'Completed');
     if (selectedModes.size === 1) params.set('mode', [...selectedModes][0]);
     window.location.assign(`/print/landscape?${params}`);
   }
@@ -329,8 +298,6 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
   }
 
   function resetFilters() {
-    setShowCompleted(true);
-    setShowCancelled(false);
     setSelectedModes(new Set(timelineModes));
   }
 
@@ -349,12 +316,8 @@ export default function TimelineDashboard({ lang, embedded = false, sourceReport
           {embedded ? null : <div className="timeline-controls">
             <label className="timeline-search"><span className="sr-only">{t.search}</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder={t.search} /></label>
             <details className="timeline-filter-menu" onKeyDown={event => { if (event.key === 'Escape' && event.currentTarget.open) { event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); } }}>
-              <summary aria-controls="timeline-filter-options"><span>{t.filterJobs}</span><small>{selectedModes.size}/{timelineModes.length} · {statusSummary}</small></summary>
+              <summary aria-controls="timeline-filter-options"><span>{t.filterJobs}</span><small>{selectedModes.size}/{timelineModes.length}</small></summary>
               <div className="timeline-filter-popover" id="timeline-filter-options">
-                <fieldset><legend>{t.status}</legend><div className="timeline-filter-status-grid">
-                  <label className={`timeline-checkbox-chip completed-chip ${showCompleted ? 'selected' : ''}`}><input type="checkbox" checked={showCompleted} onChange={() => setShowCompleted(current => !current)} /><span>{t.completed}</span></label>
-                  <label className={`timeline-checkbox-chip cancelled-chip ${showCancelled ? 'selected' : ''}`}><input type="checkbox" checked={showCancelled} onChange={() => setShowCancelled(current => !current)} /><span>{t.cancelled}</span></label>
-                </div></fieldset>
                 <fieldset><legend>{t.jobTypes}</legend><div className="timeline-filter-mode-grid">{reportableOperations.map(action => {
                   const mode = action[2];
                   const checked = selectedModes.has(mode);

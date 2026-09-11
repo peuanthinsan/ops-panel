@@ -9,14 +9,20 @@ import {
 } from '../lib/api-contract.mjs';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-loadProjectEnv(projectRoot, { silent: true });
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const apiPort = process.env.PORT || '4000';
-const dashboardPort = process.env.SONGDEE_DASHBOARD_PORT || '5173';
-const configuredApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
-const apiBaseUrl = configuredApiBaseUrl || `http://localhost:${apiPort}`;
-const processes = [];
+
+export function getDevConfiguration(args = [], env = {}) {
+  const apiPort = env.PORT || '4000';
+  const configuredApiBaseUrl = env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  const mode = configuredApiBaseUrl ? 'external' : args.includes('--json') ? 'json' : 'neon';
+  return {
+    mode,
+    apiPort,
+    dashboardPort: env.SONGDEE_DASHBOARD_PORT || '5173',
+    apiBaseUrl: configuredApiBaseUrl || (mode === 'json' ? `http://localhost:${apiPort}` : null),
+  };
+}
 
 async function assertPortAvailableOnHost(port, host, label) {
   await new Promise((resolve, reject) => {
@@ -45,7 +51,7 @@ async function assertPortAvailable(port, label) {
   await assertPortAvailableOnHost(port, '::1', label);
 }
 
-async function readSongdeeApiHealth() {
+async function readSongdeeApiHealth(apiBaseUrl) {
   try {
     const response = await fetch(`${apiBaseUrl}/api/health`, { signal: AbortSignal.timeout(3000) });
     const body = await response.json();
@@ -53,58 +59,68 @@ async function readSongdeeApiHealth() {
   } catch { return null; }
 }
 
-try {
+async function main() {
+  loadProjectEnv(projectRoot, { silent: true });
+  const { mode, apiPort, dashboardPort, apiBaseUrl } = getDevConfiguration(process.argv.slice(2), process.env);
+  const processes = [];
   await assertPortAvailable(dashboardPort, 'Dashboard');
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-}
 
-const apiHealth = await readSongdeeApiHealth();
-if (isCompatibleSongdeeApiHealth(apiHealth)) {
-  console.log(`Using the Songdee Fleet Ops API already running at ${apiBaseUrl}`);
-} else if (apiHealth?.service === 'songdee-fleet-ops') {
-  console.error(`A stale Songdee Ops API is running at ${apiBaseUrl}.`);
-  console.error(`It reports contract ${apiHealth.apiContractVersion || 'none'}; this workspace requires ${SONGDEE_API_CONTRACT_VERSION}.`);
-  console.error('Stop that API process, then run this command again so the current server can start.');
-  process.exit(1);
-} else if (configuredApiBaseUrl) {
-  console.error(`The configured Songdee Ops API is unavailable or incompatible: ${apiBaseUrl}/api/health`);
-  console.error('Check NEXT_PUBLIC_API_BASE_URL, the API deployment, and its network access before starting the dashboard.');
-  process.exit(1);
-} else {
-  try {
-    await assertPortAvailable(apiPort, 'API');
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+  if (apiBaseUrl) {
+    const apiHealth = await readSongdeeApiHealth(apiBaseUrl);
+    if (isCompatibleSongdeeApiHealth(apiHealth)) {
+      console.log(`Using the Songdee Fleet Ops API already running at ${apiBaseUrl}`);
+    } else if (apiHealth?.service === 'songdee-fleet-ops') {
+      throw new Error(`A stale Songdee Ops API is running at ${apiBaseUrl}.\n`
+        + `It reports contract ${apiHealth.apiContractVersion || 'none'}; this workspace requires ${SONGDEE_API_CONTRACT_VERSION}.\n`
+        + 'Stop that API process, then run this command again so the current server can start.');
+    } else if (mode === 'external') {
+      throw new Error(`The configured Songdee Ops API is unavailable or incompatible: ${apiBaseUrl}/api/health\n`
+        + 'Check NEXT_PUBLIC_API_BASE_URL, the API deployment, and its network access before starting the dashboard.');
+    } else {
+      await assertPortAvailable(apiPort, 'API');
+      processes.push(spawn(process.execPath, ['server.js'], { stdio: 'inherit', env: { ...process.env, PORT: apiPort } }));
+    }
+  } else {
+    console.log('Starting the Next.js dashboard with same-origin API routes (configuration from web/.env.local).');
   }
-  processes.push(spawn(process.execPath, ['server.js'], { stdio: 'inherit', env: { ...process.env, PORT: apiPort } }));
-}
-processes.push(spawn(npmCommand, ['--prefix', 'web', 'run', 'dev', '--', '-p', dashboardPort], {
-  stdio: 'inherit',
-  env: { ...process.env, NEXT_PUBLIC_API_BASE_URL: apiBaseUrl },
-}));
+  const dashboardEnv = { ...process.env };
+  if (apiBaseUrl) dashboardEnv.NEXT_PUBLIC_API_BASE_URL = apiBaseUrl;
+  else delete dashboardEnv.NEXT_PUBLIC_API_BASE_URL;
+  processes.push(spawn(npmCommand, ['--prefix', 'web', 'run', 'dev', '--', '-p', dashboardPort], {
+    stdio: 'inherit',
+    env: dashboardEnv,
+  }));
 
-let stopping = false;
-function stop(exitCode = 0) {
-  if (stopping) return;
-  stopping = true;
+  let stopping = false;
+  function stop(exitCode = 0) {
+    if (stopping) return;
+    stopping = true;
+    for (const child of processes) {
+      if (!child.killed) child.kill('SIGTERM');
+    }
+    process.exitCode = exitCode;
+  }
+
   for (const child of processes) {
-    if (!child.killed) child.kill('SIGTERM');
+    child.on('error', error => {
+      console.error(error.message);
+      stop(1);
+    });
+    child.on('exit', code => {
+      if (!stopping) stop(code || 0);
+    });
   }
-  process.exitCode = exitCode;
+
+  process.on('SIGINT', () => stop(0));
+  process.on('SIGTERM', () => stop(0));
 }
 
-for (const child of processes) {
-  child.on('error', error => {
-    console.error(error.message);
-    stop(1);
-  });
-  child.on('exit', code => {
-    if (!stopping) stop(code || 0);
+const launchedDirectly = process.argv[1]
+  && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (launchedDirectly) {
+  main().catch(error => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
   });
 }
-
-process.on('SIGINT', () => stop(0));
-process.on('SIGTERM', () => stop(0));

@@ -2,10 +2,9 @@ import { operationActions } from '../../lib/actions';
 import { printReportLocation } from '../../lib/report-print-view';
 import { reportDateKey } from '../../lib/report-view';
 import { mergeReportSpeedSeries, normalizeSpeedSamples } from '../../lib/speed-timeline';
+import { classicActivityPosition } from '../../lib/report-classic';
 
 const MODE_LABELS = Object.fromEntries(operationActions.map(action => [action[2], { th: action[1], en: action[2] }]));
-const STATUS_MODES = { drive: [], load: ['Load'], unload: ['Unload'], wait: [], break: ['Break'], sleep: ['Park overnight'], refuel: ['Refuel'], park: ['Stop vehicle'] };
-const STATUS_ORDER = ['drive', 'load', 'unload', 'wait', 'break', 'sleep', 'refuel', 'park'];
 const LABELS = {
   en: {
     title: 'Vehicle Operation Report', code: 'Code', layoutCode: 'Layout code', vehicle: 'Vehicle plate', driver: 'Driver name', driverCode: 'Driver code',
@@ -48,10 +47,10 @@ function dateTime(value, seconds = false) {
   return timestamp(value) == null ? '—' : `${reportDateKey(value).replaceAll('-', '/')} ${clock(value, seconds)}`;
 }
 
-function duration(value) {
+function duration(value, includeSeconds = true) {
   if (value == null || !Number.isFinite(Number(value))) return '—';
   const seconds = Math.max(0, Math.floor(Number(value)));
-  return `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds % 3600 / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+  return `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds % 3600 / 60)).padStart(2, '0')}${includeSeconds ? `:${String(seconds % 60).padStart(2, '0')}` : ''}`;
 }
 
 function sumDurations(...values) {
@@ -70,7 +69,7 @@ function dayOffset(value, origin) {
 
 function TimeWithDay({ value, origin, labels }) {
   const offset = dayOffset(value, origin);
-  return <span>{clock(value)}{offset !== 0 && <small className="classic-day-offset">{offset > 0 ? '+' : ''}{offset} {labels.day}</small>}</span>;
+  return <span className="classic-log-time">{clock(value)}{offset !== 0 && <small className="classic-day-offset">{offset > 0 ? '+' : ''}{offset} {labels.day}</small>}</span>;
 }
 
 function ValueTable({ values, className = '' }) {
@@ -93,7 +92,7 @@ function ClassicTripLog({ page, lang, labels }) {
       return <tr key={report.id || `${report.startTime}-${index}`} className={report.status === 'Cancelled' ? 'classic-cancelled' : undefined}>
         <td>{page.rowOffset + index + 1}</td>
         <td><TimeWithDay value={report.startTime} origin={page.windowStart} labels={labels} /><span className="classic-time-divider">–</span><TimeWithDay value={report.endTime} origin={page.windowStart} labels={labels} /></td>
-        <td>{MODE_LABELS[report.mode]?.[lang] || report.mode || '—'}{report.status === 'Cancelled' && <small>{labels.cancelled}</small>}</td>
+        <td><span className="classic-log-mode">{MODE_LABELS[report.mode]?.[lang] || report.mode || '—'}</span>{report.status === 'Cancelled' && <strong className="classic-cancelled-label">{labels.cancelled}</strong>}</td>
         <td className="classic-trip-description"><span>{location.name}</span>{location.coordinates && <small>{location.coordinates}</small>}</td>
       </tr>;
     }) : <tr><td colSpan={4} className="classic-no-jobs">{labels.noJobs}</td></tr>}
@@ -135,20 +134,14 @@ function ClassicSpeedChart({ rows, samplesByReportId, page, labels }) {
 }
 
 function ClassicStatusRows({ rows, page, labels }) {
-  const start = timestamp(page.windowStart);
-  const end = timestamp(page.windowEnd);
-  const span = end != null && start != null ? end - start : 86_400_000;
-  return STATUS_ORDER.map(status => <div className="classic-status-row" key={status}>
-    <div className="classic-status-label">{labels[status]}</div>
+  return operationActions.map(([number, thai, mode]) => <div className="classic-status-row" key={mode}>
+    <div className="classic-status-label"><b className="classic-operation-number">{number}</b><span>{labels === LABELS.th ? thai : mode}</span></div>
     <div className="classic-status-track">{rows.flatMap((report, index) => {
-      if (report.status === 'Cancelled' || !STATUS_MODES[status].includes(report.mode)) return [];
-      const reportStart = timestamp(report.startTime);
-      const reportEnd = timestamp(report.endTime);
-      if (start == null || end == null || reportStart == null || reportEnd == null) return [];
-      const clippedStart = Math.max(start, reportStart);
-      const clippedEnd = Math.min(end, reportEnd);
-      if (clippedEnd <= clippedStart) return [];
-      return [<span key={report.id || index} className="classic-status-fill" style={{ left: `${(clippedStart - start) / span * 100}%`, width: `${(clippedEnd - clippedStart) / span * 100}%` }} title={`${MODE_LABELS[report.mode]?.[labels === LABELS.th ? 'th' : 'en'] || report.mode}: ${dateTime(report.startTime)} – ${dateTime(report.endTime)}`} />];
+      if (report.mode !== mode) return [];
+      const position = classicActivityPosition(report, page);
+      if (!position) return [];
+      const label = `${MODE_LABELS[report.mode]?.[labels === LABELS.th ? 'th' : 'en'] || report.mode}: ${dateTime(report.startTime, true)} – ${dateTime(report.endTime, true)}`;
+      return [<span key={report.id || index} className="classic-status-fill" style={{ left: `min(${position.left}%, calc(100% - var(--classic-marker-width)))`, width: `${position.width}%` }} title={label} role="img" aria-label={label} />];
     })}</div>
   </div>);
 }
@@ -165,13 +158,16 @@ export default function ClassicOperationReport({ model, lang }) {
   const labels = LABELS[language];
   const { summary, documentId, printedAt, samplesByReportId = {}, totalSeconds, classic } = model;
   const durations = classic.durations;
+  const timelineRows = summary.rows.filter(report => report.status !== 'Cancelled');
   const workPeriodId = summary.rows.find(report => report.workPeriodId)?.workPeriodId || documentId || '—';
   const summaryValues = [
     [labels.load, duration(durations.load)], [labels.unload, duration(durations.unload)], [labels.wait, duration(durations.wait)],
     [labels.breakSleep, duration(sumDurations(durations.break, durations.sleep))], [labels.refuel, duration(durations.refuel)], [labels.totalPark, duration(durations.park)],
     [labels.totalDistance, summary.distance == null ? '—' : `${number(summary.distance)} ${labels.km}`], [labels.maxSpeed, number(summary.topSpeed, 0)], [labels.count, '—'],
   ];
-  return classic.pages.map((page, pageIndex) => <section key={`${page.windowStart}-${pageIndex}`} className="print-sheet classic-report" lang={language} aria-label={`${labels.title} · ${labels.page} ${pageIndex + 1}/${classic.pages.length}`}>
+  return classic.pages.map((page, pageIndex) => {
+    const timelineStart = timestamp(page.windowStart);
+    return <section key={`${page.windowStart}-${pageIndex}`} className="print-sheet classic-report" lang={language} aria-label={`${labels.title} · ${labels.page} ${pageIndex + 1}/${classic.pages.length}`}>
     <div className="classic-form">
       <div className="classic-layout-code"><span>{labels.layoutCode}: {documentId || '—'}</span></div>
       <div className="classic-info-block">
@@ -182,7 +178,7 @@ export default function ClassicOperationReport({ model, lang }) {
         <h1 className="classic-title">{labels.title}</h1>
         <div className="classic-print-meta"><span>{labels.printed}: {printedAt || '—'}</span><span>{documentId || '—'}</span><span>{labels.page}: {pageIndex + 1}/{classic.pages.length}</span></div>
         <ValueTable values={[[labels.startOdometer, '—'], [labels.distance1, '—'], [labels.endOdometer, '—'], [labels.distance2, '—']]} />
-        <ValueTable values={[[labels.loadUnload, duration(sumDurations(durations.load, durations.unload))], [labels.drive, duration(durations.drive)], [labels.parkWait, duration(sumDurations(durations.park, durations.wait))], [labels.break, duration(durations.break)], [labels.total, duration(totalSeconds)]]} />
+        <ValueTable values={[[labels.loadUnload, duration(sumDurations(durations.load, durations.unload), false)], [labels.drive, duration(durations.drive, false)], [labels.parkWait, duration(sumDurations(durations.park, durations.wait), false)], [labels.break, duration(durations.break, false)], [labels.total, duration(totalSeconds, false)]]} />
         <ClassicTripLog page={page} lang={language} labels={labels} />
         <ExpenseTable groups={[labels.vehicleL, labels.vehicleD]} headings={['IH', 'OC', labels.other, 'IH', 'OC', labels.other]} labels={labels} />
         <ExpenseTable headings={[labels.cash, labels.etc, labels.card, labels.coupon]} labels={labels} />
@@ -191,13 +187,18 @@ export default function ClassicOperationReport({ model, lang }) {
         <div className="classic-footer-meta"><span>{labels.loadStatus}</span><span>—</span><span>—</span></div>
       </div>
       <div className="classic-timeline-block">
-        <div className="classic-hour-row"><div className="classic-hour-gutter" /><div className="classic-hours">{Array.from({ length: 24 }, (_, index) => <div key={index} className="classic-hour-cell"><span>{String((index + 6) % 24).padStart(2, '0')}:00</span>{index >= 18 && <small title={labels.nextDay}>+1</small>}</div>)}</div></div>
-        <ClassicSpeedChart rows={summary.rows} samplesByReportId={samplesByReportId} page={page} labels={labels} />
-        <div aria-label={labels.timeline}><ClassicStatusRows rows={summary.rows} page={page} labels={labels} /></div>
+        <div className="classic-hour-row"><div className="classic-hour-gutter" /><div className="classic-hours">{Array.from({ length: 24 }, (_, index) => {
+          const value = new Date(timelineStart + index * 3_600_000).toISOString();
+          const offset = dayOffset(value, page.windowStart);
+          return <div key={index} className="classic-hour-cell"><span>{clock(value)}</span>{offset > 0 && <small title={labels.nextDay}>+{offset}</small>}</div>;
+        })}</div></div>
+        <ClassicSpeedChart rows={timelineRows} samplesByReportId={samplesByReportId} page={page} labels={labels} />
+        <div aria-label={labels.timeline}><ClassicStatusRows rows={timelineRows} page={page} labels={labels} /></div>
         <div className="classic-ledger" aria-hidden="true">{Array.from({ length: 18 }, (_, index) => <div className="classic-ledger-row" key={index}><div className="classic-ledger-gutter" /><div className="classic-ledger-track" /></div>)}</div>
         <div className="classic-totals-strip">{summaryValues.map(([label, value]) => <div key={label}>{label}<strong>{value}</strong></div>)}</div>
         <ClassicChecklist labels={labels} />
       </div>
     </div>
-  </section>);
+  </section>;
+  });
 }

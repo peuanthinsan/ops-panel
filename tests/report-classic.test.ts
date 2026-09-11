@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   CLASSIC_REPORT_ROWS_PER_PAGE,
+  classicActivityPosition,
   classicActivityDurations,
   classicReportPages,
   normalizeReportStyle,
@@ -14,6 +15,39 @@ const jobs = (count: number) => Array.from({ length: count }, (_, index) => ({
   id: `job-${index + 1}`,
   startTime: `2026-09-09T${String(7 + Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}:00+07:00`,
 }));
+
+test('activity positions retain recorded duration and exclude cancelled or invalid intervals', () => {
+  const window = { windowStart: '2026-09-09T10:14:00+07:00', windowEnd: '2026-09-09T10:15:00+07:00' };
+  const check = { mode: 'Vehicle check', startTime: '2026-09-09T10:14:10+07:00', endTime: '2026-09-09T10:14:16+07:00' };
+  const position = classicActivityPosition(check, window)!;
+  assert.equal(position.end - position.start, 6000);
+  assert.equal(position.width, 10);
+  assert.equal(classicActivityPosition({ ...check, endTime: check.startTime }, window), null);
+  assert.equal(classicActivityPosition({ ...check, status: 'Cancelled' }, window), null);
+  assert.equal(classicActivityPosition({ ...check, endTime: '2026-09-09T10:14:09+07:00' }, window), null);
+});
+
+test('short activity groups keep the complete 06:00–06:00 report window', () => {
+  const rows = [
+    { mode: 'Load', startTime: '2026-09-09T10:11:02+07:00', endTime: '2026-09-09T10:11:25+07:00' },
+    { mode: 'Vehicle check', startTime: '2026-09-09T10:14:10+07:00', endTime: '2026-09-09T10:14:16+07:00' },
+    { mode: 'Refuel', status: 'Cancelled', startTime: '2026-09-09T20:00:00+07:00', endTime: '2026-09-09T20:00:20+07:00' },
+  ];
+  const pages = classicReportPages(rows, date);
+  assert.equal(pages.length, 1);
+  assert.equal(pages[0].windowStart, windowStart);
+  assert.equal(pages[0].windowEnd, windowEnd);
+  assert.equal(Date.parse(pages[0].windowEnd) - Date.parse(pages[0].windowStart), 86_400_000);
+});
+
+test('Classic markers respect daily boundaries', () => {
+  const page = { windowStart, windowEnd };
+  assert.equal(classicActivityPosition({ startTime: windowEnd, endTime: windowEnd }, page), null);
+  assert.equal(classicActivityPosition({ startTime: '2026-09-08T22:00:00Z', endTime: windowStart }, page), null);
+  const crossing = classicActivityPosition({ startTime: '2026-09-08T22:59:00Z', endTime: '2026-09-08T23:01:00Z' }, page)!;
+  assert.equal(crossing.left, 0);
+  assert.equal(crossing.end - crossing.start, 60_000);
+});
 
 test('Classic is the default report style and Modern requires an explicit choice', () => {
   for (const value of [undefined, null, '', 'classic', 'invalid', 'Modern', [], {}]) {

@@ -44,3 +44,13 @@ test('single-point jobs merge into one chronological vehicle speed line', () => 
   ]);
   assert.match(speedLinePath(speedChartPoints(merged)), /^M.* L/);
 });
+
+test('speed points use the full width of a timeline shorter than one minute', () => {
+  const points = normalizeSpeedSamples([
+    { id: 'first', capturedAt: '2026-08-31T03:14:09Z', deviceGps: { speedMps: 0 } },
+    { id: 'last', capturedAt: '2026-08-31T03:14:15Z', deviceGps: { speedMps: 1 } },
+  ]);
+  const chart = speedChartPoints(points, { startMinute: points[0].minute, endMinute: points[1].minute });
+  closeTo(chart[0].x, 0);
+  closeTo(chart[1].x, 1000);
+});

@@ -8,6 +8,44 @@ function dateValue(value?: string | null) {
   return date && Number.isFinite(date.getTime()) ? date : null;
 }
 
+export function formatTimelineTime(value: string | number | null | undefined, lang = 'en') {
+  const date = value == null || value === '' ? null : new Date(value);
+  if (!date || !Number.isFinite(date.getTime())) return '—';
+  return new Intl.DateTimeFormat(lang === 'th' ? 'th-TH' : 'en-GB', {
+    timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).format(date);
+}
+
+/** Position an activity using its actual elapsed time, including seconds. */
+export function timelineRangePosition(
+  startValue: string | null | undefined,
+  endValue: string | null | undefined,
+  scaleStart: number,
+  scaleEnd: number,
+) {
+  const start = dateValue(startValue)?.getTime();
+  if (start == null || !Number.isFinite(scaleStart) || !Number.isFinite(scaleEnd) || scaleEnd <= scaleStart) return null;
+  const end = Math.max(start, dateValue(endValue)?.getTime() ?? start);
+  if (start > scaleEnd || end < scaleStart) return null;
+  const boundedStart = Math.max(scaleStart, start);
+  const boundedEnd = Math.min(scaleEnd, end);
+  const duration = scaleEnd - scaleStart;
+  return { left: ((boundedStart - scaleStart) / duration) * 100, width: ((boundedEnd - boundedStart) / duration) * 100 };
+}
+
+/** Allocate visible lanes without changing the time represented by a segment. */
+export function assignTimelineLanes<T extends { left: number; width: number }>(segments: T[], minimumWidthPercent = 0) {
+  const laneEnds: number[] = [];
+  const positioned = [...segments].sort((left, right) => left.left - right.left).map(segment => {
+    const visibleStart = Math.min(segment.left, 100 - minimumWidthPercent);
+    let lane = laneEnds.findIndex(end => visibleStart >= end);
+    if (lane < 0) lane = laneEnds.length;
+    laneEnds[lane] = visibleStart + Math.max(segment.width, minimumWidthPercent);
+    return { ...segment, lane };
+  });
+  return { segments: positioned, laneCount: Math.max(1, laneEnds.length) };
+}
+
 export function bangkokMinuteOfDay(value?: string | null) {
   const date = dateValue(value);
   if (!date) return null;

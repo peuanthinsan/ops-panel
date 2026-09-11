@@ -24,6 +24,20 @@ export type ClassicReportPage<T> = {
   windowEnd: string;
 };
 
+/** Clip recorded activity intervals to the report's full daily window. */
+export function classicActivityPosition(row: ClassicReportRow, window: { windowStart: string; windowEnd: string }) {
+  if (row.status === 'Cancelled') return null;
+  const start = timestamp(window.windowStart);
+  const end = timestamp(window.windowEnd);
+  const reportStart = timestamp(row.startTime);
+  const reportEnd = timestamp(row.endTime);
+  if (start == null || end == null || end <= start || reportStart == null || reportEnd == null || reportEnd <= reportStart) return null;
+  if (reportStart >= end || reportEnd <= start) return null;
+  const clippedStart = Math.max(start, reportStart);
+  const clippedEnd = Math.min(end, reportEnd);
+  return { start: clippedStart, end: clippedEnd, left: (clippedStart - start) / (end - start) * 100, width: (clippedEnd - clippedStart) / (end - start) * 100 };
+}
+
 export function normalizeReportStyle(value: unknown): 'classic' | 'modern' {
   return value === 'modern' ? 'modern' : 'classic';
 }

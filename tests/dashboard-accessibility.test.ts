@@ -112,7 +112,7 @@ test('work-period report is anchor-selected, speed-enabled, and uses the officia
   assert.doesNotMatch(print, /\.slice\(0, 5\)|function shortTime|durationShort/);
   assert.match(print, /second: '2-digit'/);
   assert.match(print, /printReportLocation\(report, lang\)/);
-  assert.match(print, /periodAxis\(summary\.start, summary\.end, lang\)/);
+  assert.match(print, /periodAxis\(timelineOrigin, Number\.isFinite\(timelineEnd\)/);
   assert.match(printStyles, /@page\{size:A4 landscape;margin:0\}/);
   assert.match(printStyles, /width:297mm;height:210mm/);
 });
@@ -174,7 +174,7 @@ test('dashboard and daily print timelines expose event-timed alert arrows and de
   assert.match(markers, /timelineAlertPosition\(alert, startMinute, endMinute\)/);
   assert.match(markers, /role="tooltip"/);
   assert.match(markers, /formatTimelineAlertTime\(alert, lang\)/);
-  assert.match(print, /deriveTimelineAlerts\(summary\.rows, speedSeries\.samplesByReportId\)/);
+  assert.match(print, /deriveTimelineAlerts\(summary\.completedRows, speedSeries\.samplesByReportId\)/);
   assert.match(print, /<TimelineAlertMarkers alerts=\{alerts\} lang=\{lang\} startMinute=\{0\} endMinute=\{timelineSpanMinutes\} interactive=\{false\}/);
   assert.match(print, /<TimelineAlertChips alerts=\{alerts\} lang=\{lang\} limit=\{3\}/);
   assert.doesNotMatch(print, /function alertFor|className="timeline-flag"/);

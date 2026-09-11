@@ -4,35 +4,45 @@ This workspace contains the Android/Expo tablet app and the responsive fleet web
 
 ## Run locally
 
-Install dependencies in the repository root and in `web/`, then start the local API and Next.js dashboard together:
+Install dependencies in the repository root and in `web/`. Configure the server-only `DATABASE_URL` and `SONGDEE_ADMIN_TOKEN_SECRET` in `web/.env.local`. For a shared database, use the existing server's token secret: it also encrypts stored device credentials, so an arbitrary local secret cannot read them. The secret must contain at least 32 characters. Then start the Next.js dashboard and API:
 
 ```sh
 bun run dev
 ```
 
-The primary Next.js dashboard opens at `http://localhost:5173` and the local API runs at `http://localhost:4000`. The command starts the API when needed or reuses a compatible Fleet API already running on port 4000, so dashboard login works without a second terminal. Use the local default admin password `fleet-setup`.
+The dashboard opens at `http://localhost:5173` and calls the Next.js `/api/*` routes on that same origin. These routes use Neon through `DATABASE_URL`, just like Vercel. Next.js loads `web/.env.local`; the launcher does not start or reuse the JSON API on port 4000. When the connection points to the Vercel database, local edits affect the same saved fleet and reports.
+
+Sign in with the existing database's admin password. Starting locally does not reset it. `SONGDEE_ADMIN_PASSWORD` is only needed to initialize a database that has no saved admin password yet, and must contain 12–128 characters.
+
+If the production signing/encryption key is unavailable, the local dashboard can use the deployed API instead. Set `SONGDEE_API_URL=https://songdee-ops-panel.vercel.app` in `web/.env.local` and leave `NEXT_PUBLIC_API_BASE_URL` unset. Next.js proxies `/api/*` to Vercel, so the dashboard uses the live Neon data and existing production login without copying the secret. In this mode the frontend runs locally, while API code runs on Vercel. Remove `SONGDEE_API_URL` to run the API code locally after configuring the existing key.
 
 The command exits with a clear message if port 5173 is already occupied, which prevents accidentally opening the legacy dashboard. Either stop that process or choose an explicit alternate dashboard port:
 
 ```sh
-FLEET_DASHBOARD_PORT=5174 bun run dev
+SONGDEE_DASHBOARD_PORT=5174 bun run dev
 ```
 
-If `NEXT_PUBLIC_API_BASE_URL` is set, the launcher verifies that its `/api/health` endpoint is a compatible Fleet Ops API and exits with the failing address instead of opening a dashboard that can only report “Network request failed.” It also identifies an incompatible process already occupying local API port 4000.
+Leave both `SONGDEE_API_URL` and `NEXT_PUBLIC_API_BASE_URL` unset for the local Neon API. If `NEXT_PUBLIC_API_BASE_URL` is explicitly configured in the shell or root environment files, the launcher verifies that its `/api/health` endpoint is a compatible Fleet Ops API before starting the dashboard. This override takes precedence over either local mode.
 
-Run only one side when needed with `npm run server` or `npm run dev:web:5173`. The existing `dev:dashboard` script names remain aliases for compatibility.
+For the optional JSON-backed local fixture, run:
 
-`npm run dev:dashboard` is also available when the standard Next.js port `3000` is preferable. In local development the dashboard automatically calls `http://localhost:4000`; no API environment variable is needed.
+```sh
+bun run dev:json
+```
+
+This starts or reuses a compatible `server.js` API at `http://localhost:4000` and points the dashboard at it. It persists to the ignored `data/songdee-data.json` file and uses `songdee-setup` only when no admin password has been saved or configured. `npm run server` starts that JSON API by itself.
+
+`npm run dev:web:5173` starts Next.js directly with the same-origin Neon API. `npm run dev:dashboard` uses the standard Next.js port `3000`; the existing `dev:dashboard` script names remain aliases for compatibility. These direct Next.js commands load `web/.env.local` without the root launcher's external-API health check.
 
 For a running Android emulator, launch the control panel from the repository root in a separate terminal:
 
 ```sh
-npm run android
+EXPO_PUBLIC_API_URL=http://localhost:5173 npm run android
 ```
 
-This launcher verifies that port 4000 is serving the current API contract, chooses a free Metro port, creates the required emulator tunnels, and restarts only Expo Go without deleting the tablet's vehicle binding or queued jobs. It exits with a specific recovery message when an older API is still running instead of letting the app fail later with a generic network error or stale bundle.
+This connects the emulator to the same local Neon API. The launcher verifies the API contract, chooses a free Metro port, creates the required emulator tunnels, and restarts only Expo Go without deleting the tablet's vehicle binding or queued jobs. With `dev:json`, plain `npm run android` retains its default API port 4000.
 
-For a physical Android tablet, use `npm run start`, then scan Expo's QR code. `npm run android:direct` remains available for advanced Expo troubleshooting without the emulator safeguards. Port `8081` (or the next free port selected by the launcher) is Metro's Android bundle server, not another website; opening it directly in a desktop browser is not a supported app preview. The mobile project is intentionally Android-only, so it does not expose a misleading `npm run web` command.
+For a physical Android tablet, use `EXPO_PUBLIC_API_URL=http://YOUR_COMPUTER_LAN_IP:5173 npm run start`, then scan Expo's QR code. `npm run android:direct` remains available for advanced Expo troubleshooting without the emulator safeguards. Port `8081` (or the next free port selected by the launcher) is Metro's Android bundle server, not another website; opening it directly in a desktop browser is not a supported app preview. The mobile project is intentionally Android-only, so it does not expose a misleading `npm run web` command.
 
 The Vercel-ready Next.js dashboard is in `web/`:
 
@@ -137,7 +147,7 @@ npx eas-cli@latest build --platform android --profile production
 
 All release profiles use EAS-managed Android version codes with automatic incrementing. The committed `extra.eas.projectId` belongs only to Ops Panel and is guarded by the release-identity test.
 
-The local `server.js` development password defaults to `fleet-setup`. Production has no default password and requires the initial `FLEET_ADMIN_PASSWORD` environment variable.
+The optional JSON-backed `server.js` password defaults to `songdee-setup` for a new local fixture. Neon-backed local and production APIs use the database's saved password, or `SONGDEE_ADMIN_PASSWORD` for first setup.
 
 ## Product behavior
 
@@ -181,6 +191,6 @@ The local `server.js` development password defaults to `fleet-setup`. Production
 
 ## Backend boundary
 
-`server.js` is the local-development API and persists to the ignored `data/fleet-data.json` file. Set `FLEET_DATA_FILE` for an isolated local fixture. The production API is implemented as Next.js Vercel Functions in `web/app/api/[[...segments]]/route.js` and persists to Neon using [`db/schema.sql`](db/schema.sql). Both expose the same tablet/dashboard endpoint contract and reject JSON request bodies larger than 64 KiB.
+The default local and production API is implemented in `web/app/api/[[...segments]]/route.js` and persists to Neon using [`db/schema.sql`](db/schema.sql). `server.js` remains an optional JSON-backed API, selected with `dev:json`, and persists to the ignored `data/songdee-data.json` file. Set `SONGDEE_DATA_FILE` for an isolated local fixture. Both expose the same tablet/dashboard endpoint contract and reject JSON request bodies larger than 64 KiB.
 
 The Data-FM GPS and fallback driver mappings implement the supplied Fleet GPS API Integration Protocol v1.0. Data-FM movement and any dedicated driver service remain adapter boundaries until their exact API contracts are supplied. Completed and cancelled jobs are saved directly in this application's database; there is no separate report-delivery POST.

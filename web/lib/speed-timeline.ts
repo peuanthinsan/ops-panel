@@ -73,7 +73,7 @@ export function speedChartPoints(
     bottom = 10,
     maxSpeed = 100,
   } = options;
-  const minuteSpan = Math.max(1, endMinute - startMinute);
+  const minuteSpan = Math.max(1 / 60, endMinute - startMinute);
   const speedSpan = Math.max(1, maxSpeed);
   const chartHeight = Math.max(1, height - top - bottom);
   return points

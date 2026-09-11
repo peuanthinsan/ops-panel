@@ -293,7 +293,7 @@ export function deriveTimelineAlerts(
 
 export function timelineAlertPosition(alert: TimelineAlert, startMinute = 0, endMinute = 24 * 60) {
   if (alert.minute < startMinute || alert.minute > endMinute) return null;
-  return ((alert.minute - startMinute) / Math.max(1, endMinute - startMinute)) * 100;
+  return ((alert.minute - startMinute) / Math.max(1 / 60, endMinute - startMinute)) * 100;
 }
 
 export function formatTimelineAlertTime(alert: TimelineAlert, lang = 'en') {

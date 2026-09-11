@@ -61,3 +61,10 @@ test('route deviations use the first confirmed off-route GPS point for the timel
   assert.equal(alerts[0].minute, 8 * 60 + 23 + (45 / 60));
   assert.equal(timelineAlertLabel(alerts[0], 'en'), 'Route deviation (1.23 km) · 13.76630, 100.50200');
 });
+
+test('alerts align to exact seconds within a short timeline window', () => {
+  const [alert] = deriveTimelineAlerts([{ id: 'short-job', startTime: '2026-08-31T03:14:12Z', harshBraking: true }]);
+  const startMinute = 10 * 60 + 14 + 9 / 60;
+  const endMinute = 10 * 60 + 14 + 15 / 60;
+  assert.ok(Math.abs((timelineAlertPosition(alert, startMinute, endMinute) ?? -1) - 50) < 0.00001);
+});

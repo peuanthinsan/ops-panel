@@ -83,12 +83,12 @@ export default function SpeedTimelineOverlay({
       const selected = activePoint?.key === key;
       const togglePoint = () => setActivePoint(current => current?.key === key && current.pinned ? null : { key, point, copy, pinned: true });
       return <g className="speed-point-group" key={key}>
-        <circle className={`speed-point ${selected ? 'selected' : ''}`} cx={point.x} cy={point.y} r="3" vectorEffect="non-scaling-stroke"><title>{copy.label}</title></circle>
+        <circle className={`speed-point ${selected ? 'selected' : ''}`} cx={point.x} cy={point.y} r="5" vectorEffect="non-scaling-stroke"><title>{copy.label}</title></circle>
         {interactive ? <circle
           className="speed-point-hit"
           cx={point.x}
           cy={point.y}
-          r="9"
+          r="12"
           role="button"
           tabIndex={0}
           aria-label={copy.label}
