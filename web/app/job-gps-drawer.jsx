@@ -86,7 +86,7 @@ function retryFeedbackFor(data, lang, t) {
   return { tone: 'neutral', text: t.retryFinished };
 }
 
-export default function JobGpsDrawer({ report, lang, onClose, onReportUpdated, onRouteAssigned, onOpenReport }) {
+export default function JobGpsDrawer({ report, lang, onClose, onReportUpdated, onRouteAssigned, onOpenReport, onPrintWorkPeriod }) {
   const t = copy[lang] || copy.en;
   const closeRef = useRef(null);
   const activeReportIdRef = useRef(String(report.id || ''));
@@ -434,7 +434,7 @@ export default function JobGpsDrawer({ report, lang, onClose, onReportUpdated, o
           </div> : null}
         </section>
       </div>
-      <footer className="gps-drawer-footer"><small>{summary.lastCapturedAt ? formatReportDateTime(summary.lastCapturedAt, lang) : ''}</small><button className="primary gps-print-button" type="button" disabled={!displayedReport.workPeriodId} onClick={() => window.location.assign(`/print/portrait?vehicle=${encodeURIComponent(displayedReport.vehicleNumber || '')}&workPeriodId=${encodeURIComponent(displayedReport.workPeriodId || '')}&lang=${lang}`)}><PrinterIcon size={17} weight="bold" aria-hidden="true" />{t.print}</button></footer>
+      <footer className="gps-drawer-footer"><small>{summary.lastCapturedAt ? formatReportDateTime(summary.lastCapturedAt, lang) : ''}</small><button className="primary gps-print-button" type="button" disabled={!displayedReport.workPeriodId} onClick={() => onPrintWorkPeriod ? onPrintWorkPeriod(displayedReport) : window.location.assign(`/print/portrait?vehicle=${encodeURIComponent(displayedReport.vehicleNumber || '')}&workPeriodId=${encodeURIComponent(displayedReport.workPeriodId || '')}&lang=${lang}`)}><PrinterIcon size={17} weight="bold" aria-hidden="true" />{t.print}</button></footer>
     </aside>
   </div>;
 }

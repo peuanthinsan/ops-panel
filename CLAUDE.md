@@ -47,8 +47,9 @@ second production deployment racing the git-integration one.
 
 *Unverified:* `.vercel/project.json` proves only a CLI link, not that the Git integration
 is connected. Confirm in the Vercel dashboard before relying on push-to-deploy. The README
-names the deployment as `uthens-projects/ops-panel` → https://ops-panel.vercel.app with
-Root Directory `web`.
+previously named the deployment as `uthens-projects/ops-panel` with Root Directory `web`.
+The current production dashboard/API origin is `https://ops.songdeegps.com`; the EAS
+build profiles pin `EXPO_PUBLIC_API_URL` to this domain for preview and production APKs.
 
 ## Traps
 

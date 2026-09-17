@@ -14,7 +14,7 @@ The dashboard opens at `http://localhost:5173` and calls the Next.js `/api/*` ro
 
 Sign in with the existing database's admin password. Starting locally does not reset it. `SONGDEE_ADMIN_PASSWORD` is only needed to initialize a database that has no saved admin password yet, and must contain 12–128 characters.
 
-If the production signing/encryption key is unavailable, the local dashboard can use the deployed API instead. Set `SONGDEE_API_URL=https://songdee-ops-panel.vercel.app` in `web/.env.local` and leave `NEXT_PUBLIC_API_BASE_URL` unset. Next.js proxies `/api/*` to Vercel, so the dashboard uses the live Neon data and existing production login without copying the secret. In this mode the frontend runs locally, while API code runs on Vercel. Remove `SONGDEE_API_URL` to run the API code locally after configuring the existing key.
+If the production signing/encryption key is unavailable, the local dashboard can use the deployed API instead. Set `SONGDEE_API_URL=https://ops.songdeegps.com` in `web/.env.local` and leave `NEXT_PUBLIC_API_BASE_URL` unset. Next.js proxies `/api/*` to the production API, so the dashboard uses the live Neon data and existing production login without copying the secret. In this mode the frontend runs locally, while API code runs on the production server. Remove `SONGDEE_API_URL` to run the API code locally after configuring the existing key.
 
 The command exits with a clear message if port 5173 is already occupied, which prevents accidentally opening the legacy dashboard. Either stop that process or choose an explicit alternate dashboard port:
 
@@ -56,7 +56,7 @@ The dashboard supports `/` for reports and `/admin` for fleet administration.
 
 ## Deploy to Vercel with Neon
 
-The production dashboard and API are deployed at [https://ops-panel.vercel.app](https://ops-panel.vercel.app) in the `uthens-projects/ops-panel` Vercel project. Its dedicated `ops-panel-db-sg` Neon Postgres resource runs in Singapore and has the complete [`db/schema.sql`](db/schema.sql) schema applied.
+The production dashboard and API are available at [https://ops.songdeegps.com](https://ops.songdeegps.com). Use this domain for production API clients and tablet builds. The dedicated `ops-panel-db-sg` Neon Postgres resource runs in Singapore and has the complete [`db/schema.sql`](db/schema.sql) schema applied.
 
 For a new environment, create a dedicated Neon database, apply the schema, and create a Vercel project whose Root Directory is `web`. The Next.js dashboard and all `/api/*` Vercel Functions then deploy together under one origin. Set these Vercel environment variables:
 
@@ -72,7 +72,7 @@ Changing `FLEET_ADMIN_PASSWORD` later does not overwrite the password saved by a
 Point production tablets at the same deployment:
 
 ```sh
-EXPO_PUBLIC_API_URL=https://ops-panel.vercel.app npm run start
+EXPO_PUBLIC_API_URL=https://ops.songdeegps.com npm run start
 ```
 
 Set `FLEET_DRIVER_IDENTITY_API_URL` when a dedicated driver service is available. The tablet requests identity with both its current `vehicleNumber` and `deviceId`, and the server forwards both as query parameters to the adapter every 15 seconds. Responses are correlated back to the same vehicle/device pair before the app may display or snapshot that driver, so an in-flight lookup from a fleet reassignment cannot attach the previous vehicle's driver to the next job. When no dedicated driver adapter is configured, the native Data-FM integration uses the newest non-empty `driverrfid` and `drivername` in the recent vehicle-history window and caches that result for 30 seconds.
@@ -111,7 +111,7 @@ If this workspace is ever intentionally moved to another Fleet Expo account, rel
 npx eas-cli@latest init
 ```
 
-Create `EXPO_PUBLIC_API_URL` in both the EAS `preview` and `production` environments, pointing to the deployed HTTPS dashboard/API origin. This value is public application configuration, not a secret. The build deliberately fails if it is absent, relative, or not HTTP(S), preventing an installable tablet build from silently calling the Android emulator gateway.
+The EAS `preview` and `production` profiles set `EXPO_PUBLIC_API_URL=https://ops.songdeegps.com` in `eas.json`; `production-apk` inherits the production value. These profile values override any older EAS environment value, so new APKs use the current production domain. This value is public application configuration, not a secret. The build deliberately fails if it is absent, relative, or not HTTPS, preventing an installable tablet build from silently calling the Android emulator gateway.
 
 Build an internally installable APK for technician/device testing:
 

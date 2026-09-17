@@ -1,0 +1,398 @@
+{
+  "artifactVersion": "howen-windows-v2",
+  "createdAt": "2026-09-17T13:24:24.731219+00:00",
+  "baseCommit": "e888ae640b2b7fb6106f178c45fe20486c85fb66",
+  "branch": "main",
+  "sourceState": "uncommitted selected changes; patch is not a compiled release",
+  "patchSha256": "c4184ddf33b69a19aba96663b58f18a1e38728d4d5d0e858782c3655cc43f167",
+  "selectedFiles": [
+    {
+      "path": "gateway/protocol.mjs",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 22032,
+      "sha256": "9f6683812528d4ea2673b56b0d7a6bd6493fe1d24c29c0b780447da14ca095d6"
+    },
+    {
+      "path": "gateway/server.mjs",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 23704,
+      "sha256": "40f192e0167c3c37eeeb1dbad0008e3ec56b6beee8ae219d55ad713c17c3f22b"
+    },
+    {
+      "path": "gateway/store.mjs",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 6435,
+      "sha256": "84c27022f623bc5f592dfe61fb07c17ff16af63347e6d93f7f326ffd5e1d11d6"
+    },
+    {
+      "path": "gateway/simulator.mjs",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 14199,
+      "sha256": "b6d231f8d349fc5a1b45295d490c8c6896d4e7f722555af16071e84f6dea4178"
+    },
+    {
+      "path": "web/lib/server/howen-gateway.mjs",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 8178,
+      "sha256": "405f32a6e64ad46e027b70be57cc2ee6e7d534451760f1720b2b780c1cb2fe02"
+    },
+    {
+      "path": "web/app/gateway-stream.mjs",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 5687,
+      "sha256": "146dbb73d6b24178ec7da893981b60a512364e41a6fa81c6df464dbcf1b2edd8"
+    },
+    {
+      "path": "web/app/gateway-dashboard.jsx",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 35455,
+      "sha256": "83aa3bccbb99f8e39adaf597d4c54eca5622bf73733d7e38633c58174021d79b"
+    },
+    {
+      "path": "web/app/gateway-payload.jsx",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 5711,
+      "sha256": "afbb394bc31036214687683714348305f5002f12c4219311b4afd7336398ea31"
+    },
+    {
+      "path": "web/app/gateway.css",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 14502,
+      "sha256": "9c93f293ec3467e7fe4c1d61447d9e58c845039850e6f9b4eba57717ac8c5aef"
+    },
+    {
+      "path": "web/app/gateway/page.jsx",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 35,
+      "sha256": "779fb1568e832468a4dcb06136fa3dfc9adea3e78c91ca1d88a9da50127a1e68"
+    },
+    {
+      "path": "web/app/gateway/layout.jsx",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 147,
+      "sha256": "198a2e953dd41b9a1c5792e33ea245652834830cc7ffeeb5874b299161fd5824"
+    },
+    {
+      "path": "docs/howen-gateway.md",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 6415,
+      "sha256": "8528738a56b7d6e31f00751971b28b4edb28dc68264d0ee5579660cbb1beccaf"
+    },
+    {
+      "path": "tests/howen-protocol.test.mjs",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 15435,
+      "sha256": "4f08e3e7f2796ed5fcf4e700975186dac41aed377c4ebf94e380fd1c1c2825d2"
+    },
+    {
+      "path": "tests/howen-gateway.test.mjs",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 14329,
+      "sha256": "3b35bd2441d5138b0cc8fd57f7f01e1a8193ead6e9e4ae808b0bbe942d6a2e96"
+    },
+    {
+      "path": "tests/howen-gateway-client.test.mjs",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 5508,
+      "sha256": "4dd66c26aa06d3fa91dde11c99482e0b6df383cddd95e352099fa7cc06ad65df"
+    },
+    {
+      "path": "tests/gateway-stream.test.mjs",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 6366,
+      "sha256": "f08a0ad091086d2ba90e387cb02d929b4ede8589fa6e59be05db05d587b328a3"
+    },
+    {
+      "path": "tests/howen-ops-end-to-end.test.mjs",
+      "group": "direct_gateway",
+      "change": "added",
+      "bytes": 4812,
+      "sha256": "de2273f4ba523d362833f9d62cd59383a5561c8438366a0ea9d7016a26cda898"
+    },
+    {
+      "path": "web/app/gateway-geofences.css",
+      "group": "geofence_dependencies",
+      "change": "added",
+      "bytes": 7522,
+      "sha256": "b3355d6818f042c8128147769429529be7399e2eaac7f2a18f9b6336da3c2ca9"
+    },
+    {
+      "path": "web/app/gateway-geofences.jsx",
+      "group": "geofence_dependencies",
+      "change": "added",
+      "bytes": 33424,
+      "sha256": "c47455f4996e736e72d4ac7b3781d9e84b0716de99d9c84d964c71896ae958ec"
+    },
+    {
+      "path": "web/app/geofences/page.jsx",
+      "group": "geofence_dependencies",
+      "change": "added",
+      "bytes": 35,
+      "sha256": "779fb1568e832468a4dcb06136fa3dfc9adea3e78c91ca1d88a9da50127a1e68"
+    },
+    {
+      "path": "web/app/geofences/layout.jsx",
+      "group": "geofence_dependencies",
+      "change": "added",
+      "bytes": 147,
+      "sha256": "98b281d9bef4143ece4e1a9f80e32809047fc532fd70765f86b01acc0741b258"
+    },
+    {
+      "path": "web/lib/server/geofence-source.mjs",
+      "group": "geofence_dependencies",
+      "change": "added",
+      "bytes": 23389,
+      "sha256": "fcf34c908dac11a6e5ead9a5457ac66becd094adb19bb28fbeb6e379b43cdc18"
+    },
+    {
+      "path": "web/lib/server/vss-client.mjs",
+      "group": "geofence_dependencies",
+      "change": "added",
+      "bytes": 23764,
+      "sha256": "8ac3b5fac20a13d8a018606201bd7fb998e56a9c5dddf189cf9ae26ddb419467"
+    },
+    {
+      "path": "tests/geofence-source.test.mjs",
+      "group": "geofence_dependencies",
+      "change": "added",
+      "bytes": 15673,
+      "sha256": "965b561dd47cbe2d40833ebfbb2f9f479ca83d0e568bc5b20a50605f2cb422eb"
+    },
+    {
+      "path": "tests/vss-client.test.mjs",
+      "group": "geofence_dependencies",
+      "change": "added",
+      "bytes": 16108,
+      "sha256": "928e56e00f19fd3073f4029b1980d96b57dd55dd5625b73ec71d0fb86a3bbfd3"
+    },
+    {
+      "path": "docs/geofence-viewer.md",
+      "group": "geofence_dependencies",
+      "change": "added",
+      "bytes": 3267,
+      "sha256": "700e28d594ebe0f3fc9d9c27081840ddada8bda05fd1bdff15aabd1ca7ca8cba"
+    },
+    {
+      "path": "package.json",
+      "group": "shared_integration",
+      "change": "modified",
+      "bytes": 3954,
+      "sha256": "60624ebbce5c484abcc8e7cfd7fb87da7d1a06a872c5385ddcd023710946d098"
+    },
+    {
+      "path": "server.js",
+      "group": "shared_integration",
+      "change": "modified",
+      "bytes": 63252,
+      "sha256": "83b75bbf943d364c271e26da604feefbafcba30ce807cd5b28d092f3057a32fe"
+    },
+    {
+      "path": "web/app/dashboard-api.js",
+      "group": "shared_integration",
+      "change": "modified",
+      "bytes": 5626,
+      "sha256": "b4d97fde05bd3abf34a204b8615a9c2001d1cf56a4cc49ced9ddfded5ef0c687"
+    },
+    {
+      "path": "web/app/page.jsx",
+      "group": "shared_integration",
+      "change": "modified",
+      "bytes": 11694,
+      "sha256": "91fa0f6b8aae568fe6cbe73ebd2c78e5360c07e38a8f0710200bb38a6e0f4605"
+    },
+    {
+      "path": "web/lib/server/api.mjs",
+      "group": "shared_integration",
+      "change": "modified",
+      "bytes": 98939,
+      "sha256": "bf976679b149fce2c5527891affaf4a6c0098093dc34dd72f4faa322668bab96"
+    },
+    {
+      "path": "gateway/simulation-lab.mjs",
+      "group": "eleven_scenario_simulation",
+      "change": "added",
+      "bytes": 15952,
+      "sha256": "34458cf205ecda5d7913e1a0a9475076cb6df297cba92dc82e21c0e9e4aa6b13"
+    },
+    {
+      "path": "gateway/simulation-scenarios.mjs",
+      "group": "eleven_scenario_simulation",
+      "change": "added",
+      "bytes": 23782,
+      "sha256": "c46797addb9e1fa0b65de15225adc169dc1593cdb1490015ba912af7c4bbf443"
+    },
+    {
+      "path": "web/app/gateway-simulation.jsx",
+      "group": "eleven_scenario_simulation",
+      "change": "added",
+      "bytes": 19956,
+      "sha256": "0665113c5f069e7f0ee2b62df713923c2f186be053bfad4381a90af863648575"
+    },
+    {
+      "path": "web/app/gateway-simulation.css",
+      "group": "eleven_scenario_simulation",
+      "change": "added",
+      "bytes": 8754,
+      "sha256": "4556f18e1d0568eaa2dff2e8eaf1dc4fdd1fb5e607c9005c6eecb563b8be9044"
+    },
+    {
+      "path": "tests/howen-simulator.test.mjs",
+      "group": "eleven_scenario_simulation",
+      "change": "added",
+      "bytes": 11832,
+      "sha256": "15ed57cd2d36386ad70f4bf03df6240c2e10a482835cbf0215e8deeff38d8999"
+    },
+    {
+      "path": "tests/howen-simulation-lab.test.mjs",
+      "group": "eleven_scenario_simulation",
+      "change": "added",
+      "bytes": 15097,
+      "sha256": "5f38959aaa9e73c9924861253d843eeff401dbe0eebda87c4ff5bd60aef93b8c"
+    },
+    {
+      "path": "tests/howen-simulation-api.test.mjs",
+      "group": "eleven_scenario_simulation",
+      "change": "added",
+      "bytes": 8601,
+      "sha256": "32085c0e97dc78585a2823a0c360b4861538bec074703acc48ecb71897b54be5"
+    },
+    {
+      "path": "docs/howen-simulation.md",
+      "group": "eleven_scenario_simulation",
+      "change": "added",
+      "bytes": 5377,
+      "sha256": "4bffd762776c8fb5401b207b2e4ad9625c37e6e0cf1995fde0ba6ed72eb62d95"
+    }
+  ],
+  "unchangedContext": [
+    {
+      "path": "hosting/build.cjs",
+      "sha256": "38c63c14e4f57e4f942e5f58707181c0a12856d449e5b774794e85dd1160f102",
+      "bytes": 7924
+    },
+    {
+      "path": "hosting/launch.cjs",
+      "sha256": "b431770a4bdfc55e219d918f7cb20a8abc195a2896a68eab71241dd19ffad370",
+      "bytes": 2235
+    },
+    {
+      "path": "hosting/app.json",
+      "sha256": "c51d3733ec3842e8541780230140be863f4720495504f2f747c5f0aea6a92de8",
+      "bytes": 35
+    },
+    {
+      "path": "hosting/README.md",
+      "sha256": "58811f1180f3c32c3a43214f571d4873f07881d158a9bea409c33eb9ddfb8155",
+      "bytes": 2272
+    },
+    {
+      "path": "web/package.json",
+      "sha256": "09a8204e6184bb8c2f40107828a9b1e40bc67d18b45bdcb912b4174197eca639",
+      "bytes": 738
+    },
+    {
+      "path": "web/package-lock.json",
+      "sha256": "bec5ac686f01edb60a107369ffa3e04f3451b618b530bdfcc1581500b4b6f2f7",
+      "bytes": 52236
+    }
+  ],
+  "excludedDirtyFiles": [
+    {
+      "path": "CLAUDE.md",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "README.md",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "components/ThemeToggle.tsx",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "docs/vss-console.md",
+      "reason": "Earlier inactive VSS prototype; excluded from direct gateway release."
+    },
+    {
+      "path": "eas.json",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "lib/local-report-query.mjs",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "tests/dashboard-accessibility.test.ts",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "tests/local-report-query.test.mjs",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "tests/report-classic.test.ts",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "tests/report-filter.test.ts",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "tests/report-query.test.mjs",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "tests/vss-diagnostics.test.mjs",
+      "reason": "Earlier inactive VSS prototype; excluded from direct gateway release."
+    },
+    {
+      "path": "web/app/job-gps-drawer.jsx",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "web/app/print/portrait/page.jsx",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "web/app/print/print-dashboard.jsx",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "web/app/report-dashboard.jsx",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "web/app/timeline-dashboard.jsx",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "web/lib/report-filter.ts",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "web/lib/report-query.mjs",
+      "reason": "Pre-existing unrelated work; ownership not reassigned; preserve unchanged."
+    },
+    {
+      "path": "web/lib/server/vss-diagnostics.mjs",
+      "reason": "Earlier inactive VSS prototype; excluded from direct gateway release."
+    }
+  ],
+  "scopeRule": "Apply only to an isolated checkout of the base after review. Never apply again over the source workspace. Do not include excluded files or private configuration."
+}

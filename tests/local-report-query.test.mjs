@@ -71,3 +71,24 @@ test('local dashboard query accepts repeated multi-select filters', () => {
   const result = queryLocalReports(reports, [], params);
   assert.deepEqual(result.reports.map(report => report.id), ['R2', 'R1']);
 });
+
+test('local job date filters select Bangkok calendar days without changing work-period identity', () => {
+  const periodReports = [
+    { id: 'P1', startTime: '2026-08-31T16:59:59Z' },
+    { id: 'first', startTime: '2026-08-31T17:00:00Z' },
+    { id: 'last', startTime: '2026-09-01T16:59:59Z' },
+    { id: 'after', startTime: '2026-09-01T17:00:00Z' },
+  ].map(report => ({ ...report, vehicleNumber: '69-8617', mode: 'Load', status: 'Completed' }));
+  const params = new URLSearchParams({
+    dateBasis: 'job', startDate: '2026-09-01', endDate: '2026-09-01', workPeriodId: 'P1', sort: 'startTime:asc',
+  });
+  const selected = queryLocalReports(periodReports, [], params);
+  assert.deepEqual(selected.reports.map(report => report.id), ['first', 'last']);
+  assert.equal(selected.summary.total, 2);
+  assert.ok(selected.reports.every(report => report.workPeriodId === 'P1' && report.workPeriodDate === '2026-08-31'));
+  params.delete('dateBasis');
+  assert.equal(queryLocalReports(periodReports, [], params).summary.total, 0);
+  params.set('startDate', '2026-08-31');
+  params.set('endDate', '2026-08-31');
+  assert.equal(queryLocalReports(periodReports, [], params).summary.total, 4);
+});

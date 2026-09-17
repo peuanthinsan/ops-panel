@@ -8,6 +8,8 @@ import FullReportDashboard from './report-dashboard';
 import FleetDashboard from './fleet-dashboard';
 import SettingsDashboard from './settings-dashboard';
 import RoutesDashboard from './routes-dashboard';
+import GatewayDashboard from './gateway-dashboard';
+import GatewayGeofences from './gateway-geofences';
 import { adminFetch } from './dashboard-api';
 import { clearAdminSessionToken, getAdminSessionToken, setAdminSessionToken } from './dashboard-session';
 import { localizedDashboardAdminError } from '../lib/dashboard-errors';
@@ -26,6 +28,8 @@ const navigation = [
   { href: '/', key: 'reports' },
   { href: '/admin', key: 'fleet' },
   { href: '/routes', key: 'routes' },
+  { href: '/gateway', key: 'gateway' },
+  { href: '/geofences', key: 'geofences' },
   { href: '/settings', key: 'settings' },
 ];
 
@@ -119,8 +123,8 @@ function Shell({ lang, setLang, onLogout, children }) {
         <nav aria-label={t.navigation}>
           {navigation.map(item => (
             <Link key={item.key} href={item.href} aria-current={pathname === item.href || (item.key === 'reports' && pathname === '/timeline') ? 'page' : undefined}>
-              <strong>{t[item.key]}</strong>
-              <small>{t[`${item.key}Sub`]}</small>
+              <strong>{item.key === 'gateway' ? (lang === 'th' ? 'เกตเวย์ Howen' : 'Howen gateway') : item.key === 'geofences' ? (lang === 'th' ? 'ขอบเขตพื้นที่' : 'Geofences') : t[item.key]}</strong>
+              <small>{item.key === 'gateway' ? (lang === 'th' ? 'สัญญาณและการวินิจฉัย' : 'Signals & diagnostics') : item.key === 'geofences' ? (lang === 'th' ? 'แผนที่และข้อมูลต้นฉบับ' : 'Map & source data') : t[`${item.key}Sub`]}</small>
             </Link>
           ))}
         </nav>
@@ -221,6 +225,8 @@ export default function Dashboard() {
   if (pathname === '/admin') screen = <FleetDashboard lang={lang} />;
   if (pathname === '/routes') screen = <RoutesDashboard lang={lang} />;
   if (pathname === '/settings') screen = <SettingsDashboard lang={lang} />;
+  if (pathname === '/gateway') screen = <GatewayDashboard lang={lang} />;
+  if (pathname === '/geofences') screen = <GatewayGeofences lang={lang} />;
 
   return <Shell lang={lang} setLang={setLang} onLogout={logout}>{screen}</Shell>;
 }

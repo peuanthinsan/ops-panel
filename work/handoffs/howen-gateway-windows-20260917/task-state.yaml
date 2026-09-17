@@ -1,0 +1,54 @@
+task_id: howen-gateway-windows-20260917
+artifact_version: howen-windows-v2
+artifact_status: frozen_for_review
+objective: Hand off the direct Howen gateway and Ops diagnostics interface for a Windows pilot.
+lane: review
+author:
+  provider: OpenAI
+  agent: Codex /root
+  model: UNKNOWN
+  effort: UNKNOWN
+receiver:
+  provider: UNKNOWN
+  role: Reviewing Claude session / Windows operator, not yet assigned
+source:
+  workspace: /Users/peuan/songdee-ops-panel
+  branch: main
+  base_commit: e888ae640b2b7fb6106f178c45fe20486c85fb66
+  state: uncommitted_selected_worktree_changes
+  patch: source.patch
+  manifest: source-manifest.json
+writer_lease:
+  owner: null
+  status: released
+  next_action: Receiver claims sole write ownership before modifying scoped files.
+authorization:
+  current_request: Complete simulation data for all eleven scenarios before Windows deployment; refresh handoff.
+  source_edits_this_turn: See selectedFiles in source-manifest.json.
+  git_mutation_performed: false
+  deployment_performed: false
+  production_changes_performed: false
+  external_actions: Require deployment assignment to the receiving operator; not granted by this artifact.
+  local_workflow: Reviewing Claude owns git and deployment; Codex edits/tests/reports only.
+verification:
+  gateway_tests: 46 passed in preceding implementation phase; targeted gateway 9 and client 9 passed after changes
+  simulation_tests: 25 passed on final source
+  browser: All eleven scenarios passed in driver and input variants; prerequisite failure, evidence navigation, stop/rerun and desktop/mobile verified
+  windows_build: not_run
+  production_proxy: not_verified
+  windows_service_recovery: not_verified_stale_lock_risk
+  physical_mdvr: not_verified
+  eleven_scenario_simulation: implemented_and_verified
+  production_job_automation: not_implemented
+review:
+  cross_provider_implementation_review: pending
+  handoff_document_review: Root source inspection plus read-only transport-agent review
+  test_scope: Dedicated simulation tests plus targeted changed gateway/client regressions; no broad suite rerun.
+  source_change_policy: Any source or scope change invalidates prior artifact hashes and review receipt.
+next_gates:
+  - Review frozen patch and preserve excluded dirty files.
+  - Build on Windows and validate existing controller/proxy integration.
+  - Resolve or validate service stop and crash recovery under the actual Windows wrapper.
+  - Run all eleven sandbox scenarios on Windows through HTTPS.
+  - Establish raw TCP route and verify one physical MDVR.
+  - Confirm wiring and Data-FM geofences, then implement production automation using the verified scenario contracts.

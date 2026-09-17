@@ -23,6 +23,8 @@ import { fmsSyncNeedsRetry } from './fms-sync-state.mjs';
 import { DEFAULT_GPS_PAIR_TOLERANCE_MS, pairExternalGpsSources } from './external-gps.mjs';
 import { gpsPairingMetadata } from './gps-pairing.mjs';
 import { createServerJobId } from './job-id.mjs';
+import { getHowenGatewaySnapshot, getHowenGatewayEvents, controlHowenSimulation, HowenGatewayError } from './howen-gateway.mjs';
+import { getGeofenceSnapshot } from './geofence-source.mjs';
 import { evaluateRouteDeviation, normalizeRoutePath, parseRouteAnchors } from '../route-deviation.mjs';
 
 const allowedModes = new Set([
@@ -1712,6 +1714,28 @@ async function routeRequest(request, route) {
     });
   }
 
+  if (route === 'admin/gateway/geofences' && method === 'GET') {
+    await requireAdmin(request);
+    return json(await getGeofenceSnapshot());
+  }
+
+  if (route === 'admin/gateway/snapshot' && method === 'GET') {
+    await requireAdmin(request);
+    return json(await getHowenGatewaySnapshot(request.signal));
+  }
+
+  if (route === 'admin/gateway/events' && method === 'GET') {
+    await requireAdmin(request);
+    const upstream = await getHowenGatewayEvents(request.signal);
+    const headers = new Headers({ ...corsHeaders(), ...Object.fromEntries(upstream.headers) });
+    return new Response(upstream.body, { headers });
+  }
+
+  if (route === 'admin/gateway/simulation' && method === 'POST') {
+    await requireAdmin(request);
+    return json(await controlHowenSimulation(await readJson(request, 4096), request.signal));
+  }
+
   if (route === 'reports' && method === 'GET') {
     await requireAdmin(request);
     return json(await getReportsPage(request));
@@ -2141,6 +2165,7 @@ export async function handleApiRequest(request, segments = []) {
     return await routeRequest(request, route);
   } catch (error) {
     if (error instanceof ApiError) return json({ error: error.message, ...(error.code ? { code: error.code } : {}) }, error.status, error.headers);
+    if (error instanceof HowenGatewayError) return json({ error: error.message }, error.status);
     if (error instanceof ConfigurationError) return json({ error: error.message }, 503);
     if (error?.code === '23505') {
       if (String(error.constraint || '').includes('active_jobs_one_per_device')) {

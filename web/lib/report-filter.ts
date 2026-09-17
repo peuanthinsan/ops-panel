@@ -4,6 +4,7 @@ export const reportFilterKeys = [
   'search',
   'startDate',
   'endDate',
+  'dateBasis',
   'workPeriodId',
   'vehicle',
   'device',
@@ -53,7 +54,9 @@ export function reportMatchesFilters(
   filters: ReportFilters,
   language: 'en' | 'th',
 ) {
-  const date = String(report.workPeriodDate || reportDateKey(report.workPeriodStartTime || report.startTime));
+  const date = firstFilterValue(filters.dateBasis) === 'job'
+    ? reportDateKey(report.startTime || report.start_time)
+    : String(report.workPeriodDate || reportDateKey(report.workPeriodStartTime || report.startTime));
   const startDate = firstFilterValue(filters.startDate);
   const endDate = firstFilterValue(filters.endDate);
   if (startDate && date < startDate) return false;

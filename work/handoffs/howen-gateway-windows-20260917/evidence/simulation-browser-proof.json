@@ -1,0 +1,64 @@
+{
+  "url": "http://127.0.0.1:3055/gateway",
+  "title": "Howen Gateway · Songdee Ops Panel",
+  "viewports": [
+    [
+      1505,
+      1100
+    ],
+    [
+      390,
+      844
+    ]
+  ],
+  "browser": "Playwright Chrome; Browser plugin not available",
+  "checks": [
+    "page identity, nonblank sandbox, 11 distinct scenarios, no framework overlay",
+    "driver-confirmation run: all 11 pass via SSE without snapshot polling",
+    "snapshot evidence source labels, release check and real wire-packet navigation",
+    "standalone job-complete fails missing earlier-job prerequisites",
+    "wired-input run: all 11 pass with distinct mapped input and release evidence",
+    "390px mobile layout and scenario selection without document overflow",
+    "stop cancels the run and controls recover",
+    "rerun after stop completes and no browser exceptions"
+  ],
+  "errors": [],
+  "requests": [
+    {
+      "path": "/api/admin/gateway/snapshot",
+      "method": "GET"
+    },
+    {
+      "path": "/api/admin/gateway/snapshot",
+      "method": "GET"
+    },
+    {
+      "path": "/api/admin/gateway/events",
+      "method": "GET"
+    },
+    {
+      "path": "/api/admin/gateway/simulation",
+      "method": "POST"
+    },
+    {
+      "path": "/api/admin/gateway/simulation",
+      "method": "POST"
+    },
+    {
+      "path": "/api/admin/gateway/simulation",
+      "method": "POST"
+    },
+    {
+      "path": "/api/admin/gateway/simulation",
+      "method": "POST"
+    },
+    {
+      "path": "/api/admin/gateway/simulation",
+      "method": "POST"
+    },
+    {
+      "path": "/api/admin/gateway/simulation",
+      "method": "POST"
+    }
+  ]
+}

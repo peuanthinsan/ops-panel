@@ -1,0 +1,39 @@
+{
+  "url": "http://127.0.0.1:3055/gateway",
+  "title": "Howen Gateway · Songdee Ops Panel",
+  "errors": [],
+  "requests": [
+    {
+      "path": "/api/admin/gateway/snapshot",
+      "at": 1789649095698
+    },
+    {
+      "path": "/api/admin/gateway/snapshot",
+      "at": 1789649095699
+    },
+    {
+      "path": "/api/admin/gateway/events",
+      "at": 1789649095728
+    },
+    {
+      "path": "/api/admin/gateway/snapshot",
+      "at": 1789649103819
+    },
+    {
+      "path": "/api/admin/gateway/events",
+      "at": 1789649103832
+    }
+  ],
+  "stats": {
+    "deviceId": "SIM-HOWEN-001",
+    "registered": true,
+    "statusSubscribed": true,
+    "alarmSubscribed": true,
+    "statusesSent": 9,
+    "alarmsSent": 3,
+    "statusAcks": 9,
+    "alarmAcks": 3,
+    "heartbeatAcks": 2,
+    "ready": true
+  }
+}

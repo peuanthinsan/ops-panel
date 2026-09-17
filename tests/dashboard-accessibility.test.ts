@@ -40,11 +40,13 @@ test('reports expose labeled filters and sort direction to assistive technology'
   assert.match(source, /className="table-wrap" tabIndex=\{0\}/);
   assert.match(source, /localizedDashboardReportError/);
   assert.match(source, /print: 'Print work report'/);
-  assert.match(source, /new URLSearchParams\(\{ workPeriodId: selectedPrintPeriodId, lang \}\)/);
+  assert.match(source, /printVehicle\(\{ vehicleNumber: vehicles\[0\], workPeriodId: selectedPrintPeriodId \}\)/);
   assert.match(source, /if \(!selectedPrintPeriodId \|\| vehicles\.length !== 1\) return/);
-  assert.match(source, /params\.set\('vehicle', vehicles\[0\]\)/);
+  assert.match(source, /new URLSearchParams\(\{ vehicle, workPeriodId, lang, dateBasis: 'job' \}\)/);
+  assert.match(source, /if \(startDate\) params\.set\('startDate', startDate\)/);
+  assert.match(source, /if \(endDate\) params\.set\('endDate', endDate\)/);
   assert.match(source, /aria-describedby="daily-print-vehicle-message"/);
-  assert.match(source, /dateRange: 'Work started'/);
+  assert.match(source, /dateRange: 'Date range'/);
   assert.match(source, /function DateRangePicker/);
   assert.equal(source.match(/<DateRangePicker\b/g)?.length ?? 0, 1);
   assert.equal(source.match(/<input type="date"/g)?.length ?? 0, 0);

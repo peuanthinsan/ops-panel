@@ -2,6 +2,8 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { parseHttpAdapterUrl } from './lib/adapter-url.mjs';
 import { songdeeApiHealth } from './lib/api-contract.mjs';
@@ -12,6 +14,8 @@ import { DEFAULT_GPS_PAIR_TOLERANCE_MS, pairExternalGpsSources } from './web/lib
 import { evaluateRouteDeviation, normalizeRoutePath, parseRouteAnchors } from './web/lib/route-deviation.mjs';
 import { createServerJobId } from './web/lib/server/job-id.mjs';
 import { annotateWorkPeriods } from './web/lib/work-periods.mjs';
+import { getHowenGatewaySnapshot, getHowenGatewayEvents, controlHowenSimulation, HowenGatewayError } from './web/lib/server/howen-gateway.mjs';
+import { getGeofenceSnapshot, GeofenceSourceError } from './web/lib/server/geofence-source.mjs';
 
 const port = process.env.PORT || 4000;
 const maximumJsonBodyBytes = 64 * 1024;
@@ -535,6 +539,43 @@ const server = http.createServer(async (req, res) => {
     try { const input = await readJsonBody(req); if (!verifyPassword(String(input.password || ''), adminPasswordHash)) return send(res, 401, { error: 'Invalid password' }); const token = crypto.randomUUID(); adminSessions.set(token, Date.now() + adminSessionLifetimeMs); if (adminSessions.size > 1000) adminSessions.delete(adminSessions.keys().next().value); return send(res, 200, { token, expiresIn: adminSessionLifetimeMs }); }
     catch (error) { return sendBodyError(res, error); }
   }
+  if ((req.url === '/api/admin/gateway/geofences' || req.url?.startsWith('/api/admin/gateway/geofences?')) && req.method === 'GET') {
+    if (!isAdmin(req)) return send(res, 401, { error: 'Admin login required' });
+    try { return send(res, 200, await getGeofenceSnapshot()); }
+    catch (error) { return send(res, error instanceof GeofenceSourceError ? error.statusCode : 502, { error: error instanceof GeofenceSourceError ? error.message : 'Geofences are unavailable.' }); }
+  }
+  if ((req.url === '/api/admin/gateway/snapshot' || req.url?.startsWith('/api/admin/gateway/snapshot?')) && req.method === 'GET') {
+    if (!isAdmin(req)) return send(res, 401, { error: 'Admin login required' });
+    try { return send(res, 200, await getHowenGatewaySnapshot()); }
+    catch (error) { return send(res, error instanceof HowenGatewayError ? error.status : 502, { error: error instanceof HowenGatewayError ? error.message : 'Howen gateway diagnostics are unavailable.' }); }
+  }
+  if (req.url === '/api/admin/gateway/simulation' && req.method === 'POST') {
+    if (!isAdmin(req)) return send(res, 401, { error: 'Admin login required' });
+    try { return send(res, 200, await controlHowenSimulation(await readJsonBody(req))); }
+    catch (error) {
+      if (error instanceof RequestBodyError) return sendBodyError(res, error);
+      return send(res, error instanceof HowenGatewayError ? error.status : 502, { error: error instanceof HowenGatewayError ? error.message : 'The simulation command could not be completed.' });
+    }
+  }
+  if ((req.url === '/api/admin/gateway/events' || req.url?.startsWith('/api/admin/gateway/events?')) && req.method === 'GET') {
+    if (!isAdmin(req)) return send(res, 401, { error: 'Admin login required' });
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    res.once('close', cancel);
+    try {
+      const upstream = await getHowenGatewayEvents(controller.signal);
+      res.writeHead(200, { ...Object.fromEntries(upstream.headers),
+        'Access-Control-Allow-Origin': process.env.SONGDEE_CORS_ORIGIN || '*',
+        Vary: 'Origin',
+      });
+      res.flushHeaders();
+      await pipeline(Readable.fromWeb(upstream.body), res);
+    } catch (error) {
+      if (!res.headersSent && !res.destroyed) send(res, error instanceof HowenGatewayError ? error.status : 502, { error: error instanceof HowenGatewayError ? error.message : 'Howen gateway stream is unavailable.' });
+      else res.destroy();
+    } finally { controller.abort(); res.off('close', cancel); }
+    return;
+  }
   if (req.url?.startsWith('/api/admin/reports/') && req.method === 'GET') {
     if (!isAdmin(req)) return send(res, 401, { error: 'Admin login required' });
     const target = new URL(req.url, 'http://localhost');
@@ -956,4 +997,4 @@ const server = http.createServer(async (req, res) => {
   }
   send(res, 404, { error: 'Not found' });
 });
-server.listen(port, () => console.log(`Songdee Fleet Ops API listening on http://localhost:${port}`));
+server.listen(port, process.env.HOST || undefined, () => console.log(`Songdee Fleet Ops API listening on http://localhost:${port}`));

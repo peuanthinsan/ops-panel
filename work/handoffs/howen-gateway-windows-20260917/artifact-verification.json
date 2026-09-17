@@ -1,0 +1,30 @@
+{
+  "artifactVersion": "howen-windows-v2",
+  "patchCheck": "passed against isolated tracked base-file copies",
+  "reconstruction": "passed; all selected SHA-256 values match",
+  "browserSourceHashes": "all match frozen runtime/UI source",
+  "runtimeSecretScan": "passed",
+  "selectedFileCount": 39,
+  "patchSha256": "c4184ddf33b69a19aba96663b58f18a1e38728d4d5d0e858782c3655cc43f167",
+  "simulationTests": {
+    "passed": 25,
+    "failed": 0
+  },
+  "targetedGatewayRegression": {
+    "passed": 9,
+    "failed": 0
+  },
+  "targetedBridgeTests": {
+    "passed": 9,
+    "failed": 0
+  },
+  "browserFinalRun": {
+    "total": 11,
+    "passed": 11,
+    "failed": 0,
+    "pending": 0
+  },
+  "repositoryIndexModified": false,
+  "windowsBuildPerformed": false,
+  "deploymentPerformed": false
+}

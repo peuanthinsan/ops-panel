@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { filterReports } from '../web/lib/report-filter.ts';
 import {
   CLASSIC_REPORT_ROWS_PER_PAGE,
   classicActivityPosition,
@@ -15,6 +16,36 @@ const jobs = (count: number) => Array.from({ length: count }, (_, index) => ({
   id: `job-${index + 1}`,
   startTime: `2026-09-09T${String(7 + Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}:00+07:00`,
 }));
+
+test('selected job dates keep a multi-day work period inside the requested print range', () => {
+  const rows = ['2026-08-31', '2026-09-01', '2026-09-02'].flatMap((day, dayIndex) =>
+    Array.from({ length: dayIndex === 0 ? 5 : 3 }, (_, index) => ({
+      id: `${day}-${index}`,
+      vehicleNumber: '69-8617',
+      workPeriodId: 'three-day-period',
+      workPeriodDate: '2026-08-31',
+      startTime: `${day}T10:${String(index).padStart(2, '0')}:00+07:00`,
+      endTime: `${day}T10:${String(index + 1).padStart(2, '0')}:00+07:00`,
+      status: dayIndex === 0 && index === 2 ? 'Cancelled' : 'Completed',
+    })),
+  );
+  for (const [startDate, endDate, pageCount, jobCount] of [
+    ['2026-08-31', '2026-08-31', 1, 5],
+    ['2026-09-01', '2026-09-01', 1, 3],
+    ['2026-08-31', '2026-09-02', 3, 11],
+    ['', '', 3, 11],
+  ] as const) {
+    const selected = filterReports(rows, { startDate, endDate, dateBasis: 'job', workPeriodId: 'three-day-period' }, 'en');
+    const pages = classicReportPages(selected, startDate || '2026-08-31');
+    assert.equal(pages.length, pageCount);
+    assert.equal(pages.flatMap(page => page.rows).length, jobCount);
+    assert.ok(selected.every(row => row.workPeriodId === 'three-day-period'));
+    assert.ok(pages.every(page => Date.parse(page.windowEnd) - Date.parse(page.windowStart) === 86_400_000));
+  }
+  const firstDay = filterReports(rows, { startDate: '2026-08-31', endDate: '2026-08-31', dateBasis: 'job' }, 'en');
+  const page = classicReportPages(firstDay, '2026-08-31')[0];
+  assert.equal(firstDay.filter(row => classicActivityPosition(row, page)).length, 4);
+});
 
 test('activity positions retain recorded duration and exclude cancelled or invalid intervals', () => {
   const window = { windowStart: '2026-09-09T10:14:00+07:00', windowEnd: '2026-09-09T10:15:00+07:00' };

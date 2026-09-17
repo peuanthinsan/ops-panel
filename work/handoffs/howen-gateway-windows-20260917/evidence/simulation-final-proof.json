@@ -1,0 +1,27 @@
+{
+  "url": "http://127.0.0.1:3055/gateway",
+  "title": "Howen Gateway · Songdee Ops Panel",
+  "summary": {
+    "total": 11,
+    "passed": 11,
+    "failed": 0,
+    "pending": 0
+  },
+  "errors": [],
+  "sourceHashes": {
+    "gateway/server.mjs": "40f192e0167c3c37eeeb1dbad0008e3ec56b6beee8ae219d55ad713c17c3f22b",
+    "gateway/simulator.mjs": "b6d231f8d349fc5a1b45295d490c8c6896d4e7f722555af16071e84f6dea4178",
+    "gateway/simulation-lab.mjs": "34458cf205ecda5d7913e1a0a9475076cb6df297cba92dc82e21c0e9e4aa6b13",
+    "gateway/simulation-scenarios.mjs": "c46797addb9e1fa0b65de15225adc169dc1593cdb1490015ba912af7c4bbf443",
+    "web/app/gateway-simulation.jsx": "0665113c5f069e7f0ee2b62df713923c2f186be053bfad4381a90af863648575",
+    "web/lib/server/howen-gateway.mjs": "405f32a6e64ad46e027b70be57cc2ee6e7d534451760f1720b2b780c1cb2fe02"
+  },
+  "desktop": [
+    1505,
+    1180
+  ],
+  "mobile": [
+    390,
+    844
+  ]
+}

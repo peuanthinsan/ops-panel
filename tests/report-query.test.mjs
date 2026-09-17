@@ -39,3 +39,22 @@ test('unsafe report sort fields fall back to newest first', () => {
     { key: 'startTime', direction: 'DESC' },
   ]);
 });
+
+test('job date queries bound actual start times to the selected Bangkok dates', () => {
+  const query = buildReportQuery(new URLSearchParams({
+    dateBasis: 'job', startDate: '2026-09-01', endDate: '2026-09-02', workPeriodId: 'P1',
+  }));
+  assert.equal(query.filters.dateBasis, 'job');
+  assert.equal(query.whereSql, "WHERE report.start_time >= ($1::date::timestamp AT TIME ZONE 'Asia/Bangkok') AND report.start_time < (($2::date + 1)::timestamp AT TIME ZONE 'Asia/Bangkok') AND report.work_period_id = $3");
+  assert.deepEqual(query.values, ['2026-09-01', '2026-09-02', 'P1']);
+});
+
+test('omitted and unrecognized date bases retain work-period date queries', () => {
+  for (const dateBasis of ['', 'report.start_time; DROP TABLE reports']) {
+    const query = buildReportQuery(new URLSearchParams({
+      dateBasis, startDate: '2026-08-31', endDate: '2026-09-02',
+    }));
+    assert.equal(query.filters.dateBasis, '');
+    assert.equal(query.whereSql, "WHERE report.work_period_start_time >= ($1::date::timestamp AT TIME ZONE 'Asia/Bangkok') AND report.work_period_start_time < (($2::date + 1)::timestamp AT TIME ZONE 'Asia/Bangkok')");
+  }
+});

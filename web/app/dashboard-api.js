@@ -6,6 +6,7 @@ import { readOfflineResponse, writeOfflineResponse } from './offline-store.js';
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
 export async function adminFetch(path, options = {}) {
+  const { timeoutMs = 8000, ...fetchOptions } = options;
   const token = typeof window !== 'undefined' ? getAdminSessionToken() : '';
   const isGet = (options.method || 'GET').toUpperCase() === 'GET';
   const isLocalPreview = process.env.NODE_ENV === 'development'
@@ -35,12 +36,12 @@ export async function adminFetch(path, options = {}) {
   const abortFromCaller = () => controller.abort();
   if (externalSignal?.aborted) controller.abort();
   else externalSignal?.addEventListener('abort', abortFromCaller, { once: true });
-  const timer = window.setTimeout(() => controller.abort(), 8000);
+  const timer = window.setTimeout(() => controller.abort(), Math.min(60000, Math.max(1000, timeoutMs)));
   let response;
 
   try {
     response = await fetch(`${apiBase}${path}`, {
-      ...options,
+      ...fetchOptions,
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
