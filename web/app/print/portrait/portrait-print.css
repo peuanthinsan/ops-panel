@@ -15,3 +15,5 @@
 .report-continuation-sheet .continuation-job-section{flex:1;margin-top:5mm!important}.report-continuation-sheet .simple-job-table td{padding-block:1.7mm}
 
 @media print{.portrait-preview .portrait-sheet{width:297mm!important;height:210mm!important;min-height:210mm!important;box-shadow:none}.portrait-preview .report-masthead,.portrait-preview .print-kpi,.trip-timeline,.alert-list span,.job-type{-webkit-print-color-adjust:exact;print-color-adjust:exact}.speed-point-hit,.speed-point-tooltip{display:none!important}}
+
+.trip-timeline .fuel-scale-label{top:1.3mm!important;right:1.8mm;font-size:2.3mm}.trip-timeline .speed-scale-label{font-size:2.3mm}.portrait-preview .timeline-legend .fuel{width:4mm!important;border-top:.5mm dashed #985B05!important}.trip-timeline .speed-timeline-overlay{height:calc(100% - 5mm)}

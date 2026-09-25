@@ -1,7 +1,7 @@
 import { operationActions } from '../../lib/actions';
 import { printReportLocation } from '../../lib/report-print-view';
 import { reportDateKey } from '../../lib/report-view';
-import { mergeReportSpeedSeries, normalizeSpeedSamples } from '../../lib/speed-timeline';
+import { reportTelemetryPoints, telemetryChartPoints, telemetryDomainMaximum, telemetryLinePath, telemetryMarkerPoints } from '../../lib/speed-timeline';
 import { classicActivityPosition } from '../../lib/report-classic';
 
 const MODE_LABELS = Object.fromEntries(operationActions.map(action => [action[2], { th: action[1], en: action[2] }]));
@@ -11,7 +11,7 @@ const LABELS = {
     start: 'Start', end: 'End', printed: 'Printed on', page: 'Page', startOdometer: 'Start odometer', endOdometer: 'End odometer', distance1: 'Distance 1', distance2: 'Distance 2',
     loadUnload: 'Load/Unload', parkWait: 'Park/Wait', total: 'Total', number: 'No.', timeRange: 'Time range', status: 'Status', description: 'Description',
     vehicleL: 'Vehicle (L)', vehicleD: 'Vehicle (D)', other: 'Other', cash: 'Cash', etc: 'ETC', card: 'Card', coupon: 'Coupon', parkExpense: 'Park', travel: 'Travel', repair: 'Repair',
-    notes: 'Notes', loadStatus: 'Load status', speed: 'Speed (km/h)', rpm: 'RPM', noSpeed: 'No speed data', timeline: 'Activity timeline', nextDay: 'next day', day: 'day',
+    notes: 'Notes', loadStatus: 'Load status', speed: 'Speed (km/h)', fuel: 'Total fuel (unit unconfirmed)', noFuel: 'No fuel data', fuelUnavailable: 'Fuel unavailable', fuelPartial: 'Partial fuel data', fuelNotConnected: 'Fuel not connected', rpm: 'RPM', noSpeed: 'No speed data', timeline: 'Activity timeline', nextDay: 'next day', day: 'day',
     drive: 'Drive', load: 'Load', unload: 'Unload', wait: 'Wait', break: 'Break', sleep: 'Sleep', refuel: 'Refuel', park: 'Park', breakSleep: 'Break / Sleep', totalPark: 'Total park',
     totalDistance: 'Total distance', maxSpeed: 'Max speed', count: 'Count (?)', km: 'km', cancelled: 'Cancelled', noJobs: 'No jobs started in this time window', manual: 'Manual entry',
     engine: 'Engine', tire: 'Tire', brake: 'Brakes', inspection: 'Vehicle inspection checklist',
@@ -23,7 +23,7 @@ const LABELS = {
     start: 'เริ่มปฏิบัติงาน', end: 'สิ้นสุดปฏิบัติงาน', printed: 'วันที่พิมพ์', page: 'หน้าที่', startOdometer: 'เลขไมล์เริ่ม', endOdometer: 'เลขไมล์สิ้นสุด', distance1: 'ระยะทาง 1', distance2: 'ระยะทาง 2',
     loadUnload: 'โหลด/อันโหลด', parkWait: 'จอด/รอ', total: 'รวมทั้งหมด', number: 'ลำดับ', timeRange: 'ช่วงเวลา', status: 'สถานะ', description: 'รายละเอียด',
     vehicleL: 'ยานพาหนะ (L)', vehicleD: 'ยานพาหนะ (D)', other: 'อื่นๆ', cash: 'เงินสด', etc: 'ETC', card: 'บัตร', coupon: 'คูปอง', parkExpense: 'ค่าจอด', travel: 'ค่าเดินทาง', repair: 'ค่าซ่อม',
-    notes: 'หมายเหตุ', loadStatus: 'สถานะโหลด', speed: 'ความเร็ว (กม./ชม.)', rpm: 'รอบเครื่องยนต์', noSpeed: 'ไม่มีข้อมูลความเร็ว', timeline: 'ไทม์ไลน์กิจกรรม', nextDay: 'วันถัดไป', day: 'วัน',
+    notes: 'หมายเหตุ', loadStatus: 'สถานะโหลด', speed: 'ความเร็ว (กม./ชม.)', fuel: 'น้ำมันรวม (ยังไม่ยืนยันหน่วย)', noFuel: 'ไม่มีข้อมูลน้ำมัน', fuelUnavailable: 'ข้อมูลน้ำมันไม่พร้อม', fuelPartial: 'ข้อมูลน้ำมันไม่ครบ', fuelNotConnected: 'ยังไม่เชื่อมต่อข้อมูลน้ำมัน', rpm: 'รอบเครื่องยนต์', noSpeed: 'ไม่มีข้อมูลความเร็ว', timeline: 'ไทม์ไลน์กิจกรรม', nextDay: 'วันถัดไป', day: 'วัน',
     drive: 'ขับขี่', load: 'โหลด', unload: 'อันโหลด', wait: 'รอ', break: 'พัก', sleep: 'นอน', refuel: 'เติมน้ำมัน', park: 'จอด', breakSleep: 'พัก / นอน', totalPark: 'จอดรวม',
     totalDistance: 'ระยะทางรวม', maxSpeed: 'ความเร็วสูงสุด', count: 'จำนวนครั้ง (?)', km: 'กม.', cancelled: 'ยกเลิก', noJobs: 'ไม่มีงานเริ่มต้นในช่วงเวลานี้', manual: 'ช่องกรอกด้วยมือ',
     engine: 'เครื่องยนต์', tire: 'ยาง', brake: 'เบรก', inspection: 'รายการตรวจสภาพรถ',
@@ -100,34 +100,41 @@ function ClassicTripLog({ page, lang, labels }) {
   </table>;
 }
 
-function ClassicSpeedChart({ rows, samplesByReportId, page, labels }) {
+function ClassicSpeedChart({ rows, samplesByReportId, telemetryByReportId, page, labels }) {
   const start = timestamp(page.windowStart);
   const end = timestamp(page.windowEnd);
-  const span = end != null && start != null ? end - start : 86_400_000;
-  const points = mergeReportSpeedSeries(rows.map(report => ({ reportId: String(report.id || ''), points: normalizeSpeedSamples(samplesByReportId[report.id] || []) })))
-    .filter(point => start != null && end != null && timestamp(point.capturedAt) >= start && timestamp(point.capturedAt) < end);
-  const peakSpeed = points.reduce((max, point) => Math.max(max, point.speedKph), 0);
-  const maxSpeed = Math.max(125, Math.ceil(peakSpeed / 25) * 25);
-  const positioned = points.map(point => ({ ...point, x: (timestamp(point.capturedAt) - start) / span * 1000, y: 180 - point.speedKph / maxSpeed * 170 }));
-  const path = positioned.map((point, index) => {
-    const previous = positioned[index - 1];
-    // A new report or a GPS gap has no observed connecting speed trace.
-    const move = !previous || previous.reportId !== point.reportId || timestamp(point.capturedAt) - timestamp(previous.capturedAt) > 300_000;
-    return `${move ? 'M' : 'L'}${point.x.toFixed(2)},${point.y.toFixed(2)}`;
-  }).join(' ');
+  const spanMinutes = end != null && start != null ? (end - start) / 60_000 : 24 * 60;
+  const points = reportTelemetryPoints(rows, telemetryByReportId, samplesByReportId, page.windowStart)
+    .filter(point => point.minute >= 0 && point.minute < spanMinutes);
+  const maxSpeed = telemetryDomainMaximum(points, 'speedKph');
+  const maxFuel = telemetryDomainMaximum(points, 'totalFuel');
+  const hasFuel = points.some(point => point.totalFuel != null);
+  const hasSpeed = points.some(point => point.speedKph != null);
+  const results = rows.map(report => telemetryByReportId[report.id]);
+  const unavailable = results.some(result => result?.status === 'unavailable');
+  const notConfigured = results.length > 0 && results.every(result => result?.status === 'not_configured');
+  const fuelState = unavailable ? (hasFuel ? labels.fuelPartial : labels.fuelUnavailable) : notConfigured ? labels.fuelNotConnected : hasFuel ? '' : labels.noFuel;
+  const positioned = telemetryChartPoints(points, { startMinute: 0, endMinute: spanMinutes, height: 190, top: 10, bottom: 10, maxSpeed, maxFuel });
+  const markers = telemetryMarkerPoints(positioned);
   const ticks = [maxSpeed, maxSpeed * .6, maxSpeed * .2, 0];
   return <>
-    <div className="classic-chart-legend"><span><i />{labels.speed}</span><span>{labels.rpm}: —</span><span className="classic-window">{dateTime(page.windowStart)} – {dateTime(page.windowEnd)}</span></div>
+    <div className="classic-chart-legend"><span><i />{labels.speed}</span><span><i className="classic-fuel-key" />{labels.fuel}</span><span className="classic-window">{dateTime(page.windowStart)} – {dateTime(page.windowEnd)}</span></div>
     <div className="classic-chart-row">
       <div className="classic-chart-gutter">{ticks.map(value => <span key={value} style={{ top: `${(180 - value / maxSpeed * 170) / 190 * 100}%` }}>{Math.round(value)}</span>)}</div>
       <div className="classic-chart-area">
-        <svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="img" aria-label={`${labels.speed}: ${points.length ? number(peakSpeed) : labels.noSpeed}`}>
+        <svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="img" aria-label={`${labels.speed}: 0–${maxSpeed}. ${labels.fuel}: ${hasFuel ? `0–${maxFuel}` : ''} ${fuelState}`}>
           {Array.from({ length: 25 }, (_, index) => <line key={`v-${index}`} x1={index * 1000 / 24} x2={index * 1000 / 24} y1="0" y2="190" className="classic-chart-grid" />)}
           {[10, 78, 146, 180].map(value => <line key={`h-${value}`} x1="0" x2="1000" y1={value} y2={value} className="classic-chart-grid" />)}
-          <path d={path} className="classic-speed-path" />
-          {positioned.map((point, index) => <circle key={`${point.reportId}-${point.id}-${index}`} cx={point.x} cy={point.y} r="1.6" className="classic-speed-point" />)}
+          <path d={telemetryLinePath(positioned, 'speedKph')} className="classic-speed-path" />
+          <path d={telemetryLinePath(positioned, 'totalFuel')} className="classic-fuel-path" />
+          {markers.map(point => <g key={`${point.reportId}-${point.id}-${point.capturedAt}`}>
+            {point.speedY != null && <circle cx={point.x} cy={point.speedY} r="1.8" className="classic-speed-point" />}
+            {point.fuelY != null && <rect x={point.x - 1.8} y={point.fuelY - 1.8} width="3.6" height="3.6" className="classic-fuel-point" />}
+          </g>)}
         </svg>
-        {!points.length && <span className="classic-no-speed">{labels.noSpeed}</span>}
+        <span className="classic-fuel-scale">{hasFuel ? `${maxFuel}${fuelState ? ` · ${fuelState}` : ''}` : fuelState}</span>
+        {hasFuel && <span className="classic-fuel-zero">0</span>}
+        {!hasSpeed && <span className="classic-no-speed">{labels.noSpeed}</span>}
       </div>
     </div>
   </>;
@@ -156,7 +163,7 @@ function ClassicChecklist({ labels }) {
 export default function ClassicOperationReport({ model, lang }) {
   const language = lang === 'th' ? 'th' : 'en';
   const labels = LABELS[language];
-  const { summary, documentId, printedAt, samplesByReportId = {}, totalSeconds, classic } = model;
+  const { summary, documentId, printedAt, samplesByReportId = {}, telemetryByReportId = {}, totalSeconds, classic } = model;
   const durations = classic.durations;
   const timelineRows = summary.rows.filter(report => report.status !== 'Cancelled');
   const workPeriodId = summary.rows.find(report => report.workPeriodId)?.workPeriodId || documentId || '—';
@@ -192,7 +199,7 @@ export default function ClassicOperationReport({ model, lang }) {
           const offset = dayOffset(value, page.windowStart);
           return <div key={index} className="classic-hour-cell"><span>{clock(value)}</span>{offset > 0 && <small title={labels.nextDay}>+{offset}</small>}</div>;
         })}</div></div>
-        <ClassicSpeedChart rows={timelineRows} samplesByReportId={samplesByReportId} page={page} labels={labels} />
+        <ClassicSpeedChart rows={timelineRows} samplesByReportId={samplesByReportId} telemetryByReportId={telemetryByReportId} page={page} labels={labels} />
         <div aria-label={labels.timeline}><ClassicStatusRows rows={timelineRows} page={page} labels={labels} /></div>
         <div className="classic-ledger" aria-hidden="true">{Array.from({ length: 18 }, (_, index) => <div className="classic-ledger-row" key={index}><div className="classic-ledger-gutter" /><div className="classic-ledger-track" /></div>)}</div>
         <div className="classic-totals-strip">{summaryValues.map(([label, value]) => <div key={label}>{label}<strong>{value}</strong></div>)}</div>
