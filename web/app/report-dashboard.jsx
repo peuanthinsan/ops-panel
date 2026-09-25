@@ -10,11 +10,13 @@ import {
   reportDateKey,
 } from '../lib/report-view';
 import { reportableOperations } from '../lib/actions';
+import { reportFuelReading } from '../lib/report-fuel';
 import { localizedDashboardReportError } from '../lib/dashboard-errors';
 import { adminFetch } from './dashboard-api';
 import SearchableCombobox from './searchable-combobox';
 import JobGpsDrawer from './job-gps-drawer';
 import TimelineDashboard from './timeline-dashboard';
+import { useReportTelemetry } from './report-speed-series';
 import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockwise';
 import { ArrowRightIcon } from '@phosphor-icons/react/dist/csr/ArrowRight';
 import { MapPinLineIcon } from '@phosphor-icons/react/dist/csr/MapPinLine';
@@ -55,10 +57,12 @@ const gpsUiText = {
 const text = {
   en: {
     printPeriodRequired: 'Multiple work periods match for this vehicle. Choose the required job row below and use its Print work report button.',
+    totalFuel: 'Total fuel', fuelHint: 'Fuel shows the latest available reading recorded during each job.', fuelLatest: 'Latest', fuelLoading: 'Loading…', fuelEmpty: 'No fuel data', fuelUnavailable: 'Unavailable',
     eyebrowToday: 'TODAY', title: 'Operations reports', subtitle: 'Review, filter, print, and retry every saved vehicle job.', filtersTitle: 'Shared report filters', sharedFiltersHint: 'Dates filter jobs by when they started. The timeline and printed report use the same date range.', search: 'Search reports', searchPlaceholder: 'Vehicle, device, driver, activity, report ID, GPS, speed, or location', dateRange: 'Date range', allDates: 'All dates', today: 'Today', last7: 'Last 7 days', month: 'This month', apply: 'Apply', cancel: 'Cancel', previousMonth: 'Previous month', nextMonth: 'Next month', report: 'Report ID', vehicle: 'Vehicle', allVehicles: 'All vehicles', device: 'Device', allDevices: 'All devices', driver: 'Driver', allDrivers: 'All drivers', mode: 'Activity', allModes: 'All activities', status: 'Status', allStatuses: 'All statuses', gps: 'GPS', allGps: 'All GPS states', sortHint: 'Click a column header to sort. Shift-click to sort by up to three columns.', clear: 'Clear', refresh: 'Refresh', refreshing: 'Refreshing…', print: 'Print work report', printVehicle: 'Print work report', printVehicleRequired: 'Select exactly one vehicle.', printVehicleSelected: 'Report vehicle', jobs: 'Total jobs', jobsSub: 'in the selected date range', active: 'Vehicles operating', activeSub: 'vehicles with saved work', queued: 'GPS lookup pending', queuedSub: 'waiting for GPS data', cancelled: 'Cancelled jobs', cancelledSub: 'kept in the audit record', activity: 'Job list', date: 'Job date', workStarted: 'Work started', start: 'Start time', end: 'End time', duration: 'Total time', durationFormat: 'HH:MM:SS', topSpeed: 'Top speed', location: 'Location (GPS)', noJobs: 'No jobs match the current filters.', emptyTitle: 'No jobs recorded yet', emptyBody: 'Connect a tablet to a vehicle, then complete or cancel a job. It will appear here automatically.', noMatchTitle: 'No matching jobs', noMatchBody: 'Try a different date range, search, or filter.', manageFleet: 'Manage fleet', failed: 'Could not load reports.', loading: 'Loading reports…', retry: 'Retry GPS lookup', retrying: 'Looking up…', actions: 'Actions', deviceSamples: 'GPS', lastPoint: 'Last point', previous: 'Previous', next: 'Next', page: 'Page', of: 'of', showing: 'Showing', total: 'total', fleet: 'fleet', unknownLocation: 'No GPS point', stationary: 'Stationary', speedUnit: 'km/h',
   },
   th: {
     printPeriodRequired: 'พบหลายรอบงานของรถคันนี้ ให้เลือกแถวงานที่ต้องการด้านล่าง แล้วกดปุ่มพิมพ์รายงานรอบงานในแถวนั้น',
+    totalFuel: 'น้ำมันรวม', fuelHint: 'แสดงค่าน้ำมันล่าสุดที่บันทึกในช่วงเวลาของแต่ละงาน', fuelLatest: 'ล่าสุด', fuelLoading: 'กำลังโหลด…', fuelEmpty: 'ไม่มีข้อมูลน้ำมัน', fuelUnavailable: 'ไม่พร้อมใช้งาน',
     eyebrowToday: 'วันนี้', title: 'รายงานการวิ่งงาน', subtitle: 'ตรวจสอบ กรอง พิมพ์ และค้นหาข้อมูล GPS ของงานรถที่บันทึก', filtersTitle: 'ตัวกรองรายงานร่วม', sharedFiltersHint: 'กรองงานตามวันที่เริ่มงาน ไทม์ไลน์และรายงานที่พิมพ์ใช้ช่วงวันที่เดียวกัน', search: 'ค้นหารายงาน', searchPlaceholder: 'รถ อุปกรณ์ พขร. กิจกรรม รหัสรายงาน GPS ความเร็ว หรือสถานที่', dateRange: 'ช่วงวันที่', allDates: 'ทุกวัน', today: 'วันนี้', last7: '7 วันที่ผ่านมา', month: 'เดือนนี้', apply: 'ใช้ช่วงวันที่', cancel: 'ยกเลิก', previousMonth: 'เดือนก่อนหน้า', nextMonth: 'เดือนถัดไป', report: 'รหัสรายงาน', vehicle: 'เบอร์รถ', allVehicles: 'รถทั้งหมด', device: 'อุปกรณ์', allDevices: 'อุปกรณ์ทั้งหมด', driver: 'พขร.', allDrivers: 'พขร. ทั้งหมด', mode: 'กิจกรรม', allModes: 'กิจกรรมทั้งหมด', status: 'สถานะ', allStatuses: 'สถานะทั้งหมด', gps: 'GPS', allGps: 'สถานะ GPS ทั้งหมด', sortHint: 'คลิกหัวคอลัมน์เพื่อเรียง หรือกด Shift พร้อมคลิกเพื่อเรียงได้สูงสุด 3 คอลัมน์', clear: 'ล้างตัวกรอง', refresh: 'รีเฟรช', refreshing: 'กำลังรีเฟรช…', print: 'พิมพ์รายงานรอบงาน', printVehicle: 'พิมพ์รายงานรอบงาน', printVehicleRequired: 'เลือกรถหนึ่งคันเท่านั้นในส่วนหัว', printVehicleSelected: 'รถสำหรับรายงาน', jobs: 'งานทั้งหมด', jobsSub: 'ในช่วงวันที่ที่เลือก', active: 'รถที่วิ่งงาน', activeSub: 'รถที่มีงานบันทึก', queued: 'รอค้นหา GPS', queuedSub: 'กำลังรอข้อมูล GPS', cancelled: 'งานที่ยกเลิก', cancelledSub: 'เก็บไว้ในประวัติการตรวจสอบ', activity: 'รายการงาน', date: 'วันที่ทำงาน', workStarted: 'เริ่มรอบงาน', start: 'เวลาเริ่ม', end: 'เวลาจบ', duration: 'รวมเวลา', durationFormat: 'ชม:นาที:วินาที', topSpeed: 'ความเร็วสูงสุด', location: 'สถานที่ (GPS)', noJobs: 'ไม่พบงานตามตัวกรองนี้', emptyTitle: 'ยังไม่มีงานที่บันทึก', emptyBody: 'เชื่อมต่อแท็บเล็ตกับรถ แล้วจบหรือยกเลิกงาน รายการจะปรากฏที่นี่โดยอัตโนมัติ', noMatchTitle: 'ไม่พบงานที่ตรงกัน', noMatchBody: 'ลองเปลี่ยนช่วงวันที่ คำค้นหา หรือตัวกรอง', manageFleet: 'จัดการรถ', failed: 'ไม่สามารถโหลดรายงานได้', loading: 'กำลังโหลดรายงาน…', retry: 'ค้นหา GPS อีกครั้ง', retrying: 'กำลังค้นหา…', actions: 'การดำเนินการ', deviceSamples: 'GPS', lastPoint: 'จุดล่าสุด', previous: 'ก่อนหน้า', next: 'ถัดไป', page: 'หน้า', of: 'จาก', showing: 'แสดง', total: 'ทั้งหมด', fleet: 'คันทั้งหมด', unknownLocation: 'ไม่มีพิกัด GPS', stationary: 'จอดนิ่ง', speedUnit: 'กม./ชม.',
   },
 };
@@ -109,6 +113,20 @@ function formatTime(value, lang) {
   const date = value ? new Date(value) : null;
   if (!date || !Number.isFinite(date.getTime())) return '—';
   return new Intl.DateTimeFormat(lang === 'th' ? 'th-TH' : 'en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(date);
+}
+function JobFuelReading({ reading, report, lang, t }) {
+  if (reading.status !== 'received') {
+    const label = reading.status === 'loading' ? t.fuelLoading : reading.status === 'no_fuel' ? t.fuelEmpty : t.fuelUnavailable;
+    return <span className="job-fuel-reading job-fuel-state" data-fuel-status={reading.status} aria-busy={reading.status === 'loading'}>{label}</span>;
+  }
+  const dateKey = reportDateKey(reading.capturedAt);
+  const date = formatReportDate(dateKey, lang);
+  const time = formatTime(reading.capturedAt, lang);
+  return <span className="job-fuel-reading" data-fuel-status="received">
+    <strong>{new Intl.NumberFormat(lang === 'th' ? 'th-TH' : 'en-GB', { maximumFractionDigits: 2 }).format(reading.totalFuel)}</strong>
+    <small>{t.fuelLatest} <time dateTime={reading.capturedAt} title={`${date} ${time}`}>{time}</time></small>
+    {dateKey !== reportDateKey(report.startTime) ? <small>{date}</small> : null}
+  </span>;
 }
 function offsetDate(dateKey, amount) {
   const date = new Date(`${dateKey}T12:00:00+07:00`);
@@ -336,6 +354,10 @@ export default function FullReportDashboard({ lang }) {
   useEffect(() => { setPage(1); }, [sharedFilters]);
   const visibleReports = reports;
   const renderedReports = reports;
+  const { telemetryByReportId, telemetryLoading } = useReportTelemetry(visibleReports);
+  const fuelByReportId = useMemo(() => Object.fromEntries(visibleReports.map(report => [
+    report.id, reportFuelReading(report, telemetryByReportId[report.id], telemetryLoading),
+  ])), [visibleReports, telemetryByReportId, telemetryLoading]);
 
   function changeSort(nextKey, event) {
     const defaultDirection = nextKey === 'startTime' ? 'desc' : 'asc';
@@ -406,7 +428,7 @@ export default function FullReportDashboard({ lang }) {
       : `${t.printVehicleSelected}: ${vehicles[0]}`;
   const needsRowPrintSelection = vehicles.length === 1 && matchingPrintPeriodIds.length > 1;
   const columns = [
-    ['vehicleNumber', t.vehicle], ['mode', t.mode], ['startTime', t.date], ['startClock', t.start], ['endTime', t.end], ['duration', t.duration], ['topSpeed', t.topSpeed], ['gpsState', g.lastPosition],
+    ['vehicleNumber', t.vehicle], ['mode', t.mode], ['startTime', t.date], ['startClock', t.start], ['endTime', t.end], ['duration', t.duration], ['topSpeed', t.topSpeed], ['totalFuel', t.totalFuel], ['gpsState', g.lastPosition],
   ];
 
   return (
@@ -446,13 +468,15 @@ export default function FullReportDashboard({ lang }) {
 
       <section className="panel report-panel" aria-busy={loading || search !== deferredSearch}>
         <div className="section-heading report-section-heading"><div><h2>{t.activity}</h2><p className="sort-hint">{t.sortHint}</p></div><span className="result-count" aria-live="polite">{t.showing} {pageInfo.start}–{pageInfo.end} {t.of} {pageInfo.total}</span></div>
+        <p className="job-fuel-hint" id="job-fuel-hint">{t.fuelHint}</p>
         {error ? <p className="error" role="alert">{error}</p> : null}
         {loading && !reports.length ? <p className="loading-message" role="status">{t.loading}</p> : null}
         {visibleReports.length ? <div className="table-wrap" tabIndex={0} aria-label={lang === 'en' ? 'Scrollable saved jobs table' : 'ตารางงานที่บันทึก เลื่อนได้'}>
           <table className="reports-table">
             <caption className="sr-only">{t.activity}</caption>
-            <colgroup><col className="col-vehicle" /><col className="col-mode" /><col className="col-date" /><col className="col-time" /><col className="col-time" /><col className="col-duration" /><col className="col-speed" /><col className="col-location" /></colgroup>
+            <colgroup><col className="col-vehicle" /><col className="col-mode" /><col className="col-date" /><col className="col-time" /><col className="col-time" /><col className="col-duration" /><col className="col-speed" /><col className="col-fuel" /><col className="col-location" /></colgroup>
             <thead><tr>{columns.map(([key, label]) => {
+              if (key === 'totalFuel') return <th key={key} scope="col" aria-describedby="job-fuel-hint">{label}</th>;
               const sortIndex = sorts.findIndex(sort => sort.key === key);
               const columnSort = sortIndex >= 0 ? sorts[sortIndex] : null;
               return <th key={key} scope="col" aria-sort={sortKey === key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}><button className={`table-sort ${key === 'duration' ? 'table-sort-duration' : ''}`} type="button" title={t.sortHint} onClick={event => changeSort(key, event)}><span>{label}{columnSort ? ` ${columnSort.direction === 'asc' ? '↑' : '↓'}${sorts.length > 1 ? sortIndex + 1 : ''}` : ''}</span>{key === 'duration' ? <small>{t.durationFormat}</small> : null}</button></th>;
@@ -465,6 +489,7 @@ export default function FullReportDashboard({ lang }) {
               <td className="report-time-cell">{formatTime(report.endTime, lang)}</td>
               <td className="report-duration-cell">{formatReportDuration(report.startTime, report.endTime, report.duration)}</td>
               <td className={reportSpeed(report) > 90 ? 'speed-alert' : undefined}>{reportSpeed(report) == null ? '—' : reportSpeed(report) === 0 ? t.stationary : `${reportSpeed(report)} ${t.speedUnit}`}</td>
+              <td className="job-fuel-cell"><JobFuelReading reading={fuelByReportId[report.id]} report={report} lang={lang} t={t} /></td>
               <td className="location-cell gps-snapshot-cell"><div className="job-command-cell"><GpsSnapshotButton report={report} lang={lang} labels={g} fallback={t.unknownLocation} onOpen={setSelectedReport} /><button className="job-print-button" type="button" aria-label={`${t.printVehicle}: ${report.vehicleNumber}`} title={t.printVehicle} disabled={!report.vehicleNumber || !report.workPeriodId} onClick={() => printVehicle(report)}><PrinterIcon size={16} weight="bold" aria-hidden="true" /><span>{t.printVehicle}</span></button></div></td>
             </tr>)}</tbody>
           </table>
@@ -472,7 +497,7 @@ export default function FullReportDashboard({ lang }) {
         {visibleReports.length ? <div className="report-cards" role="list" aria-label={lang === 'en' ? 'Saved jobs' : 'งานที่บันทึก'}>
           {renderedReports.map(report => <article className={`report-card ${report.status === 'Cancelled' ? 'row-cancelled' : isLookupPending(report) ? 'row-queued' : ''} ${selectedReport?.id === report.id ? 'row-selected' : ''} ${needsRowPrintSelection ? 'row-print-highlight' : ''}`} key={report.id} role="listitem" aria-label={`${t.report} ${report.id}`}>
             <div className="report-card-heading"><div><h3>{report.vehicleNumber || '—'}</h3><small>{report.routeName ? `${lang === 'en' ? 'Route' : 'เส้นทาง'} ${report.routeName} · ` : ''}{report.id}</small>{report.workPeriodDate && report.workPeriodDate !== reportDateKey(report.startTime) ? <small>{t.workStarted}: {formatReportDate(report.workPeriodDate, lang)}</small> : null}</div><span className={`status status-${statusSlug(report.status)}`}>{displayStatus(report.status, lang)}</span></div>
-            <dl><div><dt>{t.driver}</dt><dd>{report.driverName || '—'}{report.driverId ? <small className="secondary-line">{report.driverId}</small> : null}</dd></div><div><dt>{t.device}</dt><dd className="device-id">{report.deviceId || '—'}</dd></div><div><dt>{t.mode}</dt><dd>{displayMode(report.mode, lang)}</dd></div><div><dt>{t.date}</dt><dd>{report.startTime ? formatReportDate(reportDateKey(report.startTime), lang) : '—'}</dd></div><div><dt>{t.start} – {t.end}</dt><dd className="report-time-cell">{formatTime(report.startTime, lang)} – {formatTime(report.endTime, lang)}</dd></div><div><dt>{t.duration} <span className="duration-format-inline">({t.durationFormat})</span></dt><dd className="report-duration-cell">{formatReportDuration(report.startTime, report.endTime, report.duration)}</dd></div><div><dt>{t.topSpeed}</dt><dd className={reportSpeed(report) > 90 ? 'speed-alert' : undefined}>{reportSpeed(report) == null ? '—' : reportSpeed(report) === 0 ? t.stationary : `${reportSpeed(report)} ${t.speedUnit}`}</dd></div><div className="card-location card-gps-snapshot"><dt>{g.gpsSnapshot}</dt><dd><div className="job-command-cell"><GpsSnapshotButton report={report} lang={lang} labels={g} fallback={t.unknownLocation} onOpen={setSelectedReport} /><button className="job-print-button" type="button" aria-label={`${t.printVehicle}: ${report.vehicleNumber}`} disabled={!report.vehicleNumber || !report.workPeriodId} onClick={() => printVehicle(report)}><PrinterIcon size={16} weight="bold" aria-hidden="true" /><span>{t.printVehicle}</span></button></div></dd></div></dl>
+            <dl><div><dt>{t.driver}</dt><dd>{report.driverName || '—'}{report.driverId ? <small className="secondary-line">{report.driverId}</small> : null}</dd></div><div><dt>{t.device}</dt><dd className="device-id">{report.deviceId || '—'}</dd></div><div><dt>{t.mode}</dt><dd>{displayMode(report.mode, lang)}</dd></div><div><dt>{t.date}</dt><dd>{report.startTime ? formatReportDate(reportDateKey(report.startTime), lang) : '—'}</dd></div><div><dt>{t.start} – {t.end}</dt><dd className="report-time-cell">{formatTime(report.startTime, lang)} – {formatTime(report.endTime, lang)}</dd></div><div><dt>{t.duration} <span className="duration-format-inline">({t.durationFormat})</span></dt><dd className="report-duration-cell">{formatReportDuration(report.startTime, report.endTime, report.duration)}</dd></div><div><dt>{t.topSpeed}</dt><dd className={reportSpeed(report) > 90 ? 'speed-alert' : undefined}>{reportSpeed(report) == null ? '—' : reportSpeed(report) === 0 ? t.stationary : `${reportSpeed(report)} ${t.speedUnit}`}</dd></div><div><dt aria-describedby="job-fuel-hint">{t.totalFuel}</dt><dd><JobFuelReading reading={fuelByReportId[report.id]} report={report} lang={lang} t={t} /></dd></div><div className="card-location card-gps-snapshot"><dt>{g.gpsSnapshot}</dt><dd><div className="job-command-cell"><GpsSnapshotButton report={report} lang={lang} labels={g} fallback={t.unknownLocation} onOpen={setSelectedReport} /><button className="job-print-button" type="button" aria-label={`${t.printVehicle}: ${report.vehicleNumber}`} disabled={!report.vehicleNumber || !report.workPeriodId} onClick={() => printVehicle(report)}><PrinterIcon size={16} weight="bold" aria-hidden="true" /><span>{t.printVehicle}</span></button></div></dd></div></dl>
           </article>)}
         </div> : null}
         {pageInfo.totalPages > 1 ? <nav className="pagination" aria-label={lang === 'en' ? 'Saved jobs pages' : 'หน้ารายการงาน'}><button className="secondary" type="button" disabled={pageInfo.page <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}>{t.previous}</button><span>{t.page} {pageInfo.page} {t.of} {pageInfo.totalPages}</span><button className="secondary" type="button" disabled={pageInfo.page >= pageInfo.totalPages} onClick={() => setPage(value => Math.min(pageInfo.totalPages, value + 1))}>{t.next}</button></nav> : null}
