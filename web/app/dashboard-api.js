@@ -117,6 +117,14 @@ export async function adminFetchReportGpsSamples(reportId, options = {}) {
   return (await adminFetchReportGpsData(reportId, options)).samples;
 }
 
+export async function adminFetchReportTelemetry(reportId, { signal } = {}) {
+  return adminFetch(`/api/admin/reports/${encodeURIComponent(reportId)}/telemetry`, {
+    signal,
+    timeoutMs: 45000,
+    cacheOffline: false,
+  });
+}
+
 export async function adminFetchWorkPeriodGpsData(reportId, { signal } = {}) {
   const samples = [];
   const pageSize = 200;

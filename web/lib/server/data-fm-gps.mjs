@@ -3,6 +3,10 @@ const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000;
 const VEHICLE_MASTER_LIFETIME_MS = 60 * 60 * 1000;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const MAX_FUEL_WINDOW_MS = 7 * MAX_HISTORY_WINDOW_MS;
+const MAX_FUEL_RESPONSE_BYTES = 8 * 1024 * 1024;
+const FUEL_CACHE_LIFETIME_MS = 30_000;
+const MAX_FUEL_CACHE_ENTRIES = 32;
 const DEFAULT_BASE_URL = 'https://www.data-fm.com';
 
 let tokenCache = null;
@@ -10,6 +14,8 @@ let tokenRequest = null;
 let vehicleMasterCache = null;
 let vehicleMasterRequest = null;
 const driverIdentityCache = new Map();
+const fuelHistoryCache = new Map();
+const fuelHistoryRequests = new Map();
 
 function objectRecord(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
@@ -153,9 +159,9 @@ function configuration(input = {}) {
   return { configured: true, baseUrl: parsedBaseUrl, username, password, timeZone };
 }
 
-async function responseJson(response) {
+async function responseJson(response, maxBytes = MAX_RESPONSE_BYTES) {
   const body = await response.text();
-  if (new TextEncoder().encode(body).byteLength > MAX_RESPONSE_BYTES) throw new Error('Data-FM response is too large.');
+  if (new TextEncoder().encode(body).byteLength > maxBytes) throw new Error('Data-FM response is too large.');
   try { return JSON.parse(body || '{}'); } catch { throw new Error('Data-FM returned invalid JSON.'); }
 }
 
@@ -164,7 +170,7 @@ function endpoint(baseUrl, pathname) {
 }
 
 function cacheKey(config) {
-  return `${config.baseUrl.origin}\0${config.username}`;
+  return `${config.baseUrl.origin}\0${config.username}\0${config.password}`;
 }
 
 async function requestToken(config, fetchImpl, nowMs, timeoutMs) {
@@ -321,6 +327,170 @@ export async function fetchDataFmGpsHistory({
   }
 }
 
+export function parseDataFmFuelDateTime(value, timeZone) {
+  const match = String(value || '').trim().match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{1,2}):(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const [, day, month, year, hour, minute, second] = match;
+  return parseDataFmDateTime(`${year}.${month}.${day} ${hour.padStart(2, '0')}:${minute}:${second}`, timeZone);
+}
+
+function nonnegativeFuelNumber(value) {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  if (typeof value === 'string' && !value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function fuelResult(status, message, samples = []) {
+  return { status, samples, message, source: 'data-fm', fuelUnit: null };
+}
+
+function fuelResponseCode(payload) {
+  const value = aliasValue(payload, ['vResponseCode', 'responseCode']);
+  const code = nonnegativeFuelNumber(value);
+  return Number.isSafeInteger(code) ? code : null;
+}
+
+function completeFuelRows(payload) {
+  let rows = aliasValue(payload, ['vData', 'data']);
+  if (typeof rows === 'string') {
+    try { rows = JSON.parse(rows); } catch { return null; }
+  }
+  const total = nonnegativeFuelNumber(aliasValue(payload, ['vTotalRecords', 'totalRecords']));
+  if (!Array.isArray(rows) || !Number.isSafeInteger(total) || total !== rows.length) return null;
+  return rows;
+}
+
+async function fuelHistoryRequest({ config, fetchImpl, token, vehicleNumber, fromMs, toMs, timeoutMs }) {
+  const url = endpoint(config.baseUrl, '/Api/VTService.svc/GetFuelStatus');
+  url.searchParams.set('jtoken', token);
+  url.searchParams.set('vehicleno', vehicleNumber);
+  url.searchParams.set('fromdatetime', formatDataFmDateTime(new Date(fromMs), config.timeZone));
+  url.searchParams.set('todatetime', formatDataFmDateTime(new Date(toMs), config.timeZone));
+  const response = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+  if (!response.ok) return { code: null, error: `Data-FM fuel endpoint returned HTTP ${response.status}.` };
+  const payload = await responseJson(response, MAX_FUEL_RESPONSE_BYTES);
+  return { code: fuelResponseCode(payload), payload, error: null };
+}
+
+async function readFuelHistory({ config, fetchImpl, vehicleNumber, fromMs, toMs, nowMs, timeoutMs }) {
+  const deadline = Date.now() + timeoutMs;
+  const remainingMs = () => {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new Error('Fuel request timed out.');
+    return remaining;
+  };
+  let token = await dataFmToken(config, fetchImpl, nowMs, remainingMs());
+  let refreshedToken = false;
+  let queryVehicleNumber = vehicleNumber;
+  let canonicalLookupAttempted = false;
+  const requestSegment = async (start, end) => {
+    let response = await fuelHistoryRequest({ config, fetchImpl, token, vehicleNumber: queryVehicleNumber, fromMs: start, toMs: end, timeoutMs: remainingMs() });
+    if (response.code === 1 && !refreshedToken) {
+      refreshedToken = true;
+      if (tokenCache?.key === cacheKey(config)) tokenCache = null;
+      token = await dataFmToken(config, fetchImpl, nowMs, remainingMs(), true);
+      response = await fuelHistoryRequest({ config, fetchImpl, token, vehicleNumber: queryVehicleNumber, fromMs: start, toMs: end, timeoutMs: remainingMs() });
+    }
+    return response;
+  };
+  const samples = new Map();
+  // Inclusive provider windows share one boundary; deduplication keeps one point
+  // per timestamp while every segment remains at most 24 hours.
+  for (let start = fromMs; ;) {
+    const end = Math.min(start + MAX_HISTORY_WINDOW_MS, toMs);
+    let response = await requestSegment(start, end);
+    if (response.code === 6 && completeFuelRows(response.payload)?.length === 0 && !canonicalLookupAttempted) {
+      canonicalLookupAttempted = true;
+      const canonicalVehicleNumber = await canonicalDataFmVehicleNumber(config, fetchImpl, token, vehicleNumber, nowMs, remainingMs());
+      if (canonicalVehicleNumber && canonicalVehicleNumber !== queryVehicleNumber) {
+        queryVehicleNumber = canonicalVehicleNumber;
+        response = await requestSegment(start, end);
+      }
+    }
+    if (response.error) return fuelResult('unavailable', response.error);
+    if (response.code !== 0 && response.code !== 6) return fuelResult('unavailable', dataFmStatusMessage(response.code));
+    const rows = completeFuelRows(response.payload);
+    if (!rows || (response.code === 6 && rows.length !== 0)) {
+      return fuelResult('unavailable', 'Data-FM did not return a complete fuel record list.');
+    }
+    for (const row of rows) {
+      const capturedAt = parseDataFmFuelDateTime(aliasValue(row, ['datetime']), config.timeZone);
+      const rowVehicle = optionalString(aliasValue(row, ['vehicleno']));
+      if (!capturedAt || normalizedVehicleLookupKey(rowVehicle) !== normalizedVehicleLookupKey(queryVehicleNumber)) {
+        return fuelResult('unavailable', 'Data-FM returned an invalid fuel record or a different vehicle.');
+      }
+      const capturedMs = Date.parse(capturedAt);
+      // The API accepts whole seconds only. Filter any extra endpoint samples
+      // against the original millisecond precision requested by the caller.
+      if (capturedMs < fromMs || capturedMs > toMs) continue;
+      samples.set(capturedAt, {
+        id: `data-fm-fuel:${vehicleNumber}:${capturedAt}`,
+        capturedAt,
+        speedKph: nonnegativeFuelNumber(aliasValue(row, ['speed'])),
+        totalFuel: nonnegativeFuelNumber(aliasValue(row, ['totalfuel'])),
+      });
+    }
+    if (end >= toMs) break;
+    start = end;
+  }
+  const sorted = [...samples.values()].sort((left, right) => left.capturedAt.localeCompare(right.capturedAt));
+  return fuelResult('received', sorted.length ? `${sorted.length} fuel and speed records found.` : 'No fuel and speed records were found.', sorted);
+}
+
+export async function fetchDataFmFuelHistory({
+  baseUrl,
+  username,
+  password,
+  timeZone,
+  allowHttp = false,
+  vehicleNumber,
+  fromAt,
+  toAt,
+  fetchImpl = globalThis.fetch,
+  nowMs = Date.now(),
+  timeoutMs = 20_000,
+} = {}) {
+  const config = configuration({ baseUrl, username, password, timeZone, allowHttp });
+  if (!config.configured) return fuelResult('not_configured', 'Data-FM fuel adapter is not configured.');
+  if (config.error) return fuelResult('unavailable', config.error);
+  const fromMs = Date.parse(String(fromAt || ''));
+  const toMs = Date.parse(String(toAt || ''));
+  const vehicle = optionalString(vehicleNumber);
+  if (!vehicle || !Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs < fromMs) {
+    return fuelResult('unavailable', 'Data-FM fuel request parameters are invalid.');
+  }
+  if (toMs - fromMs > MAX_FUEL_WINDOW_MS) return fuelResult('unavailable', 'Fuel and speed history supports a maximum of 7 days per request.');
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 1) return fuelResult('unavailable', 'Data-FM fuel request timeout is invalid.');
+  const budgetMs = Math.min(Math.floor(timeoutMs), 30_000);
+  const key = `${cacheKey(config)}\0${config.timeZone}\0${vehicle}\0${fromMs}\0${toMs}`;
+  for (const [cacheEntryKey, entry] of fuelHistoryCache) {
+    if (entry.expiresAt <= nowMs) fuelHistoryCache.delete(cacheEntryKey);
+  }
+  const cached = fuelHistoryCache.get(key);
+  if (cached) return cached.result;
+  if (fuelHistoryRequests.has(key)) return fuelHistoryRequests.get(key);
+  if (fuelHistoryRequests.size >= MAX_FUEL_CACHE_ENTRIES) return fuelResult('unavailable', 'Data-FM fuel history is busy. Please try again.');
+
+  let timer;
+  const timedOut = fuelResult('unavailable', 'Data-FM fuel history timed out. Please try again.');
+  const pending = Promise.race([
+    readFuelHistory({ config, fetchImpl, vehicleNumber: vehicle, fromMs, toMs, nowMs, timeoutMs: budgetMs })
+      // Fetch errors may include credential-bearing URLs. Never expose them.
+      .catch(() => fuelResult('unavailable', 'Data-FM fuel history is unavailable. Please try again.')),
+    new Promise(resolve => { timer = setTimeout(() => resolve(timedOut), budgetMs); }),
+  ]).then(result => {
+    if (fuelHistoryCache.size >= MAX_FUEL_CACHE_ENTRIES) fuelHistoryCache.delete(fuelHistoryCache.keys().next().value);
+    fuelHistoryCache.set(key, { result, expiresAt: nowMs + (result.status === 'received' ? FUEL_CACHE_LIFETIME_MS : 5_000) });
+    return result;
+  }).finally(() => {
+    clearTimeout(timer);
+    fuelHistoryRequests.delete(key);
+  });
+  fuelHistoryRequests.set(key, pending);
+  return pending;
+}
+
 export function dataFmDriverIdentity(payload) {
   const positions = Array.isArray(payload?.positions) ? payload.positions : [];
   const matched = [...positions]
@@ -360,4 +530,6 @@ export function resetDataFmTokenCacheForTests() {
   vehicleMasterCache = null;
   vehicleMasterRequest = null;
   driverIdentityCache.clear();
+  fuelHistoryCache.clear();
+  fuelHistoryRequests.clear();
 }

@@ -19,6 +19,7 @@ import {
   signaturesMatch,
 } from './device-auth.mjs';
 import { fetchDataFmDriverIdentity, fetchDataFmGpsHistory } from './data-fm-gps.mjs';
+import { getReportTelemetry } from './report-telemetry.mjs';
 import { fmsSyncNeedsRetry } from './fms-sync-state.mjs';
 import { DEFAULT_GPS_PAIR_TOLERANCE_MS, pairExternalGpsSources } from './external-gps.mjs';
 import { gpsPairingMetadata } from './gps-pairing.mjs';
@@ -1752,6 +1753,16 @@ async function routeRequest(request, route) {
     const reportId = validClientId(decodeURIComponent(workPeriodGpsMatch[1]));
     if (!reportId) throw new ApiError(400, 'A valid report id is required');
     return json(await getWorkPeriodGpsDetail(request, reportId));
+  }
+
+  const telemetryMatch = route.match(/^admin\/reports\/([^/]+)\/telemetry$/);
+  if (telemetryMatch && method === 'GET') {
+    await requireAdmin(request);
+    const reportId = validClientId(decodeURIComponent(telemetryMatch[1]));
+    if (!reportId) throw new ApiError(400, 'A valid report id is required');
+    const report = await getReport(reportId);
+    if (!report) throw new ApiError(404, 'Report not found');
+    return json(await getReportTelemetry(report));
   }
 
   const gpsDetailMatch = route.match(/^admin\/reports\/([^/]+)\/gps$/);

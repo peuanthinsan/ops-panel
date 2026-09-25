@@ -10,6 +10,7 @@ import { songdeeApiHealth } from './lib/api-contract.mjs';
 import { queryLocalDeviceJobs } from './lib/device-job-history.mjs';
 import { localReportFacets, queryLocalReports } from './lib/local-report-query.mjs';
 import { fetchDataFmDriverIdentity, fetchDataFmGpsHistory } from './web/lib/server/data-fm-gps.mjs';
+import { getReportTelemetry } from './web/lib/server/report-telemetry.mjs';
 import { DEFAULT_GPS_PAIR_TOLERANCE_MS, pairExternalGpsSources } from './web/lib/server/external-gps.mjs';
 import { evaluateRouteDeviation, normalizeRoutePath, parseRouteAnchors } from './web/lib/route-deviation.mjs';
 import { createServerJobId } from './web/lib/server/job-id.mjs';
@@ -579,6 +580,14 @@ const server = http.createServer(async (req, res) => {
   if (req.url?.startsWith('/api/admin/reports/') && req.method === 'GET') {
     if (!isAdmin(req)) return send(res, 401, { error: 'Admin login required' });
     const target = new URL(req.url, 'http://localhost');
+    const telemetryMatch = target.pathname.match(/^\/api\/admin\/reports\/([^/]+)\/telemetry$/);
+    if (telemetryMatch) {
+      const reportId = decodeURIComponent(telemetryMatch[1]);
+      if (!/^[a-zA-Z0-9._:-]+$/.test(reportId)) return send(res, 400, { error: 'A valid report id is required' });
+      const report = reports.find(item => item.id === reportId);
+      if (!report) return send(res, 404, { error: 'Report not found' });
+      return send(res, 200, await getReportTelemetry(report));
+    }
     const workPeriodGpsMatch = target.pathname.match(/^\/api\/admin\/reports\/([^/]+)\/work-period-gps$/);
     if (workPeriodGpsMatch) {
       const reportId = decodeURIComponent(workPeriodGpsMatch[1]);
