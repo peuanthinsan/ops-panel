@@ -2,14 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { adminFetchReportGpsData, adminFetchReportTelemetry } from './dashboard-api';
+import { createReportTelemetryLoader } from '../lib/report-telemetry-loader.mjs';
 
 const reportGpsCache = new Map();
-const reportTelemetryCache = new Map();
 const loadConcurrency = 4;
 const telemetryCacheLifetimeMs = 60_000;
 const emptyReports = [];
+const reportTelemetryLoader = createReportTelemetryLoader(adminFetchReportTelemetry, { cacheLifetimeMs: telemetryCacheLifetimeMs });
 
-function useReportTelemetry(reports) {
+export function useReportTelemetry(reports = emptyReports) {
   // Fuel history is available even when no tablet GPS samples were saved.
   const requests = useMemo(() => [...new Map(reports.filter(report => report?.id && report.vehicleNumber && report.startTime && report.endTime)
     .map(report => [report.id, {
@@ -23,39 +24,26 @@ function useReportTelemetry(reports) {
   const lastLoadedAt = useRef(0);
 
   useEffect(() => {
-    const controller = new AbortController();
     let active = true;
     loadingRef.current = true;
     const cached = Object.fromEntries(requests.flatMap(request => {
-      const entry = reportTelemetryCache.get(request.key);
-      return entry?.expiresAt > Date.now() ? [[request.id, entry.data]] : [];
+      const data = reportTelemetryLoader.peek(request.key);
+      return data ? [[request.id, data]] : [];
     }));
     setState({ requestKey, telemetryByReportId: cached, telemetryLoading: requests.some(request => !cached[request.id]) });
+    const pending = requests.filter(request => !cached[request.id]);
+    // Subscribe up front so overlapping consumers share queued and active reads.
+    const subscriptions = pending.map(request => ({ request, ...reportTelemetryLoader.subscribe(request) }));
     async function load() {
       const next = { ...cached };
-      const pending = requests.filter(request => !cached[request.id]);
-      // Bound upstream fan-out independently of the existing GPS/alert reads.
-      for (let start = 0; start < pending.length; start += 2) {
-        const batch = await Promise.all(pending.slice(start, start + 2).map(async request => {
-          let data;
-          try {
-            data = await adminFetchReportTelemetry(request.id, { signal: controller.signal });
-            if (!Array.isArray(data?.samples)) throw new Error('Invalid telemetry response');
-            if (data.status === 'received') {
-              reportTelemetryCache.delete(request.key);
-              reportTelemetryCache.set(request.key, { data, expiresAt: Date.now() + telemetryCacheLifetimeMs });
-              while (reportTelemetryCache.size > 100) reportTelemetryCache.delete(reportTelemetryCache.keys().next().value);
-            }
-          } catch (error) {
-            if (error?.name === 'AbortError') throw error;
-            data = { status: 'unavailable', samples: [], source: 'data-fm', fuelUnit: null };
-          }
-          return [request.id, data];
-        }));
+      let remaining = subscriptions.length;
+      await Promise.all(subscriptions.map(async ({ request, promise }) => {
+        const data = await promise;
         if (!active) return;
-        Object.assign(next, Object.fromEntries(batch));
-        setState({ requestKey, telemetryByReportId: { ...next }, telemetryLoading: start + 2 < pending.length });
-      }
+        next[request.id] = data;
+        remaining--;
+        setState({ requestKey, telemetryByReportId: { ...next }, telemetryLoading: remaining > 0 });
+      }));
       if (active) setState({ requestKey, telemetryByReportId: next, telemetryLoading: false });
     }
     void load().catch(() => {
@@ -63,7 +51,11 @@ function useReportTelemetry(reports) {
     }).finally(() => {
       if (active) { loadingRef.current = false; lastLoadedAt.current = Date.now(); }
     });
-    return () => { active = false; loadingRef.current = false; controller.abort(); };
+    return () => {
+      active = false;
+      loadingRef.current = false;
+      for (const subscription of subscriptions) subscription.release();
+    };
     // Keep an unchanged queue running when the dashboard refreshes report objects.
   }, [requestKey, refreshVersion]);
 
